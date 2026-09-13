@@ -1,9 +1,13 @@
-// PHASE 6B : les mesures d'équilibrage de ce script (rounds 1-4, valeurs citées dans
-// config.js) sont devenues obsolètes avec les chemins multiples de la phase 6A, qui
-// changent la consommation d'Aleatoire (tirage du cheminIndex de chaque ennemi) et
-// donc la reproductibilité des graines déjà testées — voir ARCHITECTURE.md. Un
-// nouveau round de mesure devra être rejoué ici, une fois la limite de tours
-// constructibles elle-même posée (également phase 6B) : ne pas s'y remettre avant.
+// Les mesures d'équilibrage de ce script (rounds 1-4, valeurs citées dans config.js)
+// restent obsolètes depuis les chemins multiples de la phase 6A, qui changent la
+// consommation d'Aleatoire (tirage du cheminIndex de chaque ennemi) et donc la
+// reproductibilité des graines déjà testées — voir ARCHITECTURE.md. La limite de
+// tours constructibles (phase 6B, voir Jeu.limiteTours dans jeu.js et
+// Config.PROPORTION_LIMITE_TOURS) est maintenant posée, mais ce script n'a reçu
+// qu'une mesure informative du nombre de cases libres pour la calibrer (voir
+// mesurerCasesLibres plus bas) — pas encore de nouveau round complet des expériences
+// 1-4 avec cette limite active, laissé à une session ultérieure une fois
+// Config.PROPORTION_LIMITE_TOURS lui-même stabilisé par le jeu réel.
 //
 // simulation-equilibrage.js — Simulation hors navigateur de « Défense Néon », pour
 // comparer des stratégies de construction/amélioration de tours à coups de chiffres
@@ -609,6 +613,37 @@ function executerExperience4(jeuContext, graines, nombreVagues, dt) {
     });
 }
 
+// Phase 6B — Mesure informative (pas une expérience de stratégie) : nombre de cases
+// 'LIBRE' juste après génération d'une carte à Config.NOMBRE_CHEMINS chemins, sur les
+// mêmes huit graines que les expériences précédentes. Sert uniquement à vérifier que
+// Config.PROPORTION_LIMITE_TOURS (la limite de tours constructibles est
+// `Math.floor(casesLibres * PROPORTION_LIMITE_TOURS)`, voir Jeu.limiteTours dans
+// jeu.js) donne un ordre de grandeur raisonnable — ni une poignée de tours
+// seulement, ni une limite si haute qu'elle ne change jamais rien en pratique — pas
+// à comparer de stratégies de jeu entre elles.
+function mesurerCasesLibres(jeuContext, graines) {
+    const { Carte } = jeuContext;
+
+    const details = graines.map(graine => {
+        Carte.generer(graine);
+        let casesLibres = 0;
+        for (const rangee of Carte.grille) {
+            for (const etat of rangee) {
+                if (etat === 'LIBRE') casesLibres++;
+            }
+        }
+        return { graine, casesLibres };
+    });
+
+    const valeurs = details.map(d => d.casesLibres);
+    return {
+        details,
+        minimum: Math.min(...valeurs),
+        moyenne: valeurs.reduce((somme, v) => somme + v, 0) / valeurs.length,
+        maximum: Math.max(...valeurs)
+    };
+}
+
 function main() {
     const jeuContext = creerContexteJeu();
     const { Config } = jeuContext;
@@ -813,6 +848,34 @@ function main() {
         'Gain moyen intégrité — Stratégie A': Number(ligne.gainMoyenA.toFixed(1)),
         'Gain moyen intégrité — Stratégie B': Number(ligne.gainMoyenB.toFixed(1))
     })));
+
+    // --- Phase 6B : mesure informative de cases libres, pour calibrer
+    // Config.PROPORTION_LIMITE_TOURS --- (ne relance aucune des trois expériences de
+    // stratégie précédentes, voir la note en tête de mesurerCasesLibres).
+
+    console.log('');
+    console.log(
+        `=== Phase 6B — Cases libres après génération (${Config.NOMBRE_CHEMINS} chemins, mêmes ${GRAINES_GENERALISATION.length} graines) ===`
+    );
+    console.log('');
+
+    const mesureCasesLibres = mesurerCasesLibres(jeuContext, GRAINES_GENERALISATION);
+
+    console.table(mesureCasesLibres.details.map(d => ({
+        'Graine': d.graine,
+        'Cases libres': d.casesLibres
+    })));
+
+    const limitePour = (n) => Math.floor(n * Config.PROPORTION_LIMITE_TOURS);
+
+    console.log('');
+    console.log(
+        `Cases libres — minimum : ${mesureCasesLibres.minimum} · moyenne : ${mesureCasesLibres.moyenne.toFixed(1)} · maximum : ${mesureCasesLibres.maximum}`
+    );
+    console.log(
+        `Limite de tours correspondante (PROPORTION_LIMITE_TOURS = ${Config.PROPORTION_LIMITE_TOURS}) — ` +
+        `minimum : ${limitePour(mesureCasesLibres.minimum)} · moyenne : ${limitePour(mesureCasesLibres.moyenne)} · maximum : ${limitePour(mesureCasesLibres.maximum)}`
+    );
 
     console.log('');
     console.log('Rappel : ce script ne modifie jamais js/config.js sur le disque ; AMELIORATION_COUT_FACTEUR,');

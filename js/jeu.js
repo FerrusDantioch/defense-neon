@@ -36,6 +36,13 @@ const Jeu = {
     credits: 0,
     enPause: false,
 
+    // Nombre maximal de tours constructibles simultanément pour la partie en cours
+    // (phase 6B), fixé une seule fois par reinitialiser() juste après la génération de
+    // la carte — jamais recalculé ensuite : une case qui passe de 'LIBRE' à 'OCCUPEE'
+    // à la construction ne doit pas faire bouger la limite elle-même. Voir
+    // Config.PROPORTION_LIMITE_TOURS.
+    limiteTours: 0,
+
     // Facteur d'échelle courant, recalculé à chaque redimensionnement du canvas.
     //
     // Toutes les valeurs de vitesse et de distance de Config (vitesse des ennemis,
@@ -343,6 +350,19 @@ const Jeu = {
         this.nombreDeVagues = duree.nombreDeVagues;
 
         Carte.generer(graine);
+
+        // Limite de tours (phase 6B) : calculée ici, juste après la génération et
+        // avant toute construction, à partir des cases 'LIBRE' de la carte qui vient
+        // d'être générée — jamais recalculée en cours de partie (voir la note sur
+        // Jeu.limiteTours plus haut). À graine égale, Carte.generer produit toujours
+        // la même grille, donc toujours la même limite.
+        let casesLibres = 0;
+        for (const rangee of Carte.grille) {
+            for (const etat of rangee) {
+                if (etat === 'LIBRE') casesLibres++;
+            }
+        }
+        this.limiteTours = Math.floor(casesLibres * Config.PROPORTION_LIMITE_TOURS);
 
         this.ennemisActifs = [];
         this.toursActives = [];

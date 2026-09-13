@@ -36,6 +36,18 @@ const Config = {
     // lui-même (voir caseValidePourChemin), seulement le choix de la ligne de départ.
     ECART_MIN_ENTREES_SORTIES: 3,
 
+    // Limite de tours constructibles (phase 6B) : une proportion plutôt qu'un nombre
+    // fixe, puisque la surface réellement constructible d'une carte à deux chemins
+    // varie d'une génération à l'autre (les tracés se croisent plus ou moins selon la
+    // graine). Calculée une seule fois par partie, juste après la génération de la
+    // carte (voir Jeu.limiteTours dans jeu.js) :
+    // Math.floor(nombreDeCasesLibres * PROPORTION_LIMITE_TOURS). Valeur de départ
+    // choisie arbitrairement (la moitié des cases libres reste toujours disponible,
+    // l'autre moitié peut être construite) ; à ajuster par test manuel du jeu réel
+    // plutôt que par un nouveau round de outils/simulation-equilibrage.js — voir la
+    // mesure informative de cases libres qui y a été ajoutée pour cette phase.
+    PROPORTION_LIMITE_TOURS: 0.5,
+
     // Poids de probabilité pour chaque direction lors du tracé du chemin (doivent
     // sommer à peu près à 1). Favoriser la droite fait avancer le chemin plus sûrement
     // vers le bord opposé.
