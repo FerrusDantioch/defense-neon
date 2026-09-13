@@ -394,6 +394,10 @@ const Jeu = {
         // panneau d'amélioration serait sinon associé à une tour qui n'existe plus).
         Interface.typeSelectionne = Config.TYPE_TOUR_PAR_DEFAUT;
         Interface.tourSelectionnee = null;
+        // Correctif mobile : une case restée en attente de confirmation tactile d'une
+        // partie précédente n'aurait plus de sens sur la nouvelle carte générée
+        // ci-dessus (même colonne/ligne, mais un état de grille différent).
+        Interface.effacerAttenteConfirmationTactile();
 
         // La taille de case dépend du canvas déjà dimensionné ; redimensionner()
         // recalcule aussi les pixels du chemin et redessine tout.

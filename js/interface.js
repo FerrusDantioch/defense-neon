@@ -83,6 +83,13 @@ const Interface = {
     // par dessinerApercuConstruction.
     caseSurvolee: null,
 
+    // Case tactile en attente d'un second tap de confirmation (correctif mobile) —
+    // colonne/ligne, ou null si aucune. Distincte de `caseSurvolee` (qui pilote le
+    // dessin de l'aperçu, mis à jour en même temps que cette case sur tactile) : voir
+    // gererClicCanvas ci-dessous. Sans effet sur souris, où la construction reste
+    // immédiate au clic comme depuis la phase 1C.
+    caseEnAttenteConfirmation: null,
+
     // Minuteur (secondes restantes, en temps réel — voir mettreAJourEcrans) du
     // message de construction affiché dans le HUD ("Case invalide", etc.).
     dureeRestanteMessageConstruction: 0,
@@ -222,13 +229,21 @@ const Interface = {
             Jeu.vitesseJeu = Jeu.vitesseJeu === 1 ? 2 : 1;
         });
 
-        // Un tap construit directement sur tactile, exactement comme en phase 1C ;
-        // le survol (pointermove) n'a d'effet que sur les appareils avec une vraie
-        // souris (voir supportSurvol) et alimente uniquement l'aperçu visuel.
+        // Le survol (pointermove) n'a d'effet que sur les appareils avec une vraie
+        // souris (voir supportSurvol) et alimente uniquement l'aperçu visuel ; sur
+        // tactile, gererClicCanvas gère lui-même l'aperçu en deux temps (correctif
+        // mobile, voir plus bas).
         Jeu.canvas.addEventListener('pointerdown', evenement => this.gererClicCanvas(evenement));
         Jeu.canvas.addEventListener('pointermove', evenement => this.gererSurvolCanvas(evenement));
-        Jeu.canvas.addEventListener('pointerleave', () => {
-            this.caseSurvolee = null;
+        // Ne s'applique qu'à la souris (correctif mobile) : sur beaucoup de
+        // navigateurs, un tap tactile déclenche aussi pointerleave juste après le
+        // relâchement (le point de contact « quitte » l'élément puisqu'il cesse
+        // d'exister) — sans cette garde, l'aperçu tactile fraîchement posé par
+        // gererClicCanvas serait effacé l'instant suivant, avant même d'être visible.
+        Jeu.canvas.addEventListener('pointerleave', evenement => {
+            if (this.supportSurvol(evenement)) {
+                this.caseSurvolee = null;
+            }
         });
     },
 
@@ -293,8 +308,14 @@ const Interface = {
 
     // Distingue trois cas selon l'état de la case cliquée : une case déjà occupée
     // sélectionne sa tour (ouvre le panneau d'amélioration/vente), une case libre
-    // construit normalement (et ferme le panneau s'il était ouvert), une case de
-    // chemin se contente de fermer le panneau sans autre effet.
+    // construit, une case de chemin se contente de fermer le panneau sans autre effet.
+    // Sur souris, une case libre construit immédiatement, comme depuis la phase 1C.
+    // Sur tactile (correctif mobile), une case libre suit un tap pour prévisualiser,
+    // second tap pour confirmer : le premier tap sur une case pose
+    // `caseEnAttenteConfirmation` et affiche l'aperçu (même dessin que le survol
+    // souris, voir dessinerApercuConstruction) sans construire ; un second tap sur
+    // CETTE MÊME case construit ; un tap sur une case libre différente déplace
+    // simplement l'aperçu sans jamais construire l'ancienne case en attente.
     gererClicCanvas(evenement) {
         if (Jeu.etatPartie !== 'enCours' || Jeu.enPause) return;
 
@@ -302,16 +323,53 @@ const Interface = {
         if (!Carte.dansLaGrille(colonne, ligne)) return;
 
         const etat = Carte.grille[ligne][colonne];
+
         if (etat === 'OCCUPEE') {
+            this.effacerAttenteConfirmationTactile();
             this.tourSelectionnee = Jeu.toursActives.find(
                 tour => tour.colonne === colonne && tour.ligne === ligne
             ) || null;
-        } else if (etat === 'LIBRE') {
-            this.tourSelectionnee = null;
-            this.tenterConstruireTour(colonne, ligne);
-        } else {
-            this.tourSelectionnee = null;
+            return;
         }
+
+        if (etat !== 'LIBRE') {
+            this.effacerAttenteConfirmationTactile();
+            this.tourSelectionnee = null;
+            return;
+        }
+
+        this.tourSelectionnee = null;
+
+        if (this.supportSurvol(evenement)) {
+            // Sur un appareil hybride (écran tactile + souris), une case tactile
+            // restée en attente d'un ancien tap ne doit pas survivre à un clic souris
+            // ailleurs : sans effet sur un appareil purement souris, où cette case est
+            // de toute façon toujours restée null.
+            this.effacerAttenteConfirmationTactile();
+            this.tenterConstruireTour(colonne, ligne);
+            return;
+        }
+
+        const memeCaseEnAttente = this.caseEnAttenteConfirmation
+            && this.caseEnAttenteConfirmation.colonne === colonne
+            && this.caseEnAttenteConfirmation.ligne === ligne;
+
+        if (memeCaseEnAttente) {
+            this.tenterConstruireTour(colonne, ligne);
+            this.effacerAttenteConfirmationTactile();
+        } else {
+            this.caseEnAttenteConfirmation = { colonne, ligne };
+            this.caseSurvolee = { colonne, ligne };
+        }
+    },
+
+    // Efface la case tactile en attente de confirmation et l'aperçu qui l'accompagne
+    // (correctif mobile) : appelée dès que ce n'est plus pertinent (sélection d'une
+    // tour, tap sur une case de chemin, ou construction menée à bien sur le second
+    // tap).
+    effacerAttenteConfirmationTactile() {
+        this.caseEnAttenteConfirmation = null;
+        this.caseSurvolee = null;
     },
 
     // Vrai uniquement pour un pointeur de type souris : sur tactile, aucun survol
