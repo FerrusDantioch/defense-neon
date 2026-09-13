@@ -1,0 +1,398 @@
+/* style.css — Mise en page pour l'interface complète du jeu : écrans superposés au
+   canvas, HUD en cours de partie, canvas centré et responsive. Habillage cyberpunk
+   (phase 4A) : fond bleu-nuit assorti à Config.COULEURS.fond (carte.js), touches de
+   lueur néon (text-shadow / box-shadow) sur les éléments actifs ou sélectionnés —
+   jamais en remplacement des distinctions déjà en place (fond + liseré, jamais la
+   couleur seule), seulement en renfort visuel. */
+
+* {
+    box-sizing: border-box;
+}
+
+/* `display: flex` sur .ecran-superpose et .barre-hud (styles d'auteur) prime sinon
+   sur le `display: none` que le navigateur applique par défaut à [hidden] (style
+   agent utilisateur) : sans cette règle, un écran ou le HUD masqués via
+   `element.hidden = true` resteraient visibles en même temps que les autres. */
+[hidden] {
+    display: none !important;
+}
+
+body {
+    margin: 0;
+    padding: 16px;
+    background: #0b0b14;
+    color: #e8e8ec;
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+h1 {
+    font-size: 1.25rem;
+    margin: 0;
+    text-align: center;
+    color: #00e5ff;
+    text-shadow: 0 0 8px rgba(0, 229, 255, 0.6);
+}
+
+h2 {
+    font-size: 1.4rem;
+    margin: 0;
+    color: #00e5ff;
+    text-shadow: 0 0 6px rgba(0, 229, 255, 0.5);
+}
+
+.info-graine {
+    font-size: 0.9rem;
+    color: #a0a0aa;
+}
+
+/* Barre du HUD en cours de partie : mêmes contraintes que les autres barres, avec
+   les boutons Lancer la vague / Pause / Vitesse. */
+.barre-hud {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    width: 100%;
+    max-width: 900px;
+    font-size: 0.9rem;
+}
+
+#bouton-lancer-vague,
+#bouton-pause,
+#bouton-vitesse,
+#bouton-son {
+    min-height: 44px;
+    padding: 0 16px;
+    font-size: 0.95rem;
+    background: #00e5ff;
+    color: #10120f;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    box-shadow: 0 0 8px rgba(0, 229, 255, 0.4);
+}
+
+#bouton-lancer-vague:disabled {
+    background: #3a3a42;
+    color: #7a7a84;
+    cursor: not-allowed;
+}
+
+#bouton-pause,
+#bouton-vitesse {
+    background: #f1c40f;
+}
+
+.message-jeu {
+    color: #e74c3c;
+    font-weight: 600;
+}
+
+/* Barre de sélection du type de tour à construire (phase 2A), affichée sous le HUD.
+   Même principe de mise en évidence que .choix-duree : fond ET liseré distincts pour
+   le type actif, jamais une teinte seule (lisibilité aux personnes daltoniennes). */
+.barre-types-tours {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    max-width: 900px;
+}
+
+.barre-types-tours button {
+    min-height: 44px;
+    padding: 0 16px;
+    font-size: 0.9rem;
+    background: #2a2a30;
+    color: #e8e8ec;
+    border: 2px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.barre-types-tours button.selectionne {
+    background: #2f4a5a;
+    border-color: #00e5ff;
+    box-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+}
+
+.barre-types-tours button:disabled {
+    background: #3a3a42;
+    color: #7a7a84;
+    cursor: not-allowed;
+}
+
+/* Le conteneur porte la largeur maximale et sert d'ancrage de positionnement aux
+   écrans superposés (accueil, victoire, défaite). Le canvas prend 100% de sa largeur
+   en CSS mais ses attributs width/height (fixés en JS) définissent la vraie
+   résolution de dessin, pour éviter tout flou dû à un étirement. */
+.conteneur-canvas {
+    position: relative;
+    width: 100%;
+    max-width: 900px;
+}
+
+/* Sous env. 480 px de large, le canvas (ratio fixe 20:12) devient si bas que le
+   contenu de l'écran d'accueil — le plus dense des trois écrans superposés, avec ses
+   quatre boutons de durée — déborderait de sa boîte et chevaucherait le <h1>
+   au-dessus (les écrans sont centrés verticalement par flexbox dans une boîte
+   `inset: 0`, calée sur la hauteur du canvas). Cette hauteur minimale réserve assez
+   de place pour qu'il n'y ait plus jamais ce chevauchement, sans effet sur les
+   écrans plus larges où le canvas est déjà bien plus haut que ce minimum. */
+@media (max-width: 480px) {
+    .conteneur-canvas {
+        min-height: 420px;
+    }
+}
+
+#canvas-jeu {
+    display: block;
+    width: 100%;
+    height: auto;
+    /* Empêche le geste de défilement tactile de « voler » les interactions avec la
+       grille (pose de tours au tap). */
+    touch-action: none;
+    border-radius: 4px;
+}
+
+/* Panneau d'amélioration/vente d'une tour sélectionnée (phase 2B). Positionné dans un
+   coin fixe du plateau (le conteneur du canvas est déjà en position: relative) plutôt
+   que de suivre la tour cliquée, comme demandé : plus simple et tout aussi lisible. */
+.panneau-amelioration {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    max-width: 220px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    background: rgba(11, 11, 20, 0.92);
+    border: 2px solid #00e5ff;
+    border-radius: 6px;
+    box-shadow: 0 0 12px rgba(0, 229, 255, 0.35);
+    text-align: left;
+    font-size: 0.85rem;
+}
+
+.panneau-amelioration h3 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.panneau-amelioration p {
+    margin: 0;
+}
+
+.panneau-amelioration button {
+    min-height: 40px;
+    padding: 0 12px;
+    font-size: 0.85rem;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+#bouton-ameliorer {
+    background: #00e5ff;
+    color: #10120f;
+}
+
+#bouton-ameliorer:disabled {
+    background: #3a3a42;
+    color: #7a7a84;
+    cursor: not-allowed;
+}
+
+#panneau-niveau-max {
+    color: #f1c40f;
+    font-weight: 600;
+}
+
+#bouton-vendre {
+    background: #e74c3c;
+    color: #10120f;
+}
+
+/* Écrans superposés au canvas (accueil, victoire, défaite) : un seul à la fois est
+   visible, les autres portent l'attribut `hidden` (basculé par
+   Interface.mettreAJourEcrans). */
+.ecran-superpose {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 16px;
+    background: rgba(16, 16, 18, 0.92);
+    border-radius: 4px;
+    text-align: center;
+}
+
+.choix-duree {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    max-width: 100%;
+}
+
+.choix-duree button {
+    min-height: 44px;
+    padding: 0 16px;
+    font-size: 0.95rem;
+    background: #2a2a30;
+    color: #e8e8ec;
+    /* Bordure transparente par défaut plutôt qu'absente, pour que le passage à
+       .selectionne ne fasse pas sauter la taille du bouton. */
+    border: 2px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+/* Le bouton actif se distingue par un fond ET un liseré coloré (pas seulement une
+   teinte différente), pour rester lisible aux personnes daltoniennes. */
+.choix-duree button.selectionne {
+    background: #2f4a5a;
+    border-color: #00e5ff;
+    box-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+}
+
+/* Niveau et barre d'XP du joueur (phase 3A), affichés sur l'écran d'accueil. */
+.progression-joueur {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    max-width: 260px;
+}
+
+.niveau-joueur {
+    margin: 0;
+    font-weight: 600;
+}
+
+.barre-xp-conteneur {
+    width: 100%;
+    height: 10px;
+    background: #2a2a30;
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.barre-xp-remplissage {
+    height: 100%;
+    background: #00e5ff;
+    box-shadow: 0 0 6px rgba(0, 229, 255, 0.6);
+    /* La largeur (pourcentage de xpActuelle / seuil du niveau) est fixée en JS par
+       Interface.mettreAJourProgressionAccueil. */
+    width: 0%;
+}
+
+.texte-niveau-max-joueur {
+    margin: 0;
+    font-size: 0.85rem;
+    color: #f1c40f;
+    font-weight: 600;
+}
+
+/* Liste des paliers de bonus permanents (phase 3B), sous la barre d'XP. Débloqué vs
+   verrouillé se distingue par la couleur ET par le symbole (✓ contre 🔒) — jamais la
+   couleur seule, même principe que partout ailleurs dans l'interface. */
+.liste-paliers-bonus {
+    list-style: none;
+    margin: 4px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+    font-size: 0.78rem;
+    text-align: left;
+}
+
+.liste-paliers-bonus li {
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: #1a1a1e;
+}
+
+.liste-paliers-bonus li.palier-debloque {
+    color: #2ecc71;
+    font-weight: 600;
+}
+
+.liste-paliers-bonus li.palier-verrouille {
+    color: #7a7a84;
+}
+
+/* Mention de passage de niveau sur les écrans de victoire/défaite : suffisamment
+   visible pour ne pas passer inaperçue, sans pour autant bloquer la lecture du reste
+   de l'écran (même principe de mise en évidence que .vague-atteinte.score-sansfin). */
+.niveau-superieur {
+    margin: 0;
+    font-weight: 700;
+    color: #f1c40f;
+}
+
+.description-duree {
+    color: #a0a0aa;
+    font-size: 0.9rem;
+    margin: 0;
+    min-height: 1.2em;
+}
+
+.bouton-principal,
+.bouton-secondaire {
+    min-height: 44px;
+    padding: 0 24px;
+    font-size: 1rem;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.bouton-principal {
+    background: #39ff88;
+    color: #10120f;
+    box-shadow: 0 0 10px rgba(57, 255, 136, 0.5);
+}
+
+.bouton-principal:hover {
+    background: #29e070;
+}
+
+.bouton-secondaire {
+    background: #3a3a42;
+    color: #e8e8ec;
+}
+
+.boutons-fin-partie {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+}
+
+/* Met en évidence la vague atteinte à l'écran de défaite quand elle constitue le
+   score final du joueur (mode Sans fin) plutôt qu'une simple statistique parmi
+   d'autres. */
+.vague-atteinte.score-sansfin {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #f1c40f;
+}
