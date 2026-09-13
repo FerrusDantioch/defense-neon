@@ -1,0 +1,94 @@
+<!-- outils/generateur-icones.html — Outil à usage unique, non livré avec le jeu.
+     Dessine le badge d'icône de la PWA sur deux canvas (192×192 et 512×512) et propose
+     un lien de téléchargement PNG pour chacun. Sert une seule fois, en local, pour
+     produire icones/icone-192.png et icones/icone-512.png : voir ARCHITECTURE.md
+     (section PWA, phase 5) pour l'emplacement exact où placer les fichiers téléchargés. -->
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Générateur d'icônes — Défense Néon</title>
+<style>
+    body {
+        background: #0b0b14;
+        color: #e6e6f0;
+        font-family: system-ui, sans-serif;
+        padding: 24px;
+    }
+    .bloc-icone {
+        display: inline-block;
+        margin-right: 32px;
+        text-align: center;
+    }
+    canvas {
+        background: #0b0b14;
+        border: 1px solid #26263a;
+    }
+    a.telechargement {
+        display: block;
+        margin-top: 8px;
+        color: #39ff88;
+    }
+</style>
+</head>
+<body>
+    <h1>Générateur d'icônes — Défense Néon</h1>
+    <p>Outil interne, à usage unique : dessine le badge d'icône de la PWA, puis
+    télécharge les deux PNG et place-les dans <code>icones/</code> à la racine du
+    projet (<code>icones/icone-192.png</code>, <code>icones/icone-512.png</code>).</p>
+
+    <div class="bloc-icone">
+        <canvas id="canvas-192" width="192" height="192"></canvas>
+        <a id="lien-192" class="telechargement" download="icone-192.png">Télécharger icone-192.png</a>
+    </div>
+
+    <div class="bloc-icone">
+        <canvas id="canvas-512" width="512" height="512"></canvas>
+        <a id="lien-512" class="telechargement" download="icone-512.png">Télécharger icone-512.png</a>
+    </div>
+
+    <script>
+        // Reprend la palette cyberpunk de Config.COULEURS (js/config.js, phase 4A) :
+        // fond bleu-nuit très sombre, une forme géométrique simple — un losange,
+        // comme le socle de la tour Mitrailleuse (voir Tour.dessinerSoclePolygone) —
+        // reconnaissable et lisible même en petite taille, sans tenter de reproduire
+        // tout le plateau de jeu. Volontairement sans ctx.shadowBlur (à la différence
+        // du jeu lui-même) : un halo flouté transforme un aplat de couleur en dégradé,
+        // ce qui multiplie le poids du PNG exporté sans gain de lisibilité à la
+        // taille d'une icône d'application — voir la note sur le coût de rendu de
+        // shadowBlur dans Config.HALO_FLOU_TOUR_BASE (js/config.js).
+        function dessinerBadge(ctx, taille) {
+            const centre = taille / 2;
+
+            ctx.fillStyle = '#0b0b14';
+            ctx.fillRect(0, 0, taille, taille);
+
+            // Losange néon vert, aplat net.
+            const rayon = taille * 0.3;
+            ctx.save();
+            ctx.translate(centre, centre);
+            ctx.rotate(Math.PI / 4);
+            ctx.fillStyle = '#39ff88';
+            ctx.fillRect(-rayon, -rayon, rayon * 2, rayon * 2);
+            ctx.restore();
+
+            // Petit point rose (couleur de la case arrivée) au centre, pour rappeler
+            // la double identité néon vert/rose du jeu sans surcharger le badge.
+            ctx.beginPath();
+            ctx.fillStyle = '#ff2d6b';
+            ctx.arc(centre, centre, taille * 0.06, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function preparerCanvas(idCanvas, idLien, taille) {
+            const canvas = document.getElementById(idCanvas);
+            const ctx = canvas.getContext('2d');
+            dessinerBadge(ctx, taille);
+            document.getElementById(idLien).href = canvas.toDataURL('image/png');
+        }
+
+        preparerCanvas('canvas-192', 'lien-192', 192);
+        preparerCanvas('canvas-512', 'lien-512', 512);
+    </script>
+</body>
+</html>

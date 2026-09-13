@@ -1,0 +1,403 @@
+// jeu.js — Point d'entrée : récupère le canvas, gère le redimensionnement, la boucle
+// de jeu (simulation : déplacement des ennemis, tours, projectiles, vagues) et les
+// transitions entre états de partie. Tout ce qui concerne l'affichage et les
+// interactions (HUD, écrans, clics) vit dans interface.js ; les deux fichiers
+// s'appellent mutuellement, voir la note en tête d'interface.js.
+
+const Jeu = {
+    canvas: null,
+    ctx: null,
+
+    // État de partie : 'accueil', 'enCours', 'victoire' ou 'defaite'. Détermine à la
+    // fois quel écran est visible (voir Interface.mettreAJourEcrans) et si la boucle
+    // de simulation s'exécute (voir boucle ci-dessous) : elle ne tourne que pendant
+    // 'enCours'.
+    etatPartie: 'accueil',
+
+    // Nombre de vagues de la partie en cours, fixé par reinitialiser() d'après la
+    // durée choisie à l'accueil (Config.DUREES_PARTIE). Peut valoir Infinity en mode
+    // Sans fin : tout code qui l'utilise pour une progression ou un affichage doit
+    // vérifier Number.isFinite() avant.
+    nombreDeVagues: 0,
+
+    // Durée sélectionnée lors du dernier démarrage de partie (un id de
+    // Config.DUREES_PARTIE), réutilisée telle quelle par rejouer().
+    idDureeActuelle: Config.DUREE_PAR_DEFAUT,
+
+    // Multiplicateur de vitesse de simulation, 1 ou 2 (voir la section vitesse dans
+    // boucle()).
+    vitesseJeu: 1,
+
+    // État de partie propre à la simulation.
+    ennemisActifs: [],
+    toursActives: [],
+    poolProjectiles: [],
+    integrite: 0,
+    credits: 0,
+    enPause: false,
+
+    // Facteur d'échelle courant, recalculé à chaque redimensionnement du canvas.
+    //
+    // Toutes les valeurs de vitesse et de distance de Config (vitesse des ennemis,
+    // portée des tours, vitesse des projectiles) sont calibrées pour une case de
+    // 40 px (Config.LARGEUR_REFERENCE / Config.COLONNES). Mais le canvas se
+    // redimensionne selon la largeur de l'écran : une case ne fait pas la même
+    // taille en pixels sur un téléphone que sur un écran de bureau. Sans ce
+    // facteur, ces valeurs resteraient des pixels fixes et le jeu se comporterait
+    // différemment selon l'appareil (trop rapide et imprécis sur petit écran, trop
+    // lent sur grand écran). On multiplie donc chaque valeur par ce facteur au
+    // moment de son utilisation (jamais au moment de sa lecture initiale, puisque
+    // ce facteur change à chaque redimensionnement de fenêtre).
+    facteurEchelle: 1,
+
+    // Horodatage (en millisecondes, fourni par requestAnimationFrame) de la frame
+    // précédente. Sert uniquement à calculer dt ; null tant qu'aucune frame n'a
+    // encore été jouée.
+    dernierHorodatage: null,
+
+    // Résumé de la dernière partie terminée (XP gagnée, niveau avant/après), lu par
+    // Interface pour l'afficher sur l'écran de victoire ou de défaite. Voir
+    // finaliserPartie() ; null tant qu'aucune partie ne s'est encore terminée dans
+    // cette session.
+    derniereProgression: null,
+
+    initialiser() {
+        // Chargée une seule fois, ici, pour toute la durée de vie de la page — pas à
+        // chaque nouvelle partie (voir la note en tête de progression.js) : c'est
+        // Jeu.credits/integrite/etc. qui repartent de zéro à chaque reinitialiser(),
+        // pas Progression.
+        Progression.charger();
+        // Préférence son (phase 4B) : lue tôt elle aussi, pour que le bouton Son du
+        // HUD affiche le bon libellé dès la première image — bien avant que
+        // Son.initialiser() ne crée l'AudioContext lui-même, au premier clic sur
+        // « Jouer » (voir la note en tête de son.js).
+        Son.chargerPreference();
+
+        this.canvas = document.getElementById('canvas-jeu');
+        this.ctx = this.canvas.getContext('2d');
+
+        // Le pool de projectiles est créé une seule fois ici, jamais recréé entre
+        // deux parties (reinitialiser() se contente de désactiver ses projectiles) :
+        // voir la note sur le recyclage en tête de tour.js. Même principe pour le
+        // pool de particules (phase 4B, voir particules.js).
+        this.initialiserPoolProjectiles();
+        Particules.initialiser();
+
+        Interface.initialiser();
+
+        window.addEventListener('resize', () => this.redimensionner());
+
+        // Quand l'onglet passe en arrière-plan, le navigateur suspend l'exécution :
+        // sans cette pause automatique, dt serait énorme au retour (voir le plafond
+        // DT_MAXIMUM plus bas) et les ennemis se figeraient, mais surtout on ne veut
+        // pas que la partie continue à progresser hors de la vue du joueur. On ne
+        // remet volontairement pas enPause à false au retour : le joueur reprend la
+        // main lui-même via le bouton Pause/Reprendre. Ce bouton et cette pause
+        // automatique agissent sur la même variable, sans logique séparée.
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                this.enPause = true;
+            }
+        });
+
+        // Une carte est générée dès le chargement pour qu'un arrière-plan existe
+        // derrière l'écran d'accueil, même avant qu'une partie ne démarre.
+        Carte.generer();
+        this.redimensionner();
+
+        requestAnimationFrame(horodatage => this.boucle(horodatage));
+    },
+
+    // Adapte le canvas à la largeur disponible tout en conservant le ratio
+    // COLONNES:LIGNES. On recalcule width/height en pixels réels (pas en CSS), sinon
+    // le navigateur étire l'image déjà dessinée et le rendu devient flou.
+    redimensionner() {
+        const ratio = Config.COLONNES / Config.LIGNES;
+        const conteneur = this.canvas.parentElement;
+        const largeurDisponible = conteneur.clientWidth;
+
+        const largeur = Math.floor(largeurDisponible);
+        const hauteur = Math.floor(largeur / ratio);
+
+        this.canvas.width = largeur;
+        this.canvas.height = hauteur;
+
+        Carte.tailleCase = largeur / Config.COLONNES;
+        Carte.recalculerPixels();
+
+        // Voir le commentaire sur Jeu.facteurEchelle plus haut : 40 px est la taille
+        // de case à laquelle toutes les valeurs de vitesse et de distance de Config
+        // ont été calibrées (Config.LARGEUR_REFERENCE / Config.COLONNES).
+        this.facteurEchelle = Carte.tailleCase / 40;
+
+        this.dessinerTout();
+    },
+
+    // Crée le pool de projectiles réutilisables, une seule fois pour toute la durée
+    // de vie de la page. Voir la note en tête de tour.js : on ne crée jamais de
+    // projectile avec `new` en cours de partie, pour éviter de solliciter le
+    // ramasse-miettes du navigateur.
+    initialiserPoolProjectiles() {
+        this.poolProjectiles = [];
+        for (let i = 0; i < Config.TAILLE_POOL_PROJECTILES; i++) {
+            this.poolProjectiles.push(new Projectile());
+        }
+    },
+
+    // Dessine l'état courant du jeu : carte, tours, ennemis, projectiles actifs,
+    // particules (phase 4B, toujours par-dessus le reste de la scène pour rester
+    // visibles), puis l'aperçu de construction (Interface) en tout dernier.
+    dessinerTout() {
+        Carte.dessiner(this.ctx);
+        for (const tour of this.toursActives) {
+            tour.dessiner(this.ctx);
+        }
+        for (const ennemi of this.ennemisActifs) {
+            ennemi.dessiner(this.ctx);
+        }
+        for (const projectile of this.poolProjectiles) {
+            projectile.dessiner(this.ctx);
+        }
+        Particules.dessiner(this.ctx);
+        Interface.dessinerApercuConstruction(this.ctx);
+    },
+
+    // Boucle principale, rappelée à chaque image par requestAnimationFrame. Tourne en
+    // continu quel que soit etatPartie (pour rester réactive à un redimensionnement
+    // ou refléter les écrans superposés), mais ne simule la partie que pendant
+    // 'enCours' et hors pause.
+    boucle(horodatage) {
+        if (this.dernierHorodatage === null) {
+            this.dernierHorodatage = horodatage;
+        }
+
+        // dt en secondes, plafonné à Config.DT_MAXIMUM AVANT tout autre traitement.
+        // Sans ce plafond, un onglet remis au premier plan après une longue absence
+        // (le navigateur suspend l'exécution pendant qu'il est en arrière-plan)
+        // produirait un dt énorme, et les ennemis traverseraient instantanément
+        // toute la carte au réveil.
+        let dt = (horodatage - this.dernierHorodatage) / 1000;
+        this.dernierHorodatage = horodatage;
+        dt = Math.min(dt, Config.DT_MAXIMUM);
+
+        // Le multiplicateur de vitesse ne s'applique qu'à la simulation, et
+        // seulement après le plafonnement ci-dessus : appliquer l'ordre inverse
+        // ferait qu'un bond de dt après un changement d'onglet serait doublé en
+        // mode Vitesse ×2. Le dt réel (non multiplié) continue de piloter les
+        // éléments d'interface (ex. le minuteur du message de construction), pour
+        // que la vitesse ×2 n'accélère pas aussi ces éléments.
+        if (this.etatPartie === 'enCours' && !this.enPause) {
+            this.simuler(dt * this.vitesseJeu);
+        }
+
+        this.dessinerTout();
+        Interface.mettreAJourEcrans(dt);
+
+        requestAnimationFrame(h => this.boucle(h));
+    },
+
+    // Fait avancer la simulation d'un pas dt : déplacement des ennemis, tours,
+    // projectiles, nettoyage des ennemis arrivés/morts, mise à jour des vagues, puis
+    // vérification des conditions de fin de partie.
+    simuler(dt) {
+        for (const ennemi of this.ennemisActifs) {
+            ennemi.deplacer(dt);
+        }
+
+        for (const tour of this.toursActives) {
+            tour.mettreAJour(dt, this.ennemisActifs, this.poolProjectiles);
+        }
+
+        for (const projectile of this.poolProjectiles) {
+            projectile.mettreAJour(dt);
+        }
+
+        Particules.mettreAJour(dt);
+
+        // On parcourt le tableau à l'envers pour pouvoir le modifier (splice) pendant
+        // l'itération sans sauter un élément sur deux, comme cela arriverait avec une
+        // boucle classique du début vers la fin.
+        for (let i = this.ennemisActifs.length - 1; i >= 0; i--) {
+            const ennemi = this.ennemisActifs[i];
+
+            if (ennemi.arrive) {
+                // Un ennemi arrivé à destination ne rapporte aucun crédit.
+                this.integrite = Math.max(0, this.integrite - Config.DEGATS_INTEGRITE_PAR_ENNEMI);
+                Son.jouerAlerte();
+                this.ennemisActifs.splice(i, 1);
+            } else if (!ennemi.vivant) {
+                this.credits += ennemi.recompense;
+                Particules.creerExplosion(ennemi.x, ennemi.y, ennemi.couleur);
+                Son.jouerMort(ennemi.type);
+                this.ennemisActifs.splice(i, 1);
+            }
+        }
+
+        Vagues.mettreAJour(dt, this.ennemisActifs);
+        if (Vagues.credits > 0) {
+            this.credits += Vagues.credits;
+            Vagues.credits = 0;
+        }
+
+        this.verifierFinDePartie();
+    },
+
+    // La défaite survient dès que l'intégrité tombe à 0, sans attendre que les
+    // ennemis déjà en piste terminent leur trajet : simuler() ne sera plus rappelée
+    // dès la frame suivante puisque etatPartie ne vaudra alors plus 'enCours'. La
+    // victoire ne peut survenir qu'en mode à durée finie (Number.isFinite) : en mode
+    // Sans fin, seule la défaite met fin à la partie.
+    // Son.jouerDefaite()/jouerVictoire() sont appelés ici, à l'endroit exact de la
+    // transition d'état, et nulle part ailleurs (jamais depuis Interface ni depuis
+    // mettreAJourEcrans, qui serait rappelée en boucle tant que l'écran de fin reste
+    // affiché) : verifierFinDePartie() elle-même ne sera plus rappelée tant que
+    // etatPartie ne repasse pas à 'enCours', garantissant une seule lecture par
+    // partie (voir la note sur finaliserPartie ci-dessous).
+    verifierFinDePartie() {
+        if (this.integrite <= 0) {
+            this.etatPartie = 'defaite';
+            Son.jouerDefaite();
+            this.finaliserPartie(false);
+            return;
+        }
+
+        const derniereVagueNettoyee = Vagues.numeroVagueActuelle === this.nombreDeVagues
+            && !Vagues.enCours
+            && this.ennemisActifs.length === 0;
+
+        if (Number.isFinite(this.nombreDeVagues) && derniereVagueNettoyee) {
+            this.etatPartie = 'victoire';
+            Son.jouerVictoire();
+            this.finaliserPartie(true);
+        }
+    },
+
+    // Calcule l'XP gagnée pendant la partie qui vient de se terminer et met à jour
+    // Progression en conséquence. Appelée une seule fois par partie, exactement au
+    // moment de la transition vers 'victoire' ou 'defaite' ci-dessus (simuler() ne
+    // sera plus rappelée ensuite tant que etatPartie ne vaut pas 'enCours', donc
+    // verifierFinDePartie() elle-même ne sera plus rappelée non plus).
+    finaliserPartie(estVictoire) {
+        // Une vague ne compte que si elle est elle-même allée à son terme (tous ses
+        // ennemis morts ou arrivés, Vagues.enCours retombé à false — voir le même
+        // critère dans Vagues.mettreAJour) : une défaite survenue en pleine vague n
+        // ne récompense donc que les n - 1 vagues précédentes, pas la vague interrompue.
+        const vaguesTerminees = Vagues.enCours ? Math.max(0, Vagues.numeroVagueActuelle - 1) : Vagues.numeroVagueActuelle;
+
+        let xpGagnee = 0;
+        for (let numero = 1; numero <= vaguesTerminees; numero++) {
+            xpGagnee += Config.XP_BASE_PAR_VAGUE + numero * Config.XP_BONUS_PAR_NUMERO_VAGUE;
+        }
+        if (estVictoire) {
+            xpGagnee += Config.XP_BONUS_VICTOIRE;
+        }
+
+        const niveauAvant = Progression.niveau;
+        const niveauxGagnes = Progression.ajouterXp(xpGagnee);
+
+        Progression.partiesJouees++;
+        // Le mode Sans fin ne se termine jamais par une victoire (voir plus haut) :
+        // ce record n'a donc en pratique de sens qu'à la défaite, mais le calcul
+        // reste correct quel que soit estVictoire.
+        if (!Number.isFinite(this.nombreDeVagues) && Vagues.numeroVagueActuelle > Progression.meilleureVagueSansFin) {
+            Progression.meilleureVagueSansFin = Vagues.numeroVagueActuelle;
+        }
+
+        // Seul moment où Progression écrit dans localStorage pendant que le jeu
+        // tourne : jamais à chaque frame ni à chaque vague, voir la note en tête de
+        // progression.js.
+        Progression.sauvegarder();
+
+        this.derniereProgression = {
+            xpGagnee,
+            niveauAvant,
+            niveauApres: Progression.niveau,
+            niveauxGagnes
+        };
+    },
+
+    // Démarre une nouvelle partie dans la durée choisie à l'accueil.
+    demarrerPartie(idDuree) {
+        this.idDureeActuelle = idDuree;
+        this.reinitialiser(idDuree);
+        this.etatPartie = 'enCours';
+    },
+
+    // Relance une partie dans la même durée que la précédente, avec une nouvelle
+    // carte (aucune graine fournie à reinitialiser).
+    rejouer() {
+        this.reinitialiser(this.idDureeActuelle);
+        this.etatPartie = 'enCours';
+    },
+
+    // Retourne à l'écran d'accueil sans démarrer de partie.
+    retourAccueil() {
+        this.etatPartie = 'accueil';
+    },
+
+    // Remet à zéro tout l'état d'une partie et fixe Jeu.nombreDeVagues d'après
+    // idDuree. Si `graine` est omise, une graine aléatoire est tirée à partir de
+    // l'horloge (voir Aleatoire.initialiser).
+    reinitialiser(idDuree, graine) {
+        const duree = Config.DUREES_PARTIE.find(d => d.id === idDuree);
+        this.nombreDeVagues = duree.nombreDeVagues;
+
+        Carte.generer(graine);
+
+        this.ennemisActifs = [];
+        this.toursActives = [];
+        // Les bonus permanents éventuellement débloqués par le joueur (phase 3B,
+        // Progression.bonusCreditsDepart/bonusIntegriteDepart) s'ajoutent aux valeurs
+        // de base dès le début de chaque partie, quelle que soit la durée choisie —
+        // renvoient 0 tant que le palier correspondant n'est pas débloqué, donc ces
+        // lignes n'ont aucun effet pour un joueur qui n'a pas encore atteint le niveau
+        // requis.
+        this.credits = Config.CREDITS_DEPART + Progression.bonusCreditsDepart();
+        this.integrite = Config.INTEGRITE_DEPART + Progression.bonusIntegriteDepart();
+        this.enPause = false;
+        this.vitesseJeu = 1;
+
+        for (const projectile of this.poolProjectiles) {
+            projectile.actif = false;
+        }
+        // Même principe pour les particules éventuellement encore actives d'une
+        // partie précédente (phase 4B) : jamais recréées, seulement désactivées.
+        for (const particule of Particules.pool) {
+            particule.actif = false;
+        }
+
+        Vagues.reinitialiser();
+
+        // Le type de tour à construire revient au type par défaut à chaque nouvelle
+        // partie plutôt que de garder la sélection de la partie précédente ; aucune
+        // tour de la partie précédente ne doit non plus rester sélectionnée (le
+        // panneau d'amélioration serait sinon associé à une tour qui n'existe plus).
+        Interface.typeSelectionne = Config.TYPE_TOUR_PAR_DEFAUT;
+        Interface.tourSelectionnee = null;
+
+        // La taille de case dépend du canvas déjà dimensionné ; redimensionner()
+        // recalcule aussi les pixels du chemin et redessine tout.
+        this.redimensionner();
+
+        // Progression (niveau, XP) n'est volontairement pas touchée ici : contrairement
+        // à tout ce qui précède, cet état survit à une nouvelle partie (voir la note en
+        // tête de progression.js) — seuls ses bonus permanents (phase 3B, lus plus haut
+        // via Progression.bonusCreditsDepart/bonusIntegriteDepart) influencent le
+        // départ d'une partie.
+    }
+};
+
+window.addEventListener('DOMContentLoaded', () => Jeu.initialiser());
+
+// Enregistrement du service worker (phase 5). Placé ici plutôt qu'en ligne dans
+// index.html pour rester dans le seul fichier déjà responsable du point d'entrée de la
+// page. Sous file://, navigator.serviceWorker.register échoue systématiquement (les
+// navigateurs n'activent les service workers que sur une origine http(s)) : c'est
+// attendu, pas une erreur à corriger, d'où le .catch qui se contente d'un
+// console.warn plutôt que de laisser une exception non gérée — le jeu doit continuer
+// de fonctionner normalement à la fois sous file:// et si l'enregistrement échoue
+// pour toute autre raison.
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js')
+        .catch((erreur) => console.warn('Service worker non disponible :', erreur));
+}

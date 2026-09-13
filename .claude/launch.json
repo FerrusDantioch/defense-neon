@@ -1,0 +1,11 @@
+{
+    "version": "0.0.1",
+    "configurations": [
+        {
+            "name": "defense-neon",
+            "runtimeExecutable": "node",
+            "runtimeArgs": ["outils/serveur-statique.js", ".", "8935"],
+            "port": 8935
+        }
+    ]
+}

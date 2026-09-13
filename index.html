@@ -1,0 +1,142 @@
+<!-- index.html — Page unique de « Défense Néon » : titre, canvas de jeu avec ses
+     écrans superposés (accueil, victoire, défaite) et HUD en cours de partie. Aucune
+     dépendance externe : tout doit fonctionner en ouvrant ce fichier directement
+     depuis le disque. -->
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Défense Néon</title>
+    <link rel="stylesheet" href="css/style.css">
+    <!-- PWA (phase 5) : manifeste et balises d'installation. L'enregistrement du
+         service worker lui-même est fait en fin de js/jeu.js, pas ici (voir la note
+         à cet endroit). -->
+    <link rel="manifest" href="./manifest.webmanifest">
+    <meta name="theme-color" content="#0b0b14">
+    <link rel="apple-touch-icon" href="./icones/icone-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+</head>
+<body>
+    <h1>Défense Néon</h1>
+
+    <!-- Bouton Son (phase 4B), volontairement hors de #barre-hud : il doit rester
+         visible à tout moment (y compris à l'accueil et sur les écrans de fin), alors
+         que #barre-hud est masqué en dehors de etatPartie === 'enCours' (voir
+         Interface.mettreAJourEcrans). Libellé mis à jour par
+         Interface.mettreAJourBoutonSon(). -->
+    <button id="bouton-son" type="button">Son : ON</button>
+
+    <div class="conteneur-canvas">
+        <canvas id="canvas-jeu"></canvas>
+
+        <!-- Écran d'accueil : visible tant qu'aucune partie n'est en cours. Les
+             boutons de durée (#choix-duree) sont générés dynamiquement par
+             Interface.initialiser() à partir de Config.DUREES_PARTIE. -->
+        <div id="ecran-accueil" class="ecran-superpose">
+            <h2>Défense Néon</h2>
+
+            <!-- Niveau et XP du joueur (phase 3A, Progression) : survivent au
+                 rechargement de la page, contrairement au reste de cet écran. La
+                 barre se transforme en texte au niveau maximum (voir
+                 Interface.mettreAJourProgressionAccueil). -->
+            <div class="progression-joueur">
+                <p class="niveau-joueur">Niveau <span id="niveau-joueur-actuel">-</span></p>
+                <div id="barre-xp-conteneur" class="barre-xp-conteneur">
+                    <div id="barre-xp-remplissage" class="barre-xp-remplissage"></div>
+                </div>
+                <p id="texte-niveau-max-joueur" class="texte-niveau-max-joueur" hidden>Niveau maximum atteint</p>
+
+                <!-- Bonus permanents débloqués par niveau (phase 3B). Générée
+                     dynamiquement par Interface.initialiser() à partir de
+                     Progression.listePaliers() ; classe et texte de chaque <li>
+                     rafraîchis ensuite par Interface.mettreAJourProgressionAccueil(). -->
+                <ul id="liste-paliers-bonus" class="liste-paliers-bonus"></ul>
+            </div>
+
+            <div id="choix-duree" class="choix-duree"></div>
+            <p id="description-duree" class="description-duree"></p>
+            <button id="bouton-jouer" type="button" class="bouton-principal">Jouer</button>
+        </div>
+
+        <!-- Écran de victoire : seulement atteignable en durée finie (jamais en mode
+             Sans fin, voir Jeu.verifierFinDePartie). -->
+        <div id="ecran-victoire" class="ecran-superpose" hidden>
+            <h2>Victoire !</h2>
+            <p>Vagues franchies : <span id="vagues-franchies-victoire">-</span></p>
+            <p>Intégrité restante : <span id="integrite-restante-victoire">-</span></p>
+            <p>XP gagnée : <span id="xp-gagnee-victoire">-</span></p>
+            <p id="niveau-superieur-victoire" class="niveau-superieur" hidden>-</p>
+            <div class="boutons-fin-partie">
+                <button type="button" class="bouton-principal bouton-rejouer">Rejouer</button>
+                <button type="button" class="bouton-secondaire bouton-changer-duree">Changer de durée</button>
+            </div>
+        </div>
+
+        <!-- Écran de défaite : la vague atteinte constitue le score en mode Sans fin
+             (mise en évidence via la classe .score-sansfin, ajoutée par
+             Interface.mettreAJourEcrans). -->
+        <div id="ecran-defaite" class="ecran-superpose" hidden>
+            <h2>Défaite</h2>
+            <p>Vague atteinte : <span id="vague-atteinte-defaite" class="vague-atteinte">-</span></p>
+            <p>XP gagnée : <span id="xp-gagnee-defaite">-</span></p>
+            <p id="niveau-superieur-defaite" class="niveau-superieur" hidden>-</p>
+            <div class="boutons-fin-partie">
+                <button type="button" class="bouton-principal bouton-rejouer">Rejouer</button>
+                <button type="button" class="bouton-secondaire bouton-changer-duree">Changer de durée</button>
+            </div>
+        </div>
+
+        <!-- Panneau d'amélioration/vente (phase 2B), visible uniquement quand
+             Interface.tourSelectionnee n'est pas null (clic sur une tour déjà
+             construite). Positionné dans un coin fixe du plateau plutôt que de
+             suivre la tour sélectionnée. -->
+        <div id="panneau-amelioration" class="panneau-amelioration" hidden>
+            <h3 id="panneau-titre">-</h3>
+            <p id="panneau-stats">-</p>
+            <button id="bouton-ameliorer" type="button">Améliorer</button>
+            <p id="panneau-niveau-max" hidden>Niveau maximum atteint</p>
+            <button id="bouton-vendre" type="button">Vendre</button>
+        </div>
+    </div>
+
+    <!-- HUD en cours de partie, visible uniquement pendant etatPartie === 'enCours'. -->
+    <div id="barre-hud" class="barre-hud" hidden>
+        <span>Crédits : <span id="credits-actuels">-</span></span>
+        <span>Intégrité : <span id="integrite-actuelle">-</span></span>
+        <span>Vague : <span id="numero-vague">-</span></span>
+        <span class="info-graine">Graine : <span id="graine-actuelle">-</span></span>
+        <button id="bouton-lancer-vague" type="button">Lancer la vague</button>
+        <button id="bouton-pause" type="button">Pause</button>
+        <button id="bouton-vitesse" type="button">Vitesse ×1</button>
+        <span id="message-construction" class="message-jeu"></span>
+    </div>
+
+    <!-- Barre de sélection du type de tour à construire (phase 2A), visible en même
+         temps que le HUD. Les boutons sont générés dynamiquement par
+         Interface.initialiser() à partir de Config.TYPES_TOURS. Un clic sur une case
+         libre du canvas construit directement une tour du type ici sélectionné ; un
+         clic sur une tour déjà construite ouvre plutôt le panneau d'amélioration/vente
+         (#panneau-amelioration, phase 2B) sans passer par cette barre. -->
+    <div id="barre-types-tours" class="barre-types-tours" hidden></div>
+
+    <!-- L'ordre de chargement compte : il n'y a pas de système de modules, chaque
+         fichier s'appuie sur les objets globaux définis par les précédents.
+         interface.js et jeu.js s'appellent mutuellement (voir la note en tête
+         d'interface.js) : l'ordre entre ces deux-là n'a donc pas d'importance pour
+         les appels, seulement pour que Config, Carte, Vagues, Tour, Progression,
+         Particules et Son existent déjà. -->
+    <script src="js/config.js"></script>
+    <script src="js/aleatoire.js"></script>
+    <script src="js/carte.js"></script>
+    <script src="js/ennemi.js"></script>
+    <script src="js/vagues.js"></script>
+    <script src="js/tour.js"></script>
+    <script src="js/progression.js"></script>
+    <script src="js/particules.js"></script>
+    <script src="js/son.js"></script>
+    <script src="js/interface.js"></script>
+    <script src="js/jeu.js"></script>
+</body>
+</html>
