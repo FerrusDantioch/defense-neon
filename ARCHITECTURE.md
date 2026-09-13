@@ -94,7 +94,8 @@ HTML/CSS/JS vanilla, sans module ES6 ni dépendance. Fichiers chargés dans cet 
   (l'affichage et les interactions vivent dans `interface.js`). État : `etatPartie`,
   `nombreDeVagues`, `idDureeActuelle`, `vitesseJeu`, `ennemisActifs`, `toursActives`,
   `poolProjectiles`, `integrite`, `credits`, `enPause`, `facteurEchelle` (voir « Mise à
-  l'échelle des distances » ci-dessous), `derniereProgression` (résumé de la dernière
+  l'échelle des distances » ci-dessous), `limiteTours` (phase 6B, voir « Limite de
+  tours (phase 6B) » ci-dessous), `derniereProgression` (résumé de la dernière
   partie terminée pour l'affichage, voir phase 3A). Fonctions publiques :
   `initialiser()`, `redimensionner()`, `initialiserPoolProjectiles()`, `dessinerTout()`,
   `boucle(horodatage)`, `simuler(dt)`, `verifierFinDePartie()`, `finaliserPartie(estVictoire)`,
@@ -816,12 +817,15 @@ avant cette phase (depuis la phase 4B) et lui est totalement étranger ; il n'a 
 corrigé ici pour ne pas élargir le périmètre de la phase 6A, mais a été signalé comme
 tâche séparée.
 
-### Hors périmètre (phase 6B)
+### Hors périmètre à cette étape (traité depuis, voir « Limite de tours (phase 6B) »)
 
-Deux commentaires `// PHASE 6B :` marquent les points laissés délibérément de côté :
-dans `Interface.tenterConstruireTour` (`interface.js`), où viendra le refus de
-construire au-delà d'une limite de tours ; en tête de `outils/simulation-equilibrage.js`,
-pour le nouveau round de mesure qui devra suivre cette limite.
+Deux commentaires `// PHASE 6B :` marquaient les points laissés délibérément de côté à
+la fin de la phase 6A : le refus de construire au-delà d'une limite de tours
+(`Interface.tenterConstruireTour`, `interface.js`) et le nouveau round de mesure qui
+devrait suivre cette limite (`outils/simulation-equilibrage.js`). Le premier point est
+désormais traité (voir la section dédiée plus bas) ; le round de mesure complet reste
+lui seul en attente, une mesure purement informative ayant suffi pour cette étape (voir
+la même section).
 
 ### Vérification
 
@@ -848,6 +852,83 @@ construction, panneau d'amélioration/vente, lancement de vague, perte d'intégr
 l'arrivée d'un ennemi (sur l'un ou l'autre chemin), écran de progression joueur, et
 enregistrement/activation du service worker (PWA) fonctionnent tous sans erreur console
 après cette phase.
+
+## Limite de tours (phase 6B)
+
+Ajoute une limite au nombre de tours constructibles simultanément sur une carte,
+**proportionnelle** à sa surface réellement constructible plutôt qu'un nombre fixe :
+avec deux chemins qui peuvent se croiser (phase 6A), le nombre de cases `'LIBRE'`
+varie d'une carte à l'autre selon la forme exacte des tracés — un chiffre en dur serait
+tantôt trop permissif, tantôt trop restrictif.
+
+### Calcul (`jeu.js`)
+
+`Config.PROPORTION_LIMITE_TOURS` (0,5 pour commencer — voir « Valeur mesurée » plus
+bas) multiplie le nombre de cases `'LIBRE'` de la carte qui vient d'être générée.
+`Jeu.reinitialiser()` compte ces cases juste après `Carte.generer(graine)` (avant toute
+construction) et fixe `Jeu.limiteTours = Math.floor(casesLibres * Config.
+PROPORTION_LIMITE_TOURS)` — calculé une seule fois par partie, jamais recalculé
+ensuite : recalculer en cours de partie ferait bouger la limite elle-même à chaque
+construction, puisqu'une case `'LIBRE'` devient `'OCCUPEE'`. À graine égale,
+`Carte.generer` produit toujours la même grille, donc toujours la même limite (critère
+d'acceptation n°5).
+
+### Application (`interface.js`)
+
+Un seul point de vérité pour la limite : `Jeu.toursActives.length >= Jeu.limiteTours`,
+consulté à quatre endroits qui doivent tous rester d'accord entre eux —
+- **Construction** (`tenterConstruireTour`) : refuse et affiche « Limite de tours
+  atteinte » (même mécanisme que « Crédits insuffisants »), avant même de vérifier le
+  coût — une tour ne se construit pas juste parce que les crédits le permettraient ;
+- **Barre de sélection** (`mettreAJourBoutonsTypesTours`) : grise les trois boutons de
+  type dès que la limite est atteinte, pas seulement celui dont le coût dépasse les
+  crédits (comme c'était déjà le cas) — aucun type n'est alors plus constructible ;
+- **Aperçu au survol** (`dessinerApercuConstruction`) : une case par ailleurs `'LIBRE'`
+  bascule en contour rouge une fois la limite atteinte, alors qu'elle resterait verte
+  autrement — visuellement libre, mais plus constructible tant qu'aucune tour n'a été
+  vendue ;
+- **HUD** (`index.html`, `mettreAJourEcrans`) : nouvel élément « Tours : X / Y » entre
+  Intégrité et Vague, X = `Jeu.toursActives.length`, Y = `Jeu.limiteTours`.
+
+Vendre une tour (phase 2B, inchangée) libère naturellement un emplacement : les quatre
+points ci-dessus relisent `toursActives.length` à chaque évaluation, aucune logique
+supplémentaire n'était nécessaire pour ce cas (vérifié en test manuel : vendre une tour
+une fois la limite atteinte permet immédiatement d'en reconstruire une autre).
+
+### Valeur mesurée (`outils/simulation-equilibrage.js`)
+
+Nouvelle mesure informative (`mesurerCasesLibres`, appelée en fin de script) : compte
+les cases `'LIBRE'` juste après génération d'une carte à 2 chemins, sur les huit
+graines déjà utilisées par les expériences de stratégie. Ne relance aucun des quatre
+rounds précédents (voir la note en tête du fichier).
+
+| | Cases libres | Limite (× 0,5) |
+|---|---|---|
+| Minimum | 171 | 85 |
+| Moyenne | 179,1 | 89 |
+| Maximum | 187 | 93 |
+
+**`Config.PROPORTION_LIMITE_TOURS = 0,5` reste une première valeur, pas définitive** —
+explicitement demandé comme telle : une limite de 85 à 93 tours est probablement très
+généreuse en pratique (l'économie du jeu, crédits gagnés au fil des vagues, plafonne
+déjà naturellement le nombre de tours qu'un joueur peut se permettre bien avant ce
+chiffre pour une partie Standard ou Rapide), donc cette limite ne se fera sûrement
+sentir qu'en parties longues ou Sans fin. Le bon réglage se fera par test manuel du jeu
+réel plutôt que par un nouveau round automatisé, comme demandé — une future session
+pourra resserrer `PROPORTION_LIMITE_TOURS` si le jeu en partie longue montre qu'elle ne
+se fait jamais sentir.
+
+### Vérification
+
+Testé manuellement en navigateur (serveur local), limite abaissée temporairement à 2
+via la console pour ne pas devoir construire des dizaines de tours : construction
+refusée avec le message dédié au-delà de la limite (crédits pourtant largement
+suffisants), les trois boutons de type grisés, aperçu au survol rouge sur une case
+`'LIBRE'`, vente d'une tour suivie d'une reconstruction immédiate réussie, HUD à jour
+(« 2 / 2 » puis retour à « 2 / 2 » après vente+reconstruction), reproductibilité
+confirmée (même graine → même `Jeu.limiteTours` sur deux appels successifs de
+`reinitialiser`). Aucune erreur console. Service worker et cache (`defense-neon-v2`,
+incrémenté pour cette mise à jour de contenu) fonctionnels après ces changements.
 
 ## Écart par rapport au prompt
 
@@ -942,8 +1023,18 @@ Mises à jour de contenu postérieures au plan initial :
   ennemi assigné à un chemin dès sa création (reproductible à graine égale) et n'en
   dévie jamais ; ciblage des tours corrigé pour comparer une progression normalisée par
   chemin plutôt qu'un index brut ; script de vérification à neuf sur 500 graines (0
-  erreur, 93,2 % de croisements réels). **La limite de tours constructibles et le
-  nouveau round de mesure d'équilibrage qu'elle appellera restent hors périmètre,
-  explicitement laissés à la phase 6B** (commentaires `// PHASE 6B :` en place dans
-  `interface.js` et `outils/simulation-equilibrage.js`).
-- **6B** : non commencée.
+  erreur, 93,2 % de croisements réels). La limite de tours constructibles elle-même
+  était explicitement laissée à la phase 6B (commentaires `// PHASE 6B :` posés à
+  l'époque dans `interface.js` et `outils/simulation-equilibrage.js`, depuis remplacés
+  par du code réel — voir ci-dessous).
+- **6B — Limite de tours** : fait pour la limite elle-même. Voir « Limite de tours
+  (phase 6B) » ci-dessus : `Config.PROPORTION_LIMITE_TOURS` (0,5, valeur de départ,
+  pas définitive) appliqué au nombre de cases libres de la carte générée, calculé une
+  seule fois par partie et jamais recalculé ; appliqué à la construction, à la barre de
+  types, à l'aperçu au survol et à un nouvel indicateur HUD « Tours : X / Y » ; mesure
+  informative des cases libres sur les huit graines déjà utilisées (85 à 93 tours selon
+  la carte). **Le nouveau round de mesure d'équilibrage complet (expériences 1-4 avec
+  cette limite active) reste volontairement hors périmètre** : la valeur de
+  `PROPORTION_LIMITE_TOURS` n'est pas encore stabilisée par du jeu réel, et la relancer
+  maintenant risquerait de devoir être refaite une nouvelle fois après un premier
+  ajustement.

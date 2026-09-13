@@ -16,6 +16,7 @@ const Interface = {
     conteneurHUD: null,
     elementCredits: null,
     elementIntegrite: null,
+    elementNombreTours: null,
     elementNumeroVague: null,
     elementGraine: null,
     boutonLancerVague: null,
@@ -94,6 +95,7 @@ const Interface = {
         this.conteneurHUD = document.getElementById('barre-hud');
         this.elementCredits = document.getElementById('credits-actuels');
         this.elementIntegrite = document.getElementById('integrite-actuelle');
+        this.elementNombreTours = document.getElementById('nombre-tours');
         this.elementNumeroVague = document.getElementById('numero-vague');
         this.elementGraine = document.getElementById('graine-actuelle');
         this.boutonLancerVague = document.getElementById('bouton-lancer-vague');
@@ -263,16 +265,19 @@ const Interface = {
 
     // Met à jour la mise en évidence du type actif, le coût affiché (qui peut varier
     // d'une partie à l'autre selon les bonus débloqués, jamais en cours de partie) et
-    // grise les types trop chers. Rappelée à la fois immédiatement après un clic et à
-    // chaque frame par mettreAJourEcrans (les crédits, eux, changent en continu
-    // pendant la partie).
+    // grise les types trop chers — ou, depuis la phase 6B, tous les types dès que la
+    // limite de tours est atteinte, puisqu'aucun n'est alors plus constructible quel
+    // que soit son coût. Rappelée à la fois immédiatement après un clic et à chaque
+    // frame par mettreAJourEcrans (les crédits, eux, changent en continu pendant la
+    // partie).
     mettreAJourBoutonsTypesTours() {
+        const limiteAtteinte = Jeu.toursActives.length >= Jeu.limiteTours;
         for (const bouton of this.boutonsTypesTours) {
             const type = bouton.dataset.typeTour;
             const cout = this.coutConstruction(type);
             bouton.textContent = `${Config.TYPES_TOURS[type].nom} — ${cout}`;
             bouton.classList.toggle('selectionne', type === this.typeSelectionne);
-            bouton.disabled = Jeu.credits < cout;
+            bouton.disabled = limiteAtteinte || Jeu.credits < cout;
         }
     },
 
@@ -329,10 +334,15 @@ const Interface = {
             return;
         }
 
-        // PHASE 6B : c'est ici que viendra le refus de construire au-delà d'une
-        // limite de tours constructibles (hors périmètre de la phase 6A — voir
-        // ARCHITECTURE.md). Ne pas coder cette limite avant que l'équilibrage ne soit
-        // remesuré en conséquence.
+        // Limite de tours (phase 6B) : vérifiée avant le coût, comme les crédits —
+        // aucune tour ne peut être construite au-delà de Jeu.limiteTours, même si les
+        // crédits le permettraient largement. Vendre une tour libère naturellement un
+        // emplacement puisque cette vérification porte sur toursActives.length à
+        // chaque tentative, recalculé à chaque appel.
+        if (Jeu.toursActives.length >= Jeu.limiteTours) {
+            this.afficherMessageConstruction('Limite de tours atteinte');
+            return;
+        }
 
         const cout = this.coutConstruction(this.typeSelectionne);
         if (Jeu.credits < cout) {
@@ -366,7 +376,13 @@ const Interface = {
         const x = colonne * taille;
         const y = ligne * taille;
         const caracteristiques = Config.TYPES_TOURS[this.typeSelectionne];
-        const constructible = Carte.estConstructible(colonne, ligne) && Jeu.credits >= this.coutConstruction(this.typeSelectionne);
+        // Phase 6B : une case par ailleurs 'LIBRE' n'est plus constructible une fois la
+        // limite de tours atteinte — l'aperçu doit donc rester rouge sur cette case
+        // même si elle reste visuellement libre, jusqu'à ce qu'une tour soit vendue.
+        const limiteAtteinte = Jeu.toursActives.length >= Jeu.limiteTours;
+        const constructible = Carte.estConstructible(colonne, ligne)
+            && Jeu.credits >= this.coutConstruction(this.typeSelectionne)
+            && !limiteAtteinte;
 
         ctx.strokeStyle = constructible ? '#2ecc71' : '#e74c3c';
         ctx.lineWidth = 2;
@@ -521,6 +537,7 @@ const Interface = {
         if (Jeu.etatPartie === 'enCours') {
             this.elementCredits.textContent = Jeu.credits;
             this.elementIntegrite.textContent = Jeu.integrite;
+            this.elementNombreTours.textContent = `${Jeu.toursActives.length} / ${Jeu.limiteTours}`;
             this.elementGraine.textContent = Aleatoire.graineActuelle;
             this.elementNumeroVague.textContent = Number.isFinite(Jeu.nombreDeVagues)
                 ? `${Vagues.numeroVagueActuelle} / ${Jeu.nombreDeVagues}`
