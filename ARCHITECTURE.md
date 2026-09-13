@@ -945,6 +945,72 @@ vague 37 — au-delà de toutes les durées finies proposées depuis la phase 1D
 vagues) et bien sûr atteignable en mode Sans fin, où c'est le comportement recherché (la
 cadence continue de s'intensifier avec le score).
 
+## Correctifs mobile
+
+Deux correctifs indépendants, découverts en testant sur un vrai téléphone.
+
+### Bouton Son qui chevauchait l'écran d'accueil (`css/style.css`)
+
+**La cause supposée ne correspondait pas au code réel** : `#bouton-son` n'a jamais eu
+de `position: fixed`/`absolute` — il partage le style plat des autres boutons du HUD
+(`#bouton-lancer-vague, #bouton-pause, #bouton-vitesse, #bouton-son`) et s'insère
+normalement dans le flux vertical de `body` (flex column), entre le `<h1>` et
+`.conteneur-canvas`. Reproduit à 360px et 320px (`resize_window` + lecture directe de
+`getBoundingClientRect`) pour identifier la vraie cause avant de corriger : le contenu
+de l'écran d'accueil (`#ecran-accueil`, centré verticalement par flexbox dans une boîte
+`inset: 0` calée sur `min-height` de `.conteneur-canvas`) mesurait 461px de haut, contre
+une `min-height` de seulement 420px héritée de la phase 1D — un contenu plus haut que sa
+boîte déborde de façon symétrique en haut ET en bas, sans qu'aucun `overflow` ne le
+limite, et c'est ce débordement du haut qui chevauchait le bouton Son (et le `<h1>`)
+juste au-dessus dans le flux normal de la page. Cette valeur de 420px n'avait
+simplement jamais été révisée depuis que l'écran d'accueil s'est étoffé (niveau/XP et
+liste des cinq paliers de bonus, phases 3A/3B) — la vraie régression, sans rapport avec
+le positionnement du bouton lui-même. Corrigé en portant cette `min-height` à 500px
+(marge au-delà des 461px mesurés). Testé à 360px et 320px : plus aucun chevauchement, le
+bouton reste tapable (`min-height: 44px` déjà en place), écrans de victoire/défaite et
+panneau d'amélioration non affectés (leur contenu, plus court, ne débordait déjà pas).
+
+### Aperçu de portée au tap, sur tactile (`interface.js`, `jeu.js`)
+
+`Interface.gererClicCanvas` distingue maintenant souris et tactile
+(`this.supportSurvol(evenement)`, la même détection que celle qui pilote déjà le
+survol depuis la phase 1D) : sur souris, comportement inchangé (construction immédiate
+au clic) ; sur tactile, un premier tap sur une case `'LIBRE'` pose
+`Interface.caseEnAttenteConfirmation` et réutilise `caseSurvolee` (donc le même
+`dessinerApercuConstruction` déjà écrit pour la souris, aucun code de dessin dupliqué)
+sans construire ; un second tap sur cette même case construit et efface l'attente ; un
+tap sur une case libre différente déplace simplement l'aperçu ; un tap sur une case
+`'OCCUPEE'` ou `'CHEMIN'` efface l'attente et conserve le comportement déjà en place
+(sélection de tour / fermeture du panneau). `Jeu.reinitialiser()` efface aussi cette
+attente à chaque nouvelle partie (comme `Interface.tourSelectionnee`), et le clic
+souris l'efface également par robustesse sur un appareil hybride écran tactile +
+souris (sans effet sur un appareil purement souris, où elle reste toujours `null`).
+
+**Piège rencontré et corrigé en le découvrant** : sur beaucoup de navigateurs, un tap
+tactile déclenche aussi `pointerleave` juste après le relâchement (le point de contact
+« quitte » l'élément puisqu'il cesse d'exister) — l'écouteur `pointerleave` existant,
+qui remettait `caseSurvolee` à `null` sans condition, aurait donc effacé l'aperçu
+tactile l'instant même où `gererClicCanvas` venait de le poser, avant qu'il ne soit
+jamais visible. Corrigé en ne laissant cet écouteur agir que pour la souris
+(`this.supportSurvol(evenement)`), où `pointerleave` garde son sens habituel (le
+pointeur quitte réellement le canvas).
+
+Comme la limite de tours (phase 6B) et la vérification des crédits sont relues à
+chaque frame par `dessinerApercuConstruction`, elles s'appliquent naturellement dès le
+premier tap, sans code supplémentaire — vérifié explicitement (limite abaissée
+artificiellement à la valeur courante : l'aperçu du premier tap ressort bien rouge).
+
+Testé par événements `PointerEvent` synthétiques (`pointerType: 'touch'` puis
+`'mouse'`) plutôt que par le simulateur de clic du navigateur de développement utilisé
+pour ce projet, qui envoie toujours `pointerType: 'mouse'` même en émulation mobile
+(vérifié : un unique clic y construit toujours immédiatement) — seul un `PointerEvent`
+explicite permet donc de tester ici un vrai tap tactile. Les quatre scénarios du prompt
+(premier tap, second tap sur la même case, tap sur une case libre différente, tap sur
+une case occupée/chemin) confirmés un par un, plus le comportement souris (clic unique,
+inchangé) et la reproduction visuelle de l'aperçu (capture d'écran après un premier
+tap : contour et cercle de portée bien affichés, aucune tour construite). Aucune
+erreur console dans les deux modes.
+
 ## Avancement (feuille de route)
 
 - **1A — Socle et carte** : fait. Génération, affichage, redimensionnement, reproductibilité

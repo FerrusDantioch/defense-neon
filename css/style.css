@@ -141,15 +141,24 @@ h2 {
 }
 
 /* Sous env. 480 px de large, le canvas (ratio fixe 20:12) devient si bas que le
-   contenu de l'écran d'accueil — le plus dense des trois écrans superposés, avec ses
-   quatre boutons de durée — déborderait de sa boîte et chevaucherait le <h1>
-   au-dessus (les écrans sont centrés verticalement par flexbox dans une boîte
-   `inset: 0`, calée sur la hauteur du canvas). Cette hauteur minimale réserve assez
-   de place pour qu'il n'y ait plus jamais ce chevauchement, sans effet sur les
-   écrans plus larges où le canvas est déjà bien plus haut que ce minimum. */
+   contenu de l'écran d'accueil — le plus dense des trois écrans superposés — déborderait
+   de sa boîte et chevaucherait ce qui se trouve juste au-dessus dans le flux normal de
+   la page (le <h1>, et le bouton Son depuis la phase 4B) : les écrans superposés sont
+   centrés verticalement par flexbox dans une boîte `inset: 0` calée sur la hauteur du
+   canvas, et un contenu plus haut que cette boîte déborde de façon symétrique, aussi
+   bien en haut qu'en bas, sans qu'`overflow` ne le limite.
+   Cette valeur (initialement 420px, phase 1D) a été mesurée insuffisante : l'écran
+   d'accueil a grossi depuis (niveau/XP et liste des cinq paliers de bonus permanents,
+   phases 3A/3B) sans que cette hauteur minimale n'ait été révisée en conséquence —
+   c'est ce qui produisait, en pratique, le chevauchement du bouton Son observé sur
+   mobile (à tort attribué à un positionnement propre au bouton : il n'a jamais eu de
+   `position: fixed`/`absolute`, voir son style partagé avec les autres boutons du HUD
+   plus haut). Mesuré à nouveau à 360px et 320px (son contenu ne dépend pas de la
+   largeur à ces deux tailles, les mêmes quatre boutons de durée y passent déjà sur
+   deux lignes) : 461px de contenu réel, d'où cette marge. */
 @media (max-width: 480px) {
     .conteneur-canvas {
-        min-height: 420px;
+        min-height: 500px;
     }
 }
 
