@@ -8,6 +8,16 @@ const Jeu = {
     canvas: null,
     ctx: null,
 
+    // Mode paysage mobile (contenu additionnel post-lancement) : identique à la media
+    // query de style.css qui bascule la mise en page en grille (titre/HUD/barre de
+    // tours en colonne à droite, canvas à gauche prenant toute la hauteur) — cible les
+    // téléphones en orientation paysage (hauteur de viewport réduite), pas les
+    // tablettes/ordinateurs en paysage qui ont déjà assez de place verticale avec la
+    // mise en page habituelle. Dupliquée ici plutôt que lue depuis le CSS : plus
+    // simple et tout aussi fiable qu'une lecture de propriété calculée, et les deux
+    // valeurs sont assez stables pour ne pas justifier une source unique partagée.
+    MEDIA_PAYSAGE_MOBILE: '(orientation: landscape) and (max-height: 500px)',
+
     // État de partie : 'accueil', 'enCours', 'victoire' ou 'defaite'. Détermine à la
     // fois quel écran est visible (voir Interface.mettreAJourEcrans) et si la boucle
     // de simulation s'exécute (voir boucle ci-dessous) : elle ne tourne que pendant
@@ -119,6 +129,16 @@ const Jeu = {
         requestAnimationFrame(horodatage => this.boucle(horodatage));
     },
 
+    // Vrai si la media query MEDIA_PAYSAGE_MOBILE correspond actuellement — factorisé
+    // ici pour n'écrire cette chaîne qu'une seule fois (voir la constante ci-dessus) et
+    // parce que window.matchMedia(...).matches est réévalué à chaque appel (pas
+    // d'objet MediaQueryList mis en cache : ce mode change trop rarement en cours de
+    // partie — seulement à une rotation d'écran, qui déclenche de toute façon déjà
+    // resize — pour que ça vaille la peine).
+    enModePaysageMobile() {
+        return window.matchMedia(this.MEDIA_PAYSAGE_MOBILE).matches;
+    },
+
     // Adapte le canvas à la largeur disponible tout en conservant le ratio
     // COLONNES:LIGNES. On recalcule width/height en pixels réels (pas en CSS), sinon
     // le navigateur étire l'image déjà dessinée et le rendu devient flou.
@@ -127,8 +147,28 @@ const Jeu = {
         const conteneur = this.canvas.parentElement;
         const largeurDisponible = conteneur.clientWidth;
 
-        const largeur = Math.floor(largeurDisponible);
-        const hauteur = Math.floor(largeur / ratio);
+        let largeur = Math.floor(largeurDisponible);
+        let hauteur = Math.floor(largeur / ratio);
+
+        // Mode paysage mobile (contenu additionnel post-lancement) : en dessous de
+        // MEDIA_PAYSAGE_MOBILE (voir plus haut, la même requête que celle de
+        // style.css), .conteneur-canvas reçoit une vraie hauteur du layout en grille
+        // (voir style.css) au lieu de la laisser dériver du canvas lui-même comme en
+        // portrait — sans ce second plafond, un canvas dimensionné sur la seule
+        // largeur disponible (large en paysage) déborderait largement d'un écran de
+        // téléphone, court dans cette orientation. Repli sur `clientHeight` seulement
+        // quand cette media query correspond : hors de ce cas (portrait, desktop),
+        // .conteneur-canvas n'a pas de hauteur propre (elle dérive du canvas), donc
+        // lire clientHeight ici renverrait la hauteur du rendu précédent plutôt qu'une
+        // vraie contrainte — sans ce garde-fou, le tout premier appel (avant que le
+        // canvas n'ait de hauteur) figerait le jeu à une hauteur de 0.
+        if (this.enModePaysageMobile()) {
+            const hauteurDisponible = conteneur.clientHeight;
+            if (hauteurDisponible > 0 && hauteur > hauteurDisponible) {
+                hauteur = Math.floor(hauteurDisponible);
+                largeur = Math.floor(hauteur * ratio);
+            }
+        }
 
         this.canvas.width = largeur;
         this.canvas.height = hauteur;

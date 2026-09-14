@@ -1419,6 +1419,122 @@ deux précédents oublis de version de cache.
 
 Aucune erreur console dans aucun de ces scénarios.
 
+## Confort en mode paysage sur mobile (correctif post-lancement)
+
+Demande utilisateur : permettre au jeu de basculer confortablement en orientation
+paysage sur téléphone. Le jeu l'autorisait déjà techniquement (`orientation: "any"`
+dans `manifest.webmanifest`, jamais modifié), mais la mise en page ne le gérait pas :
+tout était empilé verticalement (titre, bouton Son, canvas, HUD, barre de tours), pensée
+pour un écran plus haut que large. En paysage sur téléphone (large mais bas), le canvas
+— dimensionné jusqu'ici sur la seule largeur disponible, voir `Jeu.redimensionner()` —
+débordait largement de la hauteur réelle de l'écran, forçant à faire défiler la page en
+pleine partie : inconfortable sur un jeu qui demande des taps rapides et précis sur la
+grille, à l'opposé du confort demandé.
+
+### Ciblage (`style.css`, `jeu.js`)
+
+`@media (orientation: landscape) and (max-height: 500px)` — cible les téléphones en
+paysage (hauteur de viewport réduite, 320 à ~430px selon le modèle), pas les tablettes
+ni les ordinateurs en paysage qui ont déjà assez de place verticale avec la mise en page
+habituelle (une tablette en paysage dépasse 500px de haut, ex. iPad mini : 768px).
+Dupliquée à l'identique côté JS (`Jeu.MEDIA_PAYSAGE_MOBILE`, lue par
+`Jeu.enModePaysageMobile()`) plutôt que lue depuis une propriété CSS calculée : plus
+simple, et les deux valeurs n'ont pas besoin d'une source unique partagée pour rester
+synchronisées en pratique.
+
+### Mise en page (`style.css`)
+
+`body` passe en grille (`display: grid; grid-template-columns: 1fr 200px;`) uniquement
+sous cette media query : colonne de gauche pour `.conteneur-canvas`, colonne de droite
+(200px) pour le titre, le bouton Son, le HUD et la barre de sélection de tours. Une
+grille plutôt que flex : elle permet de placer ces quatre éléments dans une colonne à
+droite malgré leur ordre entrecoupé dans le DOM (`.conteneur-canvas` est physiquement
+entre `#bouton-son` et `#barre-hud` dans `index.html`) sans avoir à les envelopper dans
+un nouvel élément — chaque règle se contente de leur assigner une cellule de la grille
+par numéro de ligne, indépendamment de leur position dans le HTML.
+
+`.conteneur-canvas` s'étire sur toutes les lignes de la grille (`grid-row: 1 / -1`) :
+c'est ce qui lui donne enfin une vraie hauteur mesurable par
+`conteneur.clientHeight` dans `Jeu.redimensionner()`, au lieu de la laisser dériver du
+canvas lui-même comme en mise en page habituelle (portrait, où le conteneur n'a pas de
+hauteur propre). `#canvas-jeu` perd son étirement habituel (`width: 100%; height: auto`,
+qui déformerait son ratio) au profit de `width/height: auto; max-width/max-height: 100%`
+— il s'affiche alors à la taille exacte fixée par ses attributs `width`/`height` (posés
+par le JS ci-dessous), `.conteneur-canvas` le centrant si un espace résiduel subsiste
+dans un sens ou dans l'autre.
+
+### Plafond de hauteur du canvas (`jeu.js`)
+
+`Jeu.redimensionner()` continue de calculer une largeur/hauteur à partir de
+`conteneur.clientWidth` comme avant (portrait, desktop — comportement inchangé), mais
+plafonne désormais aussi le résultat par `conteneur.clientHeight` **uniquement** quand
+`Jeu.enModePaysageMobile()` renvoie vrai. Ce garde-fou est indispensable : hors de ce
+mode, `.conteneur-canvas` n'a pas de hauteur propre (elle dérive du rendu précédent du
+canvas), donc lire `clientHeight` sans cette condition renverrait une valeur non
+significative — et au tout premier appel, avant que le canvas n'ait jamais été
+dimensionné, une hauteur de 0, qui figerait le jeu. Le calcul reste un simple
+« contenir dans la boîte disponible en conservant le ratio COLONNES:LIGNES », comme pour
+la largeur seule en portrait, juste appliqué aux deux dimensions à la fois ici.
+
+### Débordement de la colonne latérale (`style.css`)
+
+Sur les plus petits téléphones visés par cette media query, le contenu de la colonne de
+droite (HUD complet + trois types de tours) peut rester plus haut que l'écran malgré sa
+mise en page compacte (mesuré : jusqu'à 43px de trop sur un viewport de 375px de haut
+avec les trois tours du jeu actuel). Plutôt que de forcer un `overflow: hidden` qui
+rendrait le bas de cette colonne définitivement inaccessible, la page est laissée libre
+de s'allonger et de défiler dans ce cas (`body` en `min-height: 100dvh`, pas de hauteur
+fixe). Pour que ce défilement ne fasse pas aussi défiler le plateau de jeu hors champ —
+inacceptable en pleine partie — `.conteneur-canvas` reçoit `position: sticky; top: 8px`
+et un `max-height: calc(100dvh - 16px)` : il reste épinglé à l'écran et ne peut jamais
+dépasser la hauteur réelle du viewport, quelle que soit la hauteur que la grille prend
+par ailleurs à cause de la colonne de droite. Le joueur peut alors faire défiler
+uniquement la colonne HUD/tours pour atteindre un bouton qui déborderait, sans jamais
+perdre de vue le plateau.
+
+L'écran d'accueil (le plus dense des trois écrans superposés — niveau/XP, cinq paliers
+de bonus, boutons de durée) profite du même traitement défensif :
+`.ecran-superpose { overflow-y: auto; }` sous cette media query, pour qu'un défilement
+interne à cet écran (plutôt que de la page entière, qui décalerait aussi le plateau)
+absorbe le cas où son contenu resterait malgré tout plus haut que l'espace, désormais
+généreux mais pas infini, que lui laisse le canvas dans cette mise en page.
+
+### Écart par rapport au prompt
+
+Aucun prompt écrit pour cette demande — formulée directement en conversation
+(« permettre au jeu de se mettre en vue horizontale »), sans attente de nom d'objet ou
+de structure de code particulière à respecter.
+
+### Vérification
+
+Testé en navigateur (serveur local) à plusieurs tailles, en repartant à chaque fois d'un
+service worker et de caches purgés :
+
+- **812×375** (téléphone courant en paysage) : accueil et partie en cours, canvas
+  correctement plafonné en hauteur (588×352, tient dans les 359px disponibles), colonne
+  de droite entièrement lisible (HUD + trois types de tours), aucun débordement de page
+  détecté à l'affichage initial ;
+- **568×320** (iPhone SE en paysage, cas le plus exigu couramment répandu) : canvas
+  toujours proportionné (344×206), aucun débordement horizontal ; débordement vertical
+  résiduel de 98px (contenu HUD/tours plus dense que l'espace disponible) absorbé par le
+  défilement de page + `.conteneur-canvas` épinglé (`position: sticky`) — vérifié par
+  géométrie (`getBoundingClientRect().top` reste à 8 après un défilement complet) que le
+  plateau ne bouge pas pendant que la colonne défile, et que le troisième bouton de tour
+  (« Sniper »), initialement hors champ, devient entièrement visible une fois défilé ;
+- **375×812** (portrait mobile) et résolution desktop : rendu identique à avant ce
+  correctif, aucune régression — la media query ne les cible pas.
+
+**Piège de test rencontré** : une capture d'écran prise juste après un défilement à la
+molette (`computer scroll`) a montré une fois le plateau semblant occuper toute la
+largeur de l'écran, sans colonne latérale visible, en contradiction avec la géométrie
+lue au même instant (`getBoundingClientRect` confirmant une colonne de droite bien
+présente et dimensionnée). Un défilement programmatique équivalent
+(`window.scrollTo`) sur un onglet fraîchement rechargé a produit une capture cohérente
+avec la géométrie mesurée. Conclusion : artefact ponctuel de capture d'écran de cet
+environnement de test (déjà observé sous d'autres formes pour ce projet — voir les
+limites de `requestAnimationFrame`/`document.hidden` en onglet non réellement au premier
+plan, phase 7C ci-dessus), pas un bug de la mise en page elle-même.
+
 ## Avancement (feuille de route)
 
 - **1A — Socle et carte** : fait. Génération, affichage, redimensionnement, reproductibilité
@@ -1542,3 +1658,12 @@ post-lancement » ci-dessus pour la liste complète des sous-phases à venir) :
   `ctx.clearRect` dans `Jeu.dessinerTout()`, sans conséquence tant que tous les
   remplissages étaient opaques) qui aurait fait dériver l'effet vers l'opacité totale
   au fil du temps sans ce correctif.
+- **Confort en mode paysage sur mobile (correctif post-lancement)** : fait. Voir
+  « Confort en mode paysage sur mobile (correctif post-lancement) » ci-dessus : mise en
+  page en grille sous `@media (orientation: landscape) and (max-height: 500px)`
+  (téléphones en paysage uniquement, jamais tablettes/desktop) — plateau à gauche prenant
+  toute la hauteur disponible, titre/bouton Son/HUD/barre de tours en colonne compacte à
+  droite ; `Jeu.redimensionner()` plafonne désormais aussi la hauteur du canvas dans ce
+  mode (jusqu'ici seule la largeur comptait) ; plateau épinglé (`position: sticky`) pour
+  rester visible même si la colonne latérale doit occasionnellement défiler sur les plus
+  petits téléphones. Portrait et desktop strictement inchangés.
