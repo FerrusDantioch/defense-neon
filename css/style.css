@@ -481,3 +481,122 @@ h2 {
     font-weight: 700;
     color: #f1c40f;
 }
+
+/* Mode paysage mobile (contenu additionnel post-lancement) : la mise en page
+   habituelle empile tout verticalement (titre, bouton Son, canvas, HUD, barre de
+   tours), pensée pour un écran plus haut que large. En paysage sur téléphone, c'est
+   l'inverse (large mais bas) : le canvas, dimensionné jusqu'ici sur la seule largeur
+   disponible (voir Jeu.redimensionner, jeu.js), déborderait largement de la hauteur
+   réelle de l'écran, forçant à faire défiler la page pendant la partie — inconfortable
+   sur un jeu qui demande des taps rapides et précis sur la grille.
+   Cible seulement les téléphones (hauteur de viewport réduite), pas les tablettes ou
+   ordinateurs en paysage qui ont déjà assez de place verticale avec la mise en page
+   habituelle : `max-height: 500px` couvre les téléphones actuels en paysage (320 à
+   ~430px de hauteur utile selon le modèle) sans capturer une tablette (768px et plus).
+   Voir Jeu.MEDIA_PAYSAGE_MOBILE (jeu.js), la même requête, dupliquée côté JS pour que
+   Jeu.redimensionner() sache quand plafonner aussi la hauteur du canvas (indispensable
+   ici : une grille en CSS donne enfin à .conteneur-canvas une vraie hauteur mesurable
+   (voir plus bas), mais sans ce plafond JS le canvas continuerait de ne considérer
+   que la largeur et déborderait quand même de cette hauteur).
+   Grid plutôt que flex : permet de placer titre/bouton Son/HUD/barre de tours dans une
+   colonne à droite malgré leur ordre entrecoupé dans le DOM (le canvas est entre les
+   deux dans index.html) sans avoir à les envelopper dans un nouvel élément — chaque
+   règle ci-dessous ne fait que leur assigner une cellule de la grille par nom de ligne,
+   peu importe leur position dans le HTML. */
+@media (orientation: landscape) and (max-height: 500px) {
+    body {
+        display: grid;
+        grid-template-columns: 1fr 200px;
+        grid-template-rows: auto auto 1fr auto;
+        min-height: 100dvh;
+        padding: 8px;
+        gap: 8px;
+    }
+
+    h1 {
+        grid-column: 2;
+        grid-row: 1;
+        font-size: 1.15rem;
+    }
+
+    #bouton-son {
+        grid-column: 2;
+        grid-row: 2;
+    }
+
+    /* S'étire sur toutes les lignes de la grille (peu importe qu'elle en compte trois
+       ou davantage) : c'est ce qui donne enfin à ce conteneur une vraie hauteur
+       mesurable par Jeu.redimensionner() (`conteneur.clientHeight`), au lieu de la
+       laisser dériver du canvas lui-même comme en mise en page habituelle (portrait).
+       `display: flex` + centrage : le canvas, dimensionné en JS à la taille exacte qui
+       tient dans cet espace en conservant son ratio (voir Jeu.redimensionner), ne
+       remplit pas forcément à la fois toute la largeur et toute la hauteur de cette
+       cellule — le centrer évite qu'il ne colle contre un bord plutôt que l'autre.
+       `max-height` + `position: sticky` : sur le plus petit des téléphones visés par
+       cette media query, la colonne de droite (titre, bouton Son, HUD, barre de tours)
+       peut rester plus haute que l'écran malgré sa mise en page compacte — dans ce cas,
+       la grille grandit au-delà de 100dvh et la page devient globalement défilable
+       (aucun `overflow: hidden` forcé ici, qui aurait simplement rendu le bas de cette
+       colonne inaccessible). Sans `max-height`, ce conteneur grandirait alors lui aussi
+       au-delà de la hauteur de l'écran (il s'étire sur la même grille), et une partie du
+       plateau resterait invisible sous le bord inférieur de l'écran ; `max-height`
+       l'empêche de dépasser la hauteur réelle du viewport, et `position: sticky` le
+       garde alors visible et jouable pendant que le reste de la page défile autour de
+       lui, plutôt que de le laisser défiler hors champ avec le reste. */
+    .conteneur-canvas {
+        grid-column: 1;
+        grid-row: 1 / -1;
+        max-width: none;
+        height: 100%;
+        max-height: calc(100dvh - 16px);
+        position: sticky;
+        top: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* Sans ces deux propriétés, le canvas garderait son étirement habituel (width:
+       100%; height: auto, voir plus bas) et couvrirait toute la largeur de
+       .conteneur-canvas en déformant son ratio au lieu de respecter la taille exacte
+       fixée par Jeu.redimensionner() sur ses attributs width/height. */
+    #canvas-jeu {
+        width: auto;
+        height: auto;
+        max-width: 100%;
+        max-height: 100%;
+    }
+
+    /* Colonne de droite : au lieu du centrage habituel sur toute la largeur de l'écran
+       (pensé pour une bande étroite en portrait), les items s'accumulent verticalement
+       du haut de leur cellule plutôt qu'au centre, plus lisible dans une colonne
+       étroite (200px) qu'un centrage qui les ferait flotter au milieu d'un espace
+       vertical généreux. */
+    .barre-hud,
+    .barre-types-tours {
+        grid-column: 2;
+        max-width: none;
+        justify-content: flex-start;
+        font-size: 0.82rem;
+        gap: 6px;
+    }
+
+    .barre-hud {
+        grid-row: 3;
+    }
+
+    .barre-types-tours {
+        grid-row: 4;
+    }
+
+    /* Filet de sécurité : sur le plus petit des téléphones visés par cette media
+       query, le contenu de l'écran d'accueil (le plus dense des trois écrans
+       superposés — niveau/XP, cinq paliers de bonus, boutons de durée) peut rester
+       plus haut que l'espace disponible malgré la hauteur généreuse que le canvas
+       reçoit désormais dans cette mise en page. Un défilement interne à l'écran
+       superposé (plutôt qu'un défilement de la page entière, qui décalerait aussi le
+       canvas et le reste de l'interface) garde tout le reste du jeu stable. */
+    .ecran-superpose {
+        overflow-y: auto;
+    }
+}
