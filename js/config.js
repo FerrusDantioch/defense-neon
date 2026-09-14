@@ -103,17 +103,22 @@ const Config = {
     // Rayon de flou (ctx.shadowBlur) des halos néon (phase 4A). Toujours posé puis
     // retiré (ctx.shadowBlur = 0) immédiatement après l'élément concerné, sous peine
     // de faire baver le halo sur tout ce qui est dessiné ensuite dans la même frame.
-    // Seuls les éléments peu nombreux par frame (tours, ennemis, départ/arrivée)
-    // portent un halo : les particules (phase 4B, potentiellement des centaines) et
-    // les projectiles (jusqu'à TAILLE_POOL_PROJECTILES actifs) en sont volontairement
-    // privés, le flou ayant un coût de rendu par appel qui ne vaudrait pas le gain
-    // visuel à cette échelle.
+    // Seuls les éléments peu nombreux par frame *et* dessinés en une seule forme
+    // (tours, départ/arrivée) portent un halo : les particules (phase 4B,
+    // potentiellement des centaines) et les projectiles (jusqu'à
+    // TAILLE_POOL_PROJECTILES actifs) en sont volontairement privés, le flou ayant un
+    // coût de rendu par appel qui ne vaudrait pas le gain visuel à cette échelle. Les
+    // ennemis en faisaient partie jusqu'à la phase 7A (un simple cercle, un seul
+    // appel de shadowBlur) ; leurs silhouettes de robot, composées de plusieurs
+    // formes par ennemi (corps, capteur, chenilles/plaques), en ont perdu le halo à
+    // cette occasion — même principe de coût par appel, mais désormais multiplié par
+    // le nombre de formes de chaque châssis plutôt qu'un seul cercle (voir
+    // Ennemi.dessiner, ennemi.js).
     HALO_FLOU_TOUR_BASE: 6,
     // Le halo d'une tour s'intensifie légèrement à chaque amélioration, pour que le
     // niveau d'une tour se lise aussi d'un coup d'œil sans dépendre uniquement du
     // panneau d'amélioration (voir Tour.dessiner dans tour.js).
     HALO_FLOU_TOUR_PAR_NIVEAU: 1.2,
-    HALO_FLOU_ENNEMI: 5,
     HALO_FLOU_POINT_CHEMIN: 10,
     // Halo léger des bâtiments du décor (phase 7C) : ce second canvas ne contient
     // jamais plus d'une quinzaine de formes au total (DECOR_NOMBRE_BATIMENTS_LOINTAIN +

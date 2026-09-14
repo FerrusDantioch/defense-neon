@@ -447,14 +447,18 @@ uniquement une note pour une future session d'équilibrage.
 Palette (`Config.COULEURS`) reprise en tons bleu-nuit très sombres (fond, cases libres,
 liseré, case de chemin) pour que les seuls points lumineux de la scène soient les
 éléments qui comptent pour le joueur : départ et arrivée (halo néon vert/rose, voir
-`Carte.dessiner`), tours et ennemis (halo néon de la couleur du type, voir
-`Tour.dessiner`/`Ennemi.dessiner`). Ces halos utilisent `ctx.shadowBlur`, toujours reposé
-à 0 immédiatement après l'élément concerné pour ne jamais déteindre sur le reste de la
-scène dessinée ensuite dans la même frame (voir `Config.HALO_FLOU_TOUR_BASE`,
-`HALO_FLOU_ENNEMI`, `HALO_FLOU_POINT_CHEMIN`). Volontairement absent de la grille
-elle-même (240 cases dessinées chaque frame) et des particules/projectiles (phase 4B,
-potentiellement nombreux) : le coût de rendu par appel de `shadowBlur` n'en vaudrait pas
-le gain visuel à cette échelle — seuls les éléments peu nombreux par frame en portent un.
+`Carte.dessiner`), tours et, à l'origine, ennemis (halo néon de la couleur du type, voir
+`Tour.dessiner`). Ces halos utilisent `ctx.shadowBlur`, toujours reposé à 0 immédiatement
+après l'élément concerné pour ne jamais déteindre sur le reste de la scène dessinée
+ensuite dans la même frame (voir `Config.HALO_FLOU_TOUR_BASE`, `HALO_FLOU_POINT_CHEMIN`).
+Volontairement absent de la grille elle-même (240 cases dessinées chaque frame) et des
+particules/projectiles (phase 4B, potentiellement nombreux) : le coût de rendu par appel
+de `shadowBlur` n'en vaudrait pas le gain visuel à cette échelle — seuls les éléments peu
+nombreux par frame *et* dessinés en une seule forme en portent un. **Les ennemis en
+faisaient partie ici, en 4A** (un simple cercle, donc un seul appel de `shadowBlur` par
+ennemi) — ils l'ont perdu depuis, quand leurs silhouettes de robot (phase 7A, plusieurs
+formes par ennemi) l'ont rendu proportionnellement plus coûteux ; voir « Silhouettes
+robotiques (phase 7A) » plus bas.
 
 Trois formes de socle distinctes remplacent la lettre M/C/S posée en phase 2A
 (`Tour.dessinerSoclePolygone`, `dessinerCanon`) :
@@ -1583,6 +1587,119 @@ bien `'triangle'` au moment de `start()`, `frequency.setValueAtTime(220, …)` p
 parallèle : toujours `'square'`/`'sawtooth'` à leurs fréquences d'origine, aucune
 régression. `CACHE_NOM` incrémenté à `v10` (`son.js` a changé).
 
+## Silhouettes robotiques (phase 7A)
+
+Remplace le rendu des ennemis — un simple cercle coloré depuis la phase 4A — par de
+véritables silhouettes de châssis robotiques, distinctes pour chacun des trois types
+existants. Purement visuel : aucune donnée de gameplay (points de vie, vitesse, dégâts,
+ciblage) ne change.
+
+### Vue du dessus, pas des personnages (`ennemi.js`)
+
+Le plateau (carte, tours) est vu du dessus depuis la phase 1A : un robot en personnage
+de profil n'aurait aucun sens sous cet angle. Les trois châssis sont donc conçus comme de
+petits véhicules/drones au sol vus depuis une caméra aérienne — un corps polygonal plein,
+jamais de jambes ni de silhouette humanoïde.
+
+### Orientation (`Ennemi.deplacer`, `Ennemi.dessiner`)
+
+Nouvelle propriété `this.angleDirection` (radians, via `Math.atan2`), recalculée à
+chaque frame dans `deplacer()` à partir du même vecteur direction que le déplacement
+lui-même — avant même de savoir si le pas de cette frame atteindra le point de passage
+visé, pour qu'un virage fasse tourner le châssis dès qu'il s'y engage. Initialisée aussi
+dans le constructeur (même calcul, vers le premier point de passage) : `Vagues.mettreAJour`
+(qui crée les ennemis) est appelée après la boucle de déplacement dans `Jeu.simuler()`, un
+ennemi tout juste apparu n'a donc pas encore eu de `deplacer()` au moment de son tout
+premier `dessiner()`, dans la même frame.
+
+`dessiner()` applique `ctx.translate(this.x, this.y)` puis `ctx.rotate(this.angleDirection)`
+avant de dessiner le châssis, entouré d'un `ctx.save()`/`ctx.restore()` : la barre de vie,
+dessinée après `restore()` avec les coordonnées absolues `this.x`/`this.y` comme avant
+cette phase, reste ainsi toujours horizontale, quelle que soit l'orientation du robot en
+dessous — vérifié explicitement au pixel (`getImageData`) sur un ennemi tourné à 90°, pas
+seulement à l'œil.
+
+### Les trois châssis (`ennemi.js`)
+
+Tous dessinés en coordonnées locales (après translate/rotate ci-dessus, +x = toujours
+l'avant du châssis) avec `beginPath`/`lineTo`/`arc`, sans image. Taille globale dérivée du
+même `rayon` qu'avant (fonction des points de vie de base du type) pour rester comparable
+aux anciens cercles.
+
+- **Standard (cyan)** : hexagone légèrement allongé dans le sens de la marche
+  (`dessinerHexagone`, un helper partagé avec le Blindé — même principe que
+  `Tour.dessinerSoclePolygone`), capteur circulaire clair pointant vers l'avant, deux
+  chenilles latérales sombres de part et d'autre du corps.
+- **Rapide (jaune)** : profil effilé en flèche mousse (un polygone à cinq sommets : nez
+  pointu, épaules larges, arrière tronqué), plus étroit et plus long que le Standard, sans
+  chenilles ; un petit accent triangulaire clair à l'arrière évoque un réacteur.
+- **Blindé (orange)** : hexagone large et trapu (peu allongé, contrairement au Standard),
+  deux plaques d'armure latérales sombres en léger surplomb du corps, capteur central
+  plus gros que celui du Standard.
+
+Teintes claires/sombres dérivées de la couleur de base de chaque type via deux nouvelles
+tables, `COULEURS_CSS_ENNEMIS_CLAIR`/`_SOMBRE` — volontairement incomplètes (seules les
+entrées réellement utilisées existent ; le Rapide n'a pas de partie sombre, pas de
+chenilles).
+
+`// PHASE 7F :` laissé dans `Ennemi.dessiner()`, à l'endroit où un futur quatrième châssis
+(drone volant, plus anguleux et aérien) viendrait s'ajouter aux trois ci-dessus.
+
+### Écart par rapport au prompt : halo retiré (`config.js`, `ennemi.js`)
+
+Le prompt de cette phase affirmait que « la règle de performance posée en phase 4A »
+excluait déjà tout `shadowBlur` sur les ennemis. **Ce n'était pas le cas** : `Ennemi.dessiner`
+posait bien un halo (`Config.HALO_FLOU_ENNEMI`, retiré aussitôt après comme pour les
+tours) depuis la phase 4A elle-même — vérifié directement dans le code avant de commencer,
+et documenté comme tel dans ce fichier (« seuls les éléments peu nombreux par frame
+(tours, ennemis, départ/arrivée) portent un halo »). L'instruction du prompt (aucun
+`shadowBlur` sur ces nouvelles formes) a néanmoins été suivie, mais pour la vraie raison
+suivante plutôt que celle avancée par le prompt : un ancien ennemi ne coûtait qu'un seul
+appel de `shadowBlur` (un cercle) ; chaque nouveau châssis se compose de plusieurs formes
+(corps, capteur, chenilles ou plaques) — y poser un halo sur chacune aurait multiplié ce
+coût par autant de formes et par ennemi, jusqu'à 60 à l'écran (le seuil de fluidité visé).
+`Config.HALO_FLOU_ENNEMI` est donc supprimé (dernière utilisation retirée), et le
+commentaire de `Config.HALO_FLOU_TOUR_BASE` mis à jour en conséquence (voir « Identité
+visuelle cyberpunk (phase 4A) » ci-dessus, désormais corrigée pour refléter cet historique
+exact plutôt que la version que le prompt en donnait).
+
+### Vérification
+
+Testé en navigateur (serveur local) :
+
+- **orientation** : ennemis construits directement (contournant `Vagues`) avec un
+  `angleDirection` fixé à plusieurs valeurs (0, ±90°, 180°) puis dessinés sur un canvas de
+  test agrandi (`Carte.tailleCase` porté à 140px temporairement, pour juger des détails à
+  l'œil) — capteur et chenilles/plaques suivent bien la rotation. Confirmé au pixel
+  (`getImageData`) plutôt qu'à l'œil pour deux orientations (0° et 90°) sur le Standard :
+  le capteur clair se déplace exactement à l'endroit attendu (avant du châssis dans les
+  deux cas), les chenilles sombres passent de haut/bas à gauche/droite en conséquence ;
+- **barre de vie** : vérifiée au pixel sur l'ennemi tourné à 90° — reste bien horizontale
+  (dégradé vert → gris de gauche à droite), non affectée par la rotation du châssis ;
+- **reconnaissance des trois types** : les trois châssis testés côte à côte à la taille
+  réelle du jeu (canvas standard, sans agrandissement) restent distinguables par leur
+  forme et leur taille relative, pas seulement leur couleur — vérifié à la fois en
+  résolution desktop et en portrait mobile (375px de large) ;
+- **fluidité à 60 ennemis** : 60 instances (mélange des trois types) pilotées sur 120
+  frames simulées manuellement (limite de `requestAnimationFrame` sur onglet non
+  réellement au premier plan, déjà documentée plus haut) — 1,10 ms en moyenne par frame
+  pour la boucle complète (déplacement, ciblage, rendu de tous les ennemis), largement
+  sous le budget de 16,6 ms d'une image à 60 fps ;
+- **ciblage des tours** : une tour construite à proximité d'un ennemi cible et tire
+  normalement (`tour.cible` non nul, un projectile activé) — aucune régression sur cette
+  mécanique, comme demandé ;
+- **aucune erreur console** dans tous les scénarios ci-dessus, y compris la vague réelle
+  (`Vagues.demarrer`) jouée sur plusieurs centaines de frames simulées.
+
+**Résumé demandé par le prompt** : oui, les trois silhouettes restent distinguables à la
+taille réelle du jeu, y compris sur un petit écran (375px de large, testé) — la
+différence de forme globale (hexagone allongé cyan, flèche jaune, hexagone large orange)
+et de taille (le Blindé est nettement plus gros, sa taille dérivant déjà de ses points de
+vie plus élevés) porte l'essentiel de la reconnaissance à cette échelle ; les détails plus
+fins (capteur, chenilles/plaques) restent, eux, surtout visibles de près (capture d'écran
+agrandie à l'appui) mais ne sont pas nécessaires pour distinguer les trois types au
+premier coup d'œil en jeu.
+
 ## Avancement (feuille de route)
 
 - **1A — Socle et carte** : fait. Génération, affichage, redimensionnement, reproductibilité
@@ -1722,3 +1839,13 @@ post-lancement » ci-dessus pour la liste complète des sous-phases à venir) :
   téléphone/ordinateur portable. Remplacée par une onde triangle avec glissando
   220 Hz → 90 Hz, plus riche en harmoniques et donc effectivement audible, tout en
   restant la tonalité de tir la plus grave et la plus longue des trois.
+- **Silhouettes robotiques (« phase 7A »)** : fait. Voir « Silhouettes robotiques
+  (phase 7A) » ci-dessus : remplace le cercle uni des ennemis (phase 4A) par trois
+  châssis distincts vus de haut (Standard : hexagone + capteur + chenilles ; Rapide :
+  flèche mousse sans chenilles ; Blindé : hexagone large + plaques d'armure + gros
+  capteur), orientés dans le sens du déplacement via une nouvelle propriété
+  `Ennemi.angleDirection`. Halo neon retiré des ennemis à cette occasion (existait
+  depuis la 4A, contrairement à ce qu'affirmait le prompt de cette phase) : plusieurs
+  formes par châssis en auraient multiplié le coût de rendu. Repère `// PHASE 7F :`
+  laissé pour un futur châssis de drone volant. Aucune régression sur le ciblage, la
+  barre de vie reste horizontale, fluide à 60 ennemis (1,1 ms/frame en moyenne).
