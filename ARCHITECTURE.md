@@ -1700,6 +1700,124 @@ fins (capteur, chenilles/plaques) restent, eux, surtout visibles de près (captu
 agrandie à l'appui) mais ne sont pas nécessaires pour distinguer les trois types au
 premier coup d'œil en jeu.
 
+## Chemins façon route (phase 7B)
+
+Restylise le rendu des cases de chemin pour qu'elles ressemblent à une véritable route
+urbaine (asphalte, trottoirs, ligne centrale) plutôt qu'un simple aplat de couleur.
+Purement visuel, aucune donnée de gameplay ne change ; réutilise le tracé animé par
+chemin (4A/6A) et la transparence du plateau (7C bis).
+
+### Trottoirs par détection de voisinage (`carte.js`)
+
+Plutôt qu'un contour géométrique lissé le long de la courbe du chemin (bien plus
+complexe à gérer proprement sur des virages et des croisements qu'une décoration ne le
+justifie), `Carte.calculerSegmentsBordure()` exploite le fait que le plateau est déjà une
+grille : pour chaque case de chemin, chacune de ses 4 arêtes devient un trottoir
+seulement si la case voisine de ce côté n'appartient à aucun chemin (ou est hors grille).
+Calculée une seule fois par `generer()`, juste après que la grille définitive soit connue
+— jamais recalculée en boucle par `dessiner()`, qui se contente de multiplier des
+coordonnées de case déjà connues par `tailleCase` à chaque frame (même principe que le
+reste de la grille, aucun recalcul de géométrie). Stockée en unités de case
+(`{ colonne, ligne, arete }`), pas en pixels, pour rester valide quel que soit le
+redimensionnement du canvas.
+
+Un seul `beginPath()`/`stroke()` pour la totalité des segments (jusqu'à une centaine sur
+une carte à deux chemins), pas un appel par segment.
+
+### Texture d'asphalte (`carte.js`)
+
+`Carte.genererTachesAsphalte()` sème `Config.NOMBRE_TACHES_PAR_CASE_CHEMIN` petites
+taches par case de chemin (position et rayon en fraction de case, pas en pixels absolus
+— même raison que les trottoirs ci-dessus). Tirées via `Aleatoire`, pas `Math.random()` :
+contrairement au décor de la phase 7C (purement scénographique, jamais lu par le reste du
+jeu), cette texture fait partie du rendu de la carte elle-même et doit rester
+reproductible à graine égale, comme le tracé du chemin. Appelée après que la génération
+des chemins ait fini de consommer ses propres tirages (nombre variable d'une tentative à
+l'autre) : peu importe combien elle en a consommé, `genererTachesAsphalte()` reprend la
+même suite là où elle en était, donc à un point déterministe pour une graine donnée —
+vérifié directement (`Carte.generer(graine)` appelé deux fois de suite avec la même
+graine produit un tableau de taches strictement identique, comparé en JSON).
+
+### Ordre de dessin (`Carte.dessiner`)
+
+Aplat d'asphalte pour chaque case de chemin (remplace l'ancien aplat uni
+`Config.COULEURS.caseChemin`, retiré) → une fois **toutes** les cases remplies (chemin
+et libres), passe séparée pour les taches d'usure, puis pour les segments de trottoir →
+ligne centrale animée par-dessus → marqueurs départ/arrivée (déjà dans la boucle
+existante). Taches et trottoirs ne sont dessinés qu'après coup, jamais dans la même
+passe que le remplissage des cases, pour une raison précise : un élément dessiné sur sa
+propre case pendant cette première passe risquerait d'être partiellement recouvert par
+l'aplat opaque d'une case voisine dessinée juste après dans le même balayage ligne par
+ligne — en particulier au bord partagé entre deux cases de chemin adjacentes, exactement
+là où les trottoirs ne doivent jamais apparaître.
+
+### Écart par rapport au prompt : liseré générique retiré des cases de chemin (`carte.js`)
+
+Non demandé explicitement par le prompt, mais nécessaire pour respecter ses propres
+critères d'acceptation (virage « propre, sans trou ni chevauchement disgracieux »,
+croisement où « la route continue proprement »). Le liseré de grille générique
+(`Config.COULEURS.lisere`, `strokeRect` sur les 4 arêtes de chaque case) restait
+auparavant dessiné sur toutes les cases sans distinction. Conservé tel quel sur les cases
+libres/occupées (toujours nécessaire pour repérer la grille constructible), mais
+désormais sauté sur les cases de chemin : le laisser aurait dessiné un fin contour sur
+les arêtes *intérieures* de la route (entre deux cases de chemin adjacentes, y compris à
+l'intérieur d'un virage ou d'un croisement) — exactement les coutures que
+`calculerSegmentsBordure()` s'attache à ne pas tracer. Les trottoirs en tiennent lieu
+pour les cases de chemin, sur leurs seules arêtes extérieures.
+
+`Config.COULEURS.caseChemin` (l'ancien aplat, `'#33334a'`) supprimé une fois plus
+référencé nulle part, comme demandé. Les trois nouvelles teintes
+(`asphalte`/`bordureRoute`/`tacheAsphalte`) ajoutées dans `Config.COULEURS` plutôt que
+dans un objet `Config.PALETTE` séparé comme l'esquissait le prompt — même écart, pour la
+même raison, que celui déjà documenté pour le décor (7C) et l'image de fond (7C bis).
+
+### Ligne centrale amincie (`carte.js`)
+
+Épaisseur du tracé animé réduite de moitié (`taille * 0.1` → `taille * 0.05`, plancher à
+2px conservé) : à l'ancienne épaisseur, la ligne occupait une bonne partie de la largeur
+de la route et se lisait comme un large faisceau plutôt qu'un marquage au sol. Logique
+d'animation (`lineDashOffset`) et couleur par chemin (`Config.COULEURS.cheminsNeon`)
+inchangées.
+
+### Vérification
+
+Testé en navigateur (serveur local), à la fois visuellement et en inspectant directement
+les données produites (plus fiable qu'un jugement à l'œil pour une intersection large de
+quelques pixels seulement) :
+
+- **ligne droite** : segments de trottoir uniquement sur les deux arêtes perpendiculaires
+  au sens du tracé, jamais sur les deux arêtes dans le sens de la marche — confirmé
+  visuellement sur plusieurs graines ;
+- **virage** : une case de virage retrouvée par analyse du tracé ordonné (changement
+  d'axe horizontal ↔ vertical entre deux pas) porte exactement 2 segments de trottoir,
+  sur ses deux arêtes extérieures — un L propre, ni trou ni chevauchement ;
+- **croisement le plus serré possible** : recherche automatique parmi 500 graines d'un
+  croisement réduit à une seule case partagée (graine 4, case (11, 7)) — ses 4 voisines
+  sont bien toutes `'CHEMIN'` et elle ne porte **aucun** segment de trottoir, confirmé
+  directement sur `Carte.segmentsBordure`. Un croisement plus large (graine 1, deux
+  chemins se chevauchant sur 14 cases) donne le même résultat à plus grande échelle :
+  route continue, aucun trottoir intérieur, capture d'écran agrandie à l'appui ;
+- **reproductibilité** : `Carte.generer(4)` appelé deux fois de suite produit des
+  tableaux `tachesAsphalte` et `segmentsBordure` strictement identiques (comparaison
+  JSON) ;
+- **transparence du plateau (7C bis)** : vérifié au pixel — une case libre reste à
+  alpha 225/255 (translucide, valeur inchangée depuis le correctif de la phase 7C), une
+  case de chemin (hors ligne centrale/tache) est à `rgb(35, 38, 46)` = `Config.COULEURS.
+  asphalte` exact, alpha 255 (pleinement opaque) ;
+- **fluidité** : 60 ennemis simulés sur 180 frames avec la nouvelle carte (110 segments
+  de trottoir, 180 taches sur cette graine) — 0,35 ms en moyenne par frame pour la boucle
+  complète, aucune perte de fluidité mesurable ;
+- **aucune erreur console** dans tous les scénarios ci-dessus.
+
+**Résumé demandé par le prompt** : oui, l'effet de trottoir reste convaincant même sur
+l'intersection la plus serrée observée (une seule case partagée entre les deux chemins,
+graine 4) — la route y reste visuellement continue dans les deux directions, sans aucun
+trottoir parasite traversant l'intersection, exactement le comportement attendu d'un
+vrai carrefour. Testé sur plusieurs dizaines de graines différentes (génération
+automatisée pour trouver des cas serrés) sans jamais observer de trou ni de
+chevauchement disgracieux, y compris quand deux chemins se chevauchent sur une longue
+portion plutôt qu'un simple point de croisement.
+
 ## Avancement (feuille de route)
 
 - **1A — Socle et carte** : fait. Génération, affichage, redimensionnement, reproductibilité
@@ -1849,3 +1967,13 @@ post-lancement » ci-dessus pour la liste complète des sous-phases à venir) :
   formes par châssis en auraient multiplié le coût de rendu. Repère `// PHASE 7F :`
   laissé pour un futur châssis de drone volant. Aucune régression sur le ciblage, la
   barre de vie reste horizontale, fluide à 60 ennemis (1,1 ms/frame en moyenne).
+- **Chemins façon route (« phase 7B »)** : fait. Voir « Chemins façon route (phase 7B) »
+  ci-dessus : asphalte opaque + taches d'usure (reproductibles à graine égale, via
+  `Aleatoire`) + trottoirs sur les seules arêtes extérieures d'une case de chemin
+  (détectées par simple voisinage de grille, calculées une fois à la génération), ligne
+  centrale animée existante conservée mais amincie. Croisement le plus serré possible
+  (une case partagée) vérifié sans aucun trottoir parasite. Liseré générique de grille
+  retiré des cases de chemin (nécessaire pour des jonctions propres, non prévu tel quel
+  par le prompt). `Config.COULEURS.caseChemin` supprimé, remplacé par
+  `asphalte`/`bordureRoute`/`tacheAsphalte`. Aucune régression sur la transparence du
+  plateau (7C bis) ni sur la fluidité (0,35 ms/frame en moyenne à 60 ennemis).

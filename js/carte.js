@@ -25,6 +25,25 @@ const Carte = {
     // les conversions pixels <-> case en dépendent.
     tailleCase: 0,
 
+    // Chemins façon route (phase 7B). Les deux tableaux ci-dessous sont calculés une
+    // seule fois par generer() (jamais recalculés en boucle : la grille ne change pas
+    // en cours de partie) et stockés en unités de case/fraction de case plutôt qu'en
+    // pixels bruts — dessiner() les convertit en coordonnées réelles à chaque frame en
+    // multipliant simplement par tailleCase, exactement comme il le fait déjà pour
+    // chaque case de la grille (x = colonne * taille) : aucun recalcul de géométrie,
+    // seulement une multiplication, donc sans impact sur la fluidité même si le
+    // canvas est redimensionné.
+    //
+    // Un segment par arête extérieure d'une case de chemin (voir
+    // calculerSegmentsBordure) : { colonne, ligne, arete } où arete vaut 'haut',
+    // 'bas', 'gauche' ou 'droite'.
+    segmentsBordure: [],
+    // Une tache d'usure par tirage (voir genererTachesAsphalte) : { colonne, ligne,
+    // xFraction, yFraction, rayonFraction }, les trois derniers dans [0, 1] — une
+    // fraction de tailleCase, pas un pixel absolu, pour rester valides quelle que
+    // soit la taille du canvas au moment du tracé.
+    tachesAsphalte: [],
+
     // Renvoie les 4 cases orthogonalement adjacentes à (colonne, ligne) — haut, bas,
     // gauche, droite. On ignore volontairement les diagonales : les ennemis se
     // déplaceront uniquement en orthogonal (phase 1B), donc deux cases qui ne se
@@ -226,6 +245,76 @@ const Carte = {
         return this.cheminDeSecours();
     },
 
+    // Trottoirs façon route (phase 7B). Ne calcule aucun contour géométrique lissé le
+    // long de la courbe du chemin — avec des virages et des croisements (phase 6A),
+    // gérer proprement les jointures serait bien plus complexe que nécessaire pour un
+    // effet purement décoratif. Exploite à la place le fait que le plateau est déjà
+    // une grille : pour chaque case de chemin, chacune de ses 4 arêtes devient un
+    // trottoir si et seulement si la case voisine de ce côté n'appartient à aucun
+    // chemin (ou est hors grille). Ce principe simple gère tout sans cas particulier :
+    // une ligne droite ne produit des trottoirs que sur ses deux côtés longs, un
+    // virage en produit un en L (les deux arêtes extérieures du virage n'ont, chacune,
+    // pas de voisine-chemin de leur côté), et un croisement entre deux chemins n'en
+    // produit aucun à l'endroit où ils se rejoignent (la case voisine y appartient
+    // bien à un chemin, peu importe lequel — la grille ne distingue pas lequel, voir
+    // la note en tête de ce fichier, et ça n'a pas besoin de le faire ici non plus).
+    calculerSegmentsBordure() {
+        this.segmentsBordure = [];
+
+        const aretesParDirection = [
+            { dc: 0, dl: -1, arete: 'haut' },
+            { dc: 0, dl: 1, arete: 'bas' },
+            { dc: -1, dl: 0, arete: 'gauche' },
+            { dc: 1, dl: 0, arete: 'droite' }
+        ];
+
+        for (let ligne = 0; ligne < Config.LIGNES; ligne++) {
+            for (let colonne = 0; colonne < Config.COLONNES; colonne++) {
+                if (this.grille[ligne][colonne] !== 'CHEMIN') continue;
+
+                for (const { dc, dl, arete } of aretesParDirection) {
+                    const voisineColonne = colonne + dc;
+                    const voisineLigne = ligne + dl;
+                    const voisineEstChemin = this.dansLaGrille(voisineColonne, voisineLigne)
+                        && this.grille[voisineLigne][voisineColonne] === 'CHEMIN';
+
+                    if (!voisineEstChemin) {
+                        this.segmentsBordure.push({ colonne, ligne, arete });
+                    }
+                }
+            }
+        }
+    },
+
+    // Texture d'asphalte (phase 7B) : quelques petites taches d'usure par case de
+    // chemin, position et rayon tirés via Aleatoire — pas Math.random() : contrairement
+    // au décor de la phase 7C (purement scénographique, jamais lu par le reste du
+    // jeu), cette texture fait partie du rendu de la carte elle-même et doit rester
+    // reproductible à graine égale, comme le tracé du chemin lui-même. Appelée après
+    // que tenterTracerChemin/genererUnChemin aient fini de consommer leurs propres
+    // tirages pour cette carte : peu importe combien ils en ont consommé (variable
+    // d'une tentative à l'autre), cette fonction reprend la même suite là où elle en
+    // était, donc à un point déterministe pour une graine donnée.
+    genererTachesAsphalte() {
+        this.tachesAsphalte = [];
+
+        for (let ligne = 0; ligne < Config.LIGNES; ligne++) {
+            for (let colonne = 0; colonne < Config.COLONNES; colonne++) {
+                if (this.grille[ligne][colonne] !== 'CHEMIN') continue;
+
+                for (let i = 0; i < Config.NOMBRE_TACHES_PAR_CASE_CHEMIN; i++) {
+                    this.tachesAsphalte.push({
+                        colonne,
+                        ligne,
+                        xFraction: Aleatoire.nombre(),
+                        yFraction: Aleatoire.nombre(),
+                        rayonFraction: 0.03 + Aleatoire.nombre() * 0.05
+                    });
+                }
+            }
+        }
+    },
+
     // Point d'entrée de la génération : initialise l'aléatoire avec la graine donnée,
     // puis génère Config.NOMBRE_CHEMINS chemins l'un après l'autre (chemin 0, puis
     // chemin 1, etc.), chacun avec sa propre entrée et sortie espacées des entrées et
@@ -291,6 +380,14 @@ const Carte = {
                 this.grille[c.ligne][c.colonne] = 'CHEMIN';
             }
         }
+
+        // Chemins façon route (phase 7B) : les deux dépendent de la grille
+        // définitive ci-dessus (trottoirs : quelles arêtes sont extérieures ; taches :
+        // quelles cases sont des cases de chemin), donc calculés seulement maintenant,
+        // une seule fois par carte générée — jamais recalculés en boucle par
+        // Carte.dessiner().
+        this.calculerSegmentsBordure();
+        this.genererTachesAsphalte();
     },
 
     // Vraie si la case existe et peut recevoir une construction.
@@ -342,7 +439,7 @@ const Carte = {
                 const x = colonne * taille;
                 const y = ligne * taille;
 
-                // Toutes les cases 'CHEMIN' partagent la même teinte de base, qu'il
+                // Toutes les cases 'CHEMIN' partagent le même aplat d'asphalte, qu'il
                 // s'agisse d'un croisement entre deux chemins ou non (phase 6A) : la
                 // distinction entre chemins se fait uniquement via le flux animé et
                 // les marqueurs départ/arrivée dessinés par-dessus, plus bas. Cette
@@ -351,10 +448,20 @@ const Carte = {
                 // jamais à travers le tracé du chemin, contrairement aux cases
                 // 'LIBRE'/'OCCUPEE' juste en dessous, rendues translucides.
                 if (etat === 'CHEMIN') {
-                    ctx.fillStyle = Config.COULEURS.caseChemin;
-                } else {
-                    ctx.fillStyle = Config.COULEURS.caseLibreTranslucide;
+                    ctx.fillStyle = Config.COULEURS.asphalte;
+                    ctx.fillRect(x, y, taille, taille);
+                    // Pas de liseré générique ici (voir juste en dessous, hors chemin)
+                    // : il dessinerait un fin contour sur les QUATRE arêtes de chaque
+                    // case de chemin, y compris celles partagées avec une case de
+                    // chemin voisine — exactement les coutures que
+                    // calculerSegmentsBordure() s'attache à ne PAS tracer à
+                    // l'intérieur d'une route continue (ligne droite, virage,
+                    // croisement). Les trottoirs, dessinés plus bas une fois toutes
+                    // les cases remplies, en tiennent lieu pour les cases de chemin.
+                    continue;
                 }
+
+                ctx.fillStyle = Config.COULEURS.caseLibreTranslucide;
                 ctx.fillRect(x, y, taille, taille);
 
                 // Un liseré plus clair garde la grille visible : sans lui, les cases
@@ -365,6 +472,54 @@ const Carte = {
             }
         }
 
+        // Chemins façon route (phase 7B) : taches d'usure d'abord, trottoirs ensuite
+        // — tous deux dans une passe séparée, une fois que la boucle ci-dessus a fini
+        // de remplir TOUTES les cases (chemin comme libres). Une tache ou un trottoir
+        // dessiné pendant la boucle ci-dessus, sur la case qui le porte, risquerait
+        // d'être partiellement recouvert par l'aplat opaque d'une case voisine
+        // dessinée juste après lui dans cette même boucle (ordre de balayage
+        // ligne par ligne) — en particulier au bord partagé entre deux cases de
+        // chemin adjacentes, exactement là où les trottoirs ne doivent PAS apparaître.
+        ctx.fillStyle = Config.COULEURS.tacheAsphalte;
+        for (const tache of this.tachesAsphalte) {
+            const cx = tache.colonne * taille + tache.xFraction * taille;
+            const cy = tache.ligne * taille + tache.yFraction * taille;
+            const rayon = tache.rayonFraction * taille;
+            ctx.beginPath();
+            ctx.arc(cx, cy, rayon, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Un seul beginPath()/stroke() pour tous les segments plutôt qu'un par
+        // segment : même résultat visuel, un seul appel de dessin au lieu de
+        // potentiellement plusieurs centaines sur une grande carte à deux chemins.
+        ctx.strokeStyle = Config.COULEURS.bordureRoute;
+        ctx.lineWidth = Config.LARGEUR_BORDURE_ROUTE * Jeu.facteurEchelle;
+        ctx.beginPath();
+        for (const segment of this.segmentsBordure) {
+            const x = segment.colonne * taille;
+            const y = segment.ligne * taille;
+            switch (segment.arete) {
+                case 'haut':
+                    ctx.moveTo(x, y);
+                    ctx.lineTo(x + taille, y);
+                    break;
+                case 'bas':
+                    ctx.moveTo(x, y + taille);
+                    ctx.lineTo(x + taille, y + taille);
+                    break;
+                case 'gauche':
+                    ctx.moveTo(x, y);
+                    ctx.lineTo(x, y + taille);
+                    break;
+                case 'droite':
+                    ctx.moveTo(x + taille, y);
+                    ctx.lineTo(x + taille, y + taille);
+                    break;
+            }
+        }
+        ctx.stroke();
+
         // Chemins multiples (phase 6A) : chaque chemin est retracé par-dessus la
         // grille sous forme de ligne pointillée animée (lineDashOffset, fonction du
         // temps écoulé) dans sa propre teinte néon (Config.COULEURS.cheminsNeon,
@@ -372,7 +527,12 @@ const Carte = {
         // cette même teinte plutôt que le vert/rose fixe d'avant phase 6A — c'est ce
         // qui rend un croisement lisible à l'œil : deux chemins qui se touchent
         // restent chacun reconnaissables à leur couleur, et l'on voit immédiatement
-        // quelle entrée correspond à quelle sortie.
+        // quelle entrée correspond à quelle sortie. Depuis la phase 7B, ce tracé fait
+        // aussi office de ligne centrale de la route posée dessous (asphalte +
+        // trottoirs) : logique d'animation et couleur par chemin inchangées, seule
+        // l'épaisseur a été réduite (voir plus bas) pour se lire comme un marquage au
+        // sol plutôt que comme le large faisceau qu'elle formait seule sur un simple
+        // aplat de couleur.
         const maintenant = performance.now();
         for (let index = 0; index < this.chemins.length; index++) {
             const infoChemin = this.chemins[index];
@@ -387,7 +547,12 @@ const Carte = {
                     else ctx.lineTo(point.x, point.y);
                 });
                 ctx.strokeStyle = teinte;
-                ctx.lineWidth = Math.max(2, taille * 0.1);
+                // Réduite de moitié depuis la phase 7B (0,1 → 0,05 * taille) : à
+                // l'ancienne épaisseur, la ligne occupait une bonne partie de la
+                // largeur de la route et se lisait comme un large faisceau plutôt
+                // qu'un marquage au sol. Plancher à 2px conservé pour rester visible
+                // sur les plus petites tailles de case.
+                ctx.lineWidth = Math.max(2, taille * 0.05);
                 ctx.setLineDash([motif, motif * 0.7]);
                 // Défile dans le temps pour suggérer un flux ; la période (motif *
                 // 1.7, la longueur totale d'un motif plein+vide) n'a besoin d'aucune

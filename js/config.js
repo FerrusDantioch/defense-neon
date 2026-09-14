@@ -62,19 +62,33 @@ const Config = {
         fond: '#0b0b14',
         caseLibre: '#14141f',
         lisere: '#26263a',
-        caseChemin: '#33334a',
 
         // Variantes semi-transparentes de `fond`/`caseLibre` ci-dessus, pour que le
         // décor d'arrière-plan (phase 7C, decor.js) transparaisse légèrement à travers
         // le plateau lui-même sur ses cases libres, jamais sur les cases de chemin
-        // (Carte.dessiner continue d'y peindre `caseChemin`, pleinement opaque — voir
-        // plus bas). Mêmes teintes que `fond`/`caseLibre`, seulement rendues
-        // translucides ; aucune des deux valeurs ci-dessus n'est modifiée, toujours
-        // utilisées telles quelles ailleurs si besoin.
+        // (Carte.dessiner y peint désormais `asphalte`, pleinement opaque — voir plus
+        // bas et « Chemins façon route (phase 7B) »). Mêmes teintes que
+        // `fond`/`caseLibre`, seulement rendues translucides ; aucune des deux valeurs
+        // ci-dessus n'est modifiée, toujours utilisées telles quelles ailleurs si
+        // besoin.
         fondTranslucide: 'rgba(10, 14, 23, 0.7)',
         caseLibreTranslucide: 'rgba(18, 24, 43, 0.6)',
         depart: '#39ff88',
         arrivee: '#ff2d6b',
+
+        // Chemins façon route (phase 7B, contenu additionnel post-lancement) :
+        // remplacent l'ancien aplat uni `caseChemin` ('#33334a', retiré — plus
+        // référencé nulle part une fois Carte.dessiner mis à jour). `asphalte` est
+        // l'aplat de base des cases de chemin ; `tacheAsphalte` une légère texture
+        // d'usure semée dessus (voir Carte.genererTachesAsphalte) ; `bordureRoute` les
+        // segments de trottoir sur les arêtes extérieures du tracé (voir
+        // Carte.calculerSegmentsBordure). Ajoutées ici, dans Config.COULEURS plutôt
+        // que dans un objet Config.PALETTE séparé comme l'esquissait le prompt de
+        // cette phase — même écart, pour la même raison, que celui déjà documenté
+        // pour le décor (phase 7C) et l'image de fond (7C bis) juste plus bas.
+        asphalte: '#23262e',
+        bordureRoute: 'rgba(210, 214, 225, 0.5)',
+        tacheAsphalte: 'rgba(0, 0, 0, 0.15)',
         // Teinte distincte par chemin (phase 6A), indexée par cheminIndex : utilisée
         // pour le flux animé le long du tracé et pour les marqueurs de départ/arrivée
         // de ce chemin (qui remplacent, pour cet usage, `depart`/`arrivee` ci-dessus —
@@ -136,6 +150,16 @@ const Config = {
     DECOR_VITESSE_PROCHE: 10,
     DECOR_NOMBRE_BATIMENTS_LOINTAIN: 8,
     DECOR_NOMBRE_BATIMENTS_PROCHE: 6,
+
+    // Chemins façon route (phase 7B, voir carte.js) : nombre de petites taches
+    // d'usure semées sur chaque case de chemin (Carte.genererTachesAsphalte, tirées
+    // via Aleatoire — contrairement au décor ci-dessus, ceci fait partie du rendu de
+    // la carte elle-même et doit rester reproductible à graine égale), et épaisseur
+    // des segments de trottoir (Carte.calculerSegmentsBordure), en pixels à l'échelle
+    // de référence — multipliée par Jeu.facteurEchelle au moment du tracé, comme
+    // toute autre distance du jeu (voir la note sur ce facteur dans jeu.js).
+    NOMBRE_TACHES_PAR_CASE_CHEMIN: 3,
+    LARGEUR_BORDURE_ROUTE: 2,
 
     // Caractéristiques de chaque type d'ennemi. La vitesse est en pixels par seconde,
     // à l'échelle de référence de la carte (20 colonnes) : sur une carte plus large ou
