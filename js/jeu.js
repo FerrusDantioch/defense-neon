@@ -282,7 +282,10 @@ const Jeu = {
         }
 
         for (const projectile of this.poolProjectiles) {
-            projectile.mettreAJour(dt);
+            // ennemisActifs transmis pour les dégâts de zone du Flak (phase 7D) : les
+            // trois autres types de projectile reçoivent ce paramètre sans jamais s'en
+            // servir, voir la note en tête de Projectile.mettreAJour (tour.js).
+            projectile.mettreAJour(dt, this.ennemisActifs);
         }
 
         Particules.mettreAJour(dt);

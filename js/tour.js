@@ -1,11 +1,15 @@
 // tour.js — Classes Tour et Projectile.
 //
 // Tour : pose fixe sur une case, cherche une cible parmi les ennemis à portée et tire
-// à cadence régulière. Trois types de tours (Mitrailleuse, Canon, Sniper, voir
-// Config.TYPES_TOURS) partagent ce même comportement de ciblage/tir et ne diffèrent
-// que par les valeurs lues dans le constructeur et par leur apparence. Une tour peut
-// aussi être améliorée (jusqu'à Config.NIVEAU_MAX_TOUR) ou vendue (phase 2B) : voir
-// recalculerStats, coutAmelioration, ameliorer et montantVente ci-dessous.
+// à cadence régulière. Quatre types de tours (Mitrailleuse, Canon, Sniper, Flak depuis
+// la phase 7D — voir Config.TYPES_TOURS) partagent ce même comportement de ciblage/tir
+// et ne diffèrent que par les valeurs lues dans le constructeur, par leur apparence, et
+// depuis la phase 7D par la façon dont leurs dégâts se répartissent à l'impact
+// (`typeDegats`, voir Projectile.mettreAJour). Une tour peut aussi être améliorée
+// (jusqu'à Config.NIVEAU_MAX_TOUR) ou vendue (phase 2B) : voir recalculerStats,
+// coutAmelioration, ameliorer et montantVente ci-dessous — génériques, aucune de ces
+// méthodes ne fait référence à un type précis, donc valables pour le Flak sans
+// modification.
 //
 // Projectile : tiré par une tour, suit sa cible jusqu'à l'impact ou jusqu'à ce que la
 // cible meure avant lui. Recyclé via un pool plutôt que créé/détruit à la volée (voir
@@ -13,9 +17,9 @@
 // pleine partie.
 
 class Tour {
-    // `type` est une clé de Config.TYPES_TOURS ('mitrailleuse', 'canon' ou 'sniper').
-    // Conservée sur l'instance (this.type) pour retrouver le coût d'achat de base au
-    // calcul du coût d'une amélioration (voir coutAmelioration).
+    // `type` est une clé de Config.TYPES_TOURS ('mitrailleuse', 'canon', 'sniper' ou
+    // 'flak'). Conservée sur l'instance (this.type) pour retrouver le coût d'achat de
+    // base au calcul du coût d'une amélioration (voir coutAmelioration).
     constructor(colonne, ligne, type) {
         this.colonne = colonne;
         this.ligne = ligne;
@@ -35,6 +39,12 @@ class Tour {
         this.degatsBase = caracteristiques.degats;
         this.cadenceBase = caracteristiques.cadence;
         this.porteeBase = caracteristiques.portee;
+        // 'unique' (dégâts à la seule cible verrouillée) ou 'zone' (explosion à
+        // l'impact, phase 7D) — jamais recalculée après coup comme degats/cadence/
+        // portee, le type de dégâts d'une tour ne change jamais avec son niveau.
+        // Lue par Projectile.mettreAJour (via activer() ci-dessous) pour bifurquer
+        // entre les deux comportements à l'impact.
+        this.typeDegats = caracteristiques.typeDegats;
 
         this.niveau = 1;
         // Somme du coût d'achat initial et de toutes les améliorations payées
@@ -118,6 +128,9 @@ class Tour {
     chercherCible(ennemis) {
         const portee = this.portee * Jeu.facteurEchelle;
 
+        // PHASE 7F : exclure ici les ennemis volants du ciblage des tours qui n'ont
+        // pas la capacité de les viser — le Flak sera la seule exception. Rien à
+        // faire pour l'instant, aucun ennemi volant n'existe encore.
         if (this.cible && this.cible.vivant && !this.cible.arrive) {
             const distance = Math.hypot(this.cible.x - this.x, this.cible.y - this.y);
             if (distance <= portee) {
@@ -163,7 +176,7 @@ class Tour {
         const projectile = pool.find(p => !p.actif);
         if (!projectile) return;
 
-        projectile.activer(this.x, this.y, this.cible, this.degats, this.couleur);
+        projectile.activer(this.x, this.y, this.cible, this.degats, this.couleur, this.typeDegats);
 
         // Flash de tir (phase 4B) : quelques particules projetées vers la cible,
         // depuis un point légèrement décalé du centre pour évoquer le canon plutôt
@@ -211,16 +224,20 @@ class Tour {
         ctx.stroke();
     }
 
-    // Formes distinctes par type de tour (phase 4A), pour ne plus dépendre de la
-    // lettre M/C/S posée en phase 2A pour les distinguer :
+    // Formes distinctes par type de tour (phase 4A, Flak ajouté en 7D), pour ne plus
+    // dépendre de la lettre M/C/S posée en phase 2A pour les distinguer :
     // - Mitrailleuse : losange compact, deux canons fins jumelés (cadence élevée) ;
     // - Canon : octogone massif, un seul canon épais (gros dégâts, cadence lente) ;
-    // - Sniper : triangle effilé, un canon long et fin (portée très supérieure).
+    // - Sniper : triangle effilé, un canon long et fin (portée très supérieure) ;
+    // - Flak : carré large, quatre canons courts en éventail à 45° les uns des
+    //   autres (dégâts de zone, voir Projectile.mettreAJour) — évoque une batterie
+    //   antiaérienne à tir multiple plutôt qu'un canon unique.
     // Le halo néon (couleur du type, voir Config.HALO_FLOU_TOUR_BASE) s'intensifie
     // légèrement à chaque amélioration, pour que le niveau d'une tour se lise aussi
-    // d'un coup d'œil sans ouvrir le panneau d'amélioration. `ctx.shadowBlur` est
-    // remis à 0 avant les canons : le halo doit rester propre au socle, pas baver sur
-    // le reste de la scène dessinée ensuite dans la même frame.
+    // d'un coup d'œil sans ouvrir le panneau d'amélioration — même mécanisme pour les
+    // quatre types, y compris le Flak, aucun code spécifique à écrire ici pour lui.
+    // `ctx.shadowBlur` est remis à 0 avant les canons : le halo doit rester propre au
+    // socle, pas baver sur le reste de la scène dessinée ensuite dans la même frame.
     dessiner(ctx) {
         const taille = Carte.tailleCase;
 
@@ -237,8 +254,19 @@ class Tour {
             this.dessinerSoclePolygone(ctx, taille * 0.32, 4, Math.PI / 4);
         } else if (this.type === 'canon') {
             this.dessinerSoclePolygone(ctx, taille * 0.34, 8, 0);
-        } else {
+        } else if (this.type === 'sniper') {
             this.dessinerSoclePolygone(ctx, taille * 0.36, 3, -Math.PI / 2);
+        } else {
+            // Flak : même rotation que la Mitrailleuse (Math.PI/4, cotes=4) — c'est
+            // ce qui donne un carré aux côtés bien à plat plutôt qu'un losange pointu
+            // (vérifié à l'écran : rotation=0 sur un carré à 4 côtés produit un
+            // losange, Math.PI/4 un carré bien droit, malgré ce que suggérerait le
+            // commentaire « losange » ci-dessus pour la Mitrailleuse — inexact depuis
+            // la phase 4A, sans lien avec cette phase). Nettement plus large
+            // (taille * 0.38 contre 0.32) : rester distinct de la Mitrailleuse vient
+            // ici de la taille, de la couleur et du nombre de canons, pas de la forme
+            // de base elle-même.
+            this.dessinerSoclePolygone(ctx, taille * 0.38, 4, Math.PI / 4);
         }
 
         ctx.shadowBlur = 0;
@@ -249,8 +277,21 @@ class Tour {
             this.dessinerCanon(ctx, angle, taille * 0.32, Math.max(1.5, taille * 0.05), -decalage);
         } else if (this.type === 'canon') {
             this.dessinerCanon(ctx, angle, taille * 0.3, Math.max(3, taille * 0.12), 0);
-        } else {
+        } else if (this.type === 'sniper') {
             this.dessinerCanon(ctx, angle, taille * 0.5, Math.max(1.5, taille * 0.05), 0);
+        } else {
+            // Quatre canons courts en éventail autour de l'angle de visée, chacun
+            // décalé de 45° du suivant (±22,5° et ±67,5° par rapport au centre du
+            // faisceau) — pas quatre canons répartis à 90° sur tout le pourtour
+            // (nord/sud/est/ouest), qui ne pointeraient pas vers la cible comme les
+            // trois autres types et ne lirait pas comme une seule batterie tirant
+            // dans une direction. `decalage` (perpendiculaire) reste à 0 : c'est
+            // l'angle de chaque canon, pas sa position de départ, qui les sépare.
+            const longueur = taille * 0.22;
+            const epaisseur = Math.max(2, taille * 0.06);
+            for (const decalageAngle of [-3, -1, 1, 3]) {
+                this.dessinerCanon(ctx, angle + decalageAngle * (Math.PI / 8), longueur, epaisseur, 0);
+            }
         }
     }
 }
@@ -265,21 +306,29 @@ class Projectile {
         // particules d'impact à l'arrivée (voir mettreAJour ci-dessous) — le
         // projectile lui-même reste dessiné en blanc, voir dessiner().
         this.couleur = '#ffffff';
+        // 'unique' ou 'zone' (phase 7D), copié depuis la tour tireuse à l'activation —
+        // voir Tour.typeDegats (tour.js) et la bifurcation dans mettreAJour ci-dessous.
+        this.typeDegats = 'unique';
         this.actif = false;
     }
 
     // Réinitialise les propriétés d'un projectile inactif du pool au lieu d'en créer
     // un nouveau avec `new` (voir la note en tête de fichier).
-    activer(x, y, cible, degats, couleur) {
+    activer(x, y, cible, degats, couleur, typeDegats) {
         this.x = x;
         this.y = y;
         this.cible = cible;
         this.degats = degats;
         this.couleur = couleur;
+        this.typeDegats = typeDegats;
         this.actif = true;
     }
 
-    mettreAJour(dt) {
+    // `ennemisActifs` (phase 7D, Jeu.ennemisActifs) : nécessaire pour qu'un impact à
+    // dégâts de zone puisse évaluer qui se trouve autour du point d'impact, en plus
+    // de la cible verrouillée — les trois types à dégâts uniques reçoivent ce
+    // paramètre sans jamais s'en servir, aucun changement de comportement pour eux.
+    mettreAJour(dt, ennemisActifs) {
         if (!this.actif) return;
 
         // La cible a déjà été détruite par un autre projectile arrivé avant celui-ci :
@@ -294,13 +343,37 @@ class Projectile {
         const distanceRestante = Math.hypot(dx, dy);
 
         if (distanceRestante < Config.PROJECTILE_RAYON_IMPACT) {
-            this.cible.subirDegats(this.degats);
-            // Impact sans mise à mort (phase 4B) : la mort elle-même déclenche sa
-            // propre explosion ailleurs (Jeu.simuler, au moment où l'ennemi est
-            // retiré de la liste des actifs), pour ne jamais superposer les deux
-            // effets sur un seul et même coup fatal.
-            if (this.cible.vivant) {
-                Particules.creerImpact(this.x, this.y, this.couleur);
+            if (this.typeDegats === 'zone') {
+                // Dégâts de zone (Flak, phase 7D) : tout ennemi vivant à moins de
+                // FLAK_RAYON_EXPLOSION du point d'impact réel du projectile (this.x/
+                // this.y) — pas de la position de this.cible, qui n'est qu'un point
+                // de visée parmi d'autres ennemis potentiellement présents dans le
+                // rayon. On parcourt `ennemisActifs` une seule fois : chaque ennemi
+                // n'y apparaît qu'une fois, donc chacun ne peut recevoir les dégâts
+                // qu'une seule fois par explosion, sans filet supplémentaire à écrire.
+                const rayon = Config.FLAK_RAYON_EXPLOSION * Jeu.facteurEchelle;
+                for (const ennemi of ennemisActifs) {
+                    if (!ennemi.vivant) continue;
+                    const distanceExplosion = Math.hypot(ennemi.x - this.x, ennemi.y - this.y);
+                    if (distanceExplosion < rayon) {
+                        ennemi.subirDegats(this.degats);
+                    }
+                }
+                // Toujours déclenchée, même sans aucun ennemi touché : le joueur doit
+                // pouvoir voir où se situe la zone d'effet, pas seulement quand elle
+                // s'avère utile. Nombre de particules dédié (PARTICULE_NOMBRE_
+                // EXPLOSION_ZONE), plus fourni qu'un impact ordinaire pour bien
+                // matérialiser l'étendue touchée.
+                Particules.creerExplosion(this.x, this.y, this.couleur, Config.PARTICULE_NOMBRE_EXPLOSION_ZONE);
+            } else {
+                this.cible.subirDegats(this.degats);
+                // Impact sans mise à mort (phase 4B) : la mort elle-même déclenche sa
+                // propre explosion ailleurs (Jeu.simuler, au moment où l'ennemi est
+                // retiré de la liste des actifs), pour ne jamais superposer les deux
+                // effets sur un seul et même coup fatal.
+                if (this.cible.vivant) {
+                    Particules.creerImpact(this.x, this.y, this.couleur);
+                }
             }
             this.actif = false;
             return;
