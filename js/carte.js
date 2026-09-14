@@ -538,7 +538,16 @@ const Carte = {
             const infoChemin = this.chemins[index];
             const teinte = Config.COULEURS.cheminsNeon[index % Config.COULEURS.cheminsNeon.length];
 
-            if (infoChemin.pointsDePassage.length > 1) {
+            // Masqué une fois une vague lancée (Vagues.enCours), à la demande de
+            // l'utilisateur : le flux animé, pensé pour repérer un tracé au calme
+            // (accueil, entre deux vagues), devient un signal superflu — voire
+            // distrayant — une fois que de vrais ennemis avancent sur la route.
+            // Réapparaît de lui-même dès la vague terminée (enCours repasse à false),
+            // sans état à gérer ici : cette condition est relue à chaque frame,
+            // comme le reste de dessiner(). N'affecte que ce tracé animé — asphalte,
+            // trottoirs, taches et marqueurs de départ/arrivée restent dessinés
+            // normalement, vague en cours ou non.
+            if (infoChemin.pointsDePassage.length > 1 && !Vagues.enCours) {
                 const motif = Math.max(4, taille * 0.3);
 
                 ctx.beginPath();

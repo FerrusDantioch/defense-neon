@@ -1818,6 +1818,32 @@ automatisée pour trouver des cas serrés) sans jamais observer de trou ni de
 chevauchement disgracieux, y compris quand deux chemins se chevauchent sur une longue
 portion plutôt qu'un simple point de croisement.
 
+## Flux animé masqué en vague (correctif post-7B)
+
+Demande utilisateur : faire disparaître les pointillés animés (la ligne centrale de
+chaque route, phase 6A/7B) une fois qu'une vague est lancée.
+
+### Implémentation (`carte.js`)
+
+Le tracé animé (`ctx.setLineDash`/`lineDashOffset`) n'est désormais dessiné que si
+`!Vagues.enCours`, relu à chaque frame comme le reste de `Carte.dessiner()` — aucun état
+propre à gérer : le tracé réapparaît de lui-même dès qu'une vague se termine
+(`Vagues.enCours` repasse à `false`), sans rien de spécial à faire à ce moment-là.
+N'affecte que ce tracé précis : l'asphalte, les trottoirs, les taches d'usure et les
+marqueurs de départ/arrivée (avec leur halo) restent dessinés normalement, vague en
+cours ou non — seul le repère de flux, pensé pour se lire au calme (accueil, entre deux
+vagues), disparaît une fois que de vrais ennemis avancent réellement sur la route et
+rendent ce repère superflu.
+
+### Vérification
+
+Testé en navigateur (serveur local) : tracé animé bien visible avant tout lancement de
+vague (écran d'accueil, entre deux vagues) ; disparaît dès `Vagues.demarrer(...)`
+appelé (`Vagues.enCours` passe à `true`) — asphalte, trottoirs et marqueurs
+départ/arrivée restent affichés normalement, capture d'écran à l'appui ; réapparaît
+immédiatement une fois `Vagues.enCours` repassé à `false` (fin de vague). Aucune erreur
+console.
+
 ## Avancement (feuille de route)
 
 - **1A — Socle et carte** : fait. Génération, affichage, redimensionnement, reproductibilité
@@ -1977,3 +2003,8 @@ post-lancement » ci-dessus pour la liste complète des sous-phases à venir) :
   par le prompt). `Config.COULEURS.caseChemin` supprimé, remplacé par
   `asphalte`/`bordureRoute`/`tacheAsphalte`. Aucune régression sur la transparence du
   plateau (7C bis) ni sur la fluidité (0,35 ms/frame en moyenne à 60 ennemis).
+- **Flux animé masqué en vague (correctif post-7B)** : fait. Voir « Flux animé masqué
+  en vague (correctif post-7B) » ci-dessus : le tracé pointillé animé de chaque route ne
+  se dessine plus tant que `Vagues.enCours` est vrai, et réapparaît de lui-même à la fin
+  de la vague — asphalte, trottoirs et marqueurs départ/arrivée restent, eux, affichés
+  sans condition.
