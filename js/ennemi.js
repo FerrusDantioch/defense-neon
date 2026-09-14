@@ -12,6 +12,21 @@ const COULEURS_CSS_ENNEMIS = {
     orange: '#ff8c1a'
 };
 
+// Teintes claires/sombres dérivées de la couleur de base de chaque type (phase 7A),
+// pour les détails des châssis robotiques : capteur/« œil » et accent de réacteur en
+// clair, chenilles/plaques d'armure en sombre. Tables volontairement incomplètes —
+// seules les entrées réellement utilisées par un châssis sont présentes (le Rapide
+// n'a pas de partie sombre, voir dessinerChassisRapide plus bas).
+const COULEURS_CSS_ENNEMIS_CLAIR = {
+    cyan: '#a6f7ff',
+    jaune: '#fff3b0',
+    orange: '#ffd9a6'
+};
+const COULEURS_CSS_ENNEMIS_SOMBRE = {
+    cyan: '#0a4a52',
+    orange: '#9c4c00'
+};
+
 class Ennemi {
     // `type` est une clé de Config.TYPES_ENNEMIS. `multiplicateurPointsDeVie` vient de
     // la vague en cours : il fait grossir les points de vie de base au fil des vagues
@@ -27,6 +42,11 @@ class Ennemi {
         this.vitesse = caracteristiques.vitesse;
         this.recompense = caracteristiques.recompense;
         this.couleur = COULEURS_CSS_ENNEMIS[caracteristiques.couleur] || caracteristiques.couleur;
+        // Conservé à part de this.couleur (déjà résolue en hexadécimal) pour
+        // retrouver la bonne teinte claire/sombre du châssis
+        // (COULEURS_CSS_ENNEMIS_CLAIR/_SOMBRE ci-dessus, phase 7A) sans avoir à
+        // relire Config.TYPES_ENNEMIS à chaque frame dessinée.
+        this.nomCouleur = caracteristiques.couleur;
 
         this.cheminIndex = cheminIndex;
 
@@ -40,6 +60,17 @@ class Ennemi {
         const depart = Carte.chemins[this.cheminIndex].pointsDePassage[0];
         this.x = depart.x;
         this.y = depart.y;
+
+        // Orientation initiale du châssis (phase 7A), calculée ici de la même façon
+        // que dans deplacer() ci-dessous plutôt que laissée à une valeur par défaut :
+        // Vagues.mettreAJour() (qui crée les ennemis) est appelée après la boucle de
+        // déplacement dans Jeu.simuler() — deplacer() n'aura donc pas encore tourné
+        // une seule fois pour ce nouvel ennemi au moment de son tout premier
+        // dessiner(), dans la même frame.
+        const premierPoint = Carte.chemins[this.cheminIndex].pointsDePassage[1];
+        this.angleDirection = premierPoint
+            ? Math.atan2(premierPoint.y - this.y, premierPoint.x - this.x)
+            : 0;
     }
 
     // Avance l'ennemi de `vitesse * dt` pixels le long de SON chemin (Carte.chemins
@@ -63,6 +94,16 @@ class Ennemi {
         const dx = cible.x - this.x;
         const dy = cible.y - this.y;
         const distanceRestante = Math.hypot(dx, dy);
+
+        // Orientation visuelle du châssis (phase 7A), recalculée à chaque frame à
+        // partir du même vecteur direction que le déplacement lui-même — avant même
+        // de savoir si ce pas atteindra le point de passage visé, pour qu'un virage
+        // fasse tourner le châssis dès qu'il s'y engage, pas seulement une fois
+        // arrivé exactement sur le point d'angle. Lue par Ennemi.dessiner() pour
+        // orienter le dessin ; jamais par aucune mécanique de jeu (ciblage, dégâts,
+        // vitesse), qui restent toutes inchangées par cette phase purement visuelle.
+        this.angleDirection = Math.atan2(dy, dx);
+
         // Jeu.facteurEchelle convertit la vitesse de référence (calibrée pour une
         // case de 40 px) en pixels réels selon la taille de case courante : voir le
         // calcul de ce facteur dans Jeu.redimensionner().
@@ -92,24 +133,54 @@ class Ennemi {
         }
     }
 
-    // Dessine l'ennemi : un cercle dont le rayon dépend des points de vie de base du
-    // type (pas des points de vie déjà gonflés par le multiplicateur de vague, sinon
-    // un Standard tardif finirait par paraître aussi gros qu'un Blindé), surmonté
-    // d'une barre de vie à deux couleurs. Halo néon (phase 4A) de la couleur du type,
-    // retiré aussitôt après (ctx.shadowBlur = 0) pour ne pas déteindre sur la barre de
-    // vie ni sur le reste de la scène dessinée ensuite dans la même frame.
+    // Dessine l'ennemi : une silhouette de châssis robotique vue de haut (phase 7A,
+    // remplace le simple cercle de la phase 4A), orientée dans le sens du déplacement,
+    // surmontée d'une barre de vie à deux couleurs. Le rayon caractéristique dépend
+    // des points de vie de base du type (pas des points de vie déjà gonflés par le
+    // multiplicateur de vague, sinon un Standard tardif finirait par paraître aussi
+    // gros qu'un Blindé) — sert à la fois de taille globale du châssis et de
+    // dimension de la barre de vie, exactement comme le rayon du cercle qu'il
+    // remplace.
+    //
+    // ctx.translate() + ctx.rotate() orientent tout le dessin du châssis selon
+    // this.angleDirection (mis à jour dans deplacer() ci-dessus), à l'intérieur d'un
+    // save()/restore() : la rotation ne doit affecter ni la barre de vie ci-dessous
+    // (qui doit rester horizontale et lisible quelle que soit l'orientation du
+    // robot), ni le reste de la scène dessinée ensuite dans la même frame. Vue du
+    // dessus délibérée (châssis façon petit véhicule/drone au sol, jamais un
+    // personnage de profil) : cohérent avec l'angle de caméra du reste du plateau
+    // (carte, tours), qui est lui aussi vu de haut depuis la phase 1A.
+    //
+    // Aucun ctx.shadowBlur ici (voir Config.HALO_FLOU_TOUR_BASE et la note associée,
+    // config.js) : chaque châssis est composé de plusieurs formes (corps, capteur,
+    // chenilles ou plaques), et un halo posé sur chacune multiplierait le coût par
+    // appel de shadowBlur par autant de formes et par ennemi — contrairement au
+    // simple cercle qu'ils remplacent, où ce coût ne s'appliquait qu'une fois par
+    // ennemi. À 60 ennemis à l'écran (le seuil de fluidité visé pour cette phase),
+    // cette multiplication ne vaudrait pas le gain visuel, même principe que celui
+    // déjà posé en 4A pour les particules et les projectiles.
     dessiner(ctx) {
         const tailleCase = Carte.tailleCase;
         const pointsDeVieBase = Config.TYPES_ENNEMIS[this.type].pointsDeVie;
         const rayon = tailleCase * (0.12 + pointsDeVieBase / 1000);
 
-        ctx.shadowColor = this.couleur;
-        ctx.shadowBlur = Config.HALO_FLOU_ENNEMI;
-        ctx.fillStyle = this.couleur;
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, rayon, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.angleDirection);
+
+        if (this.type === 'rapide') {
+            this.dessinerChassisRapide(ctx, rayon);
+        } else if (this.type === 'blinde') {
+            this.dessinerChassisBlinde(ctx, rayon);
+        } else {
+            this.dessinerChassisStandard(ctx, rayon);
+        }
+        // PHASE 7F : quatrième châssis ici pour le drone volant — silhouette plus
+        // anguleuse et aérienne, pensée pour se distinguer d'un coup d'œil des trois
+        // véhicules au sol ci-dessus, toujours vue de haut et toujours sans
+        // shadowBlur (même raisonnement que ci-dessus).
+
+        ctx.restore();
 
         const largeurBarre = rayon * 2;
         const hauteurBarre = Math.max(2, tailleCase * 0.06);
@@ -121,5 +192,89 @@ class Ennemi {
         ctx.fillRect(xBarre, yBarre, largeurBarre, hauteurBarre);
         ctx.fillStyle = '#2ecc71';
         ctx.fillRect(xBarre, yBarre, largeurBarre * ratioVie, hauteurBarre);
+    }
+
+    // Hexagone centré sur l'origine, éventuellement allongé ou aplati selon les deux
+    // rayons donnés (rayonX ≠ rayonY) — partagé par les châssis Standard et Blindé
+    // ci-dessous, seules leurs proportions et leur remplissage diffèrent. Même
+    // principe de forme partagée que Tour.dessinerSoclePolygone (tour.js). Appelée
+    // uniquement en coordonnées locales (après translate()/rotate() dans dessiner()
+    // ci-dessus) : +x pointe toujours vers l'avant du châssis.
+    dessinerHexagone(ctx, rayonX, rayonY) {
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            const angle = (i / 6) * Math.PI * 2;
+            const px = Math.cos(angle) * rayonX;
+            const py = Math.sin(angle) * rayonY;
+            if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    // Châssis Standard (phase 7A) : hexagone légèrement allongé dans le sens de la
+    // marche, capteur circulaire clair pointant vers l'avant, deux chenilles
+    // latérales sombres de part et d'autre du corps — le châssis de référence, ni le
+    // plus véloce ni le plus massif des trois.
+    dessinerChassisStandard(ctx, rayon) {
+        ctx.fillStyle = this.couleur;
+        this.dessinerHexagone(ctx, rayon * 1.15, rayon * 0.85);
+
+        ctx.fillStyle = COULEURS_CSS_ENNEMIS_CLAIR[this.nomCouleur];
+        ctx.beginPath();
+        ctx.arc(rayon * 0.45, 0, rayon * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = COULEURS_CSS_ENNEMIS_SOMBRE[this.nomCouleur];
+        const largeurChenille = rayon * 1.5;
+        const hauteurChenille = rayon * 0.32;
+        ctx.fillRect(-largeurChenille / 2, rayon * 0.95 - hauteurChenille / 2, largeurChenille, hauteurChenille);
+        ctx.fillRect(-largeurChenille / 2, -rayon * 0.95 - hauteurChenille / 2, largeurChenille, hauteurChenille);
+    }
+
+    // Châssis Rapide (phase 7A) : profil effilé en flèche mousse (nez pointu, épaules
+    // larges, arrière tronqué), plus étroit et plus long que le Standard, sans
+    // chenilles — il glisse plutôt qu'il ne roule. Petit accent lumineux triangulaire
+    // à l'arrière, purement décoratif (repère de vitesse), jamais un halo au sens de
+    // la règle de performance de la phase 4A : voir la note sur l'absence de
+    // shadowBlur dans dessiner() ci-dessus, qui s'applique aussi à ce triangle.
+    dessinerChassisRapide(ctx, rayon) {
+        ctx.fillStyle = this.couleur;
+        ctx.beginPath();
+        ctx.moveTo(rayon * 1.6, 0);
+        ctx.lineTo(rayon * 0.2, rayon * 0.55);
+        ctx.lineTo(-rayon * 1.0, rayon * 0.3);
+        ctx.lineTo(-rayon * 1.0, -rayon * 0.3);
+        ctx.lineTo(rayon * 0.2, -rayon * 0.55);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = COULEURS_CSS_ENNEMIS_CLAIR[this.nomCouleur];
+        ctx.beginPath();
+        ctx.moveTo(-rayon * 1.0, rayon * 0.15);
+        ctx.lineTo(-rayon * 1.0, -rayon * 0.15);
+        ctx.lineTo(-rayon * 1.4, 0);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    // Châssis Blindé (phase 7A) : hexagone large et trapu (peu allongé, contrairement
+    // au Standard), deux plaques d'armure latérales sombres en léger surplomb du
+    // corps principal, et un capteur central plus gros que celui du Standard — plus
+    // large et plus « carré » à l'œil que les deux autres châssis.
+    dessinerChassisBlinde(ctx, rayon) {
+        ctx.fillStyle = this.couleur;
+        this.dessinerHexagone(ctx, rayon * 1.0, rayon * 1.05);
+
+        ctx.fillStyle = COULEURS_CSS_ENNEMIS_SOMBRE[this.nomCouleur];
+        const largeurPlaque = rayon * 0.5;
+        const hauteurPlaque = rayon * 0.36;
+        ctx.fillRect(rayon * 0.05, rayon * 0.95, largeurPlaque, hauteurPlaque);
+        ctx.fillRect(rayon * 0.05, -rayon * 0.95 - hauteurPlaque, largeurPlaque, hauteurPlaque);
+
+        ctx.fillStyle = COULEURS_CSS_ENNEMIS_CLAIR[this.nomCouleur];
+        ctx.beginPath();
+        ctx.arc(rayon * 0.2, 0, rayon * 0.38, 0, Math.PI * 2);
+        ctx.fill();
     }
 }
