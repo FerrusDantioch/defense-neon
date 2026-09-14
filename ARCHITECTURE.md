@@ -1535,6 +1535,54 @@ environnement de test (déjà observé sous d'autres formes pour ce projet — v
 limites de `requestAnimationFrame`/`document.hidden` en onglet non réellement au premier
 plan, phase 7C ci-dessus), pas un bug de la mise en page elle-même.
 
+## Son du tir du Canon inaudible (correctif post-lancement)
+
+Signalé par l'utilisateur : « les tirs [du Canon] n'émettent pas de son ».
+
+### Diagnostic
+
+Pas un bug de code : `Tour.tirer()` appelle bien `Son.jouerTir(this.type)` sans
+condition pour les trois types de tours (voir « Particules et son (phase 4B) »
+ci-dessus), et rien dans `Son.jouerTir` ne traite `'canon'` différemment d'un point de
+vue logique. Vérifié directement dans le navigateur en instrumentant l'API Web Audio
+(`AudioContext.state` à `running`, événements `oscillator.frequency.setValueAtTime` et
+`gain.gain.exponentialRampToValueAtTime` bien programmés aux valeurs attendues,
+`tour.tirer()` appelé sur une vraie instance de `Tour` sans lever d'exception) : le son
+du Canon se déclenchait donc bel et bien à chaque tir, exactement comme pour les deux
+autres types.
+
+Le problème est resté acoustique plutôt que logique : le Canon utilisait une onde
+sinusoïdale pure (`typeOnde: 'sine'`) à 180 Hz, une fréquence grave sans le moindre
+harmonique. Les haut-parleurs de téléphone et d'ordinateur portable — contrairement à un
+haut-parleur avec caisson de basses — reproduisent très mal les fréquences graves
+*et* n'ont, pour un sinus pur, aucune harmonique plus aiguë sur laquelle se rattraper :
+le son est correctement joué par le navigateur, mais quasiment inaudible en pratique sur
+ce type d'appareil. Les deux autres tirs n'ont jamais eu ce problème : la Mitrailleuse
+(1100 Hz, onde carrée) et le Sniper (1900 Hz, onde en dents de scie) sont à la fois plus
+aigus et construits sur des formes d'onde riches en harmoniques, largement dans la zone
+que ces haut-parleurs reproduisent bien.
+
+### Correctif (`son.js`)
+
+`Son.jouerTir('canon')` remplacé par une onde triangle (harmoniques impaires, mieux
+reproduite par un petit haut-parleur qu'un sinus tout en restant plus « sourde » qu'un
+carré) avec un glissando descendant 220 Hz → 90 Hz sur 0,16 s, plutôt qu'une note fixe à
+180 Hz. Reste la tonalité la plus grave et la plus longue des trois tirs (cohérent avec
+un tir de canon plus lourd), mais démarre maintenant sur une fréquence assez haute pour
+être effectivement reproduite, le glissando vers le grave n'intervenant qu'une fois le
+son déjà perceptible.
+
+### Vérification
+
+Testé en navigateur (serveur local), par instrumentation de l'API Web Audio plutôt qu'à
+l'oreille (aucune sortie audio dans cet environnement de test) : `oscillator.type` vaut
+bien `'triangle'` au moment de `start()`, `frequency.setValueAtTime(220, …)` puis
+`exponentialRampToValueAtTime(90, … + 0.16)` programmés comme attendu, sur un appel
+`tour.tirer(...)` réel (instance de `Tour` de type `'canon'`, pas seulement
+`Son.jouerTir` isolé) sans aucune erreur console. Mitrailleuse et Sniper revérifiés en
+parallèle : toujours `'square'`/`'sawtooth'` à leurs fréquences d'origine, aucune
+régression. `CACHE_NOM` incrémenté à `v10` (`son.js` a changé).
+
 ## Avancement (feuille de route)
 
 - **1A — Socle et carte** : fait. Génération, affichage, redimensionnement, reproductibilité
@@ -1667,3 +1715,10 @@ post-lancement » ci-dessus pour la liste complète des sous-phases à venir) :
   mode (jusqu'ici seule la largeur comptait) ; plateau épinglé (`position: sticky`) pour
   rester visible même si la colonne latérale doit occasionnellement défiler sur les plus
   petits téléphones. Portrait et desktop strictement inchangés.
+- **Son du tir du Canon inaudible (correctif post-lancement)** : fait. Voir « Son du tir
+  du Canon inaudible (correctif post-lancement) » ci-dessus : pas un bug de code (le son
+  se déclenchait bien à chaque tir, vérifié par instrumentation de l'API Web Audio), mais
+  une onde sinusoïdale pure à 180 Hz quasiment inaudible sur les haut-parleurs de
+  téléphone/ordinateur portable. Remplacée par une onde triangle avec glissando
+  220 Hz → 90 Hz, plus riche en harmoniques et donc effectivement audible, tout en
+  restant la tonalité de tir la plus grave et la plus longue des trois.

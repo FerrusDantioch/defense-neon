@@ -98,14 +98,27 @@ const Son = {
 
     // Bip de tir, dont la fréquence et le timbre varient selon le type de tour : aigu
     // et très court pour la Mitrailleuse (onde carrée, plus « électrique »), plus
-    // grave et légèrement plus long pour le Canon, aigu et sec pour le Sniper (onde en
+    // grave et légèrement plus long pour le Canon (glissando descendant, pour un effet
+    // de « boum » plutôt qu'une simple note grave), aigu et sec pour le Sniper (onde en
     // dents de scie, plus tranchante, decay très rapide).
+    //
+    // Le Canon utilisait à l'origine une onde sinusoïdale pure à 180 Hz : correct en
+    // théorie, mais quasiment inaudible en pratique sur la plupart des haut-parleurs de
+    // téléphone ou d'ordinateur portable (signalé par un utilisateur : « les tirs de
+    // canon n'émettent pas de son »), faute d'y reproduire correctement une fréquence
+    // aussi grave et faute d'harmoniques dans une onde sinus pour compenser — contexte
+    // audio et planification vérifiés fonctionnels par ailleurs (`AudioContext.state`
+    // à `running`, événements `setValueAtTime` bien programmés), ce n'était donc pas un
+    // bug de code mais un choix de timbre à corriger. Remplacée par une onde triangle
+    // (plus riche en harmoniques qu'un sinus, donc mieux reproduite par de petits
+    // haut-parleurs) avec un glissando descendant 220 Hz → 90 Hz : reste la plus grave
+    // et la plus longue des trois tonalités de tir, cette fois clairement audible.
     jouerTir(type) {
         if (!this.actif) return;
         if (type === 'mitrailleuse') {
             this.jouerTonalite({ frequenceDebut: 1100, duree: 0.045, typeOnde: 'square' });
         } else if (type === 'canon') {
-            this.jouerTonalite({ frequenceDebut: 180, duree: 0.16, typeOnde: 'sine' });
+            this.jouerTonalite({ frequenceDebut: 220, frequenceFin: 90, duree: 0.16, typeOnde: 'triangle' });
         } else {
             this.jouerTonalite({ frequenceDebut: 1900, duree: 0.03, typeOnde: 'sawtooth' });
         }
