@@ -6,7 +6,7 @@
 //
 // À incrémenter à chaque mise à jour déployée du jeu : le nom sert aussi de clé de
 // version, voir activate() ci-dessous qui purge tout cache dont le nom diffère.
-const CACHE_NOM = 'defense-neon-v2';
+const CACHE_NOM = 'defense-neon-v3';
 
 const FICHIERS_A_METTRE_EN_CACHE = [
     './',
