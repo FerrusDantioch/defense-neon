@@ -121,7 +121,14 @@ const Config = {
         // chacun leur couleur en dur (`'cyan'`, `'orange'`, `'magenta'`), jamais via
         // une référence à Config.COULEURS, et un objet en cours de construction ne
         // peut de toute façon pas encore se lire lui-même à ce stade du fichier.
-        neonVert: '#7fff6b'
+        neonVert: '#7fff6b',
+
+        // Unité de la tour Caserne (phase 7E, unite.js) : seule couleur de ce groupe
+        // effectivement *lue* via Config.COULEURS (UniteCaserne.dessiner n'est pas
+        // construite dans ce même objet Config, contrairement à TYPES_TOURS.caserne
+        // ci-dessous qui répète la valeur en dur pour la même raison qu'expliqué
+        // pour neonVert juste au-dessus).
+        neonBleu: '#3b82f6'
     },
 
     // Rayon de flou (ctx.shadowBlur) des halos néon (phase 4A). Toujours posé puis
@@ -175,10 +182,15 @@ const Config = {
     // à l'échelle de référence de la carte (20 colonnes) : sur une carte plus large ou
     // plus étroite en pratique, la vitesse relative resterait la même car le nombre de
     // cases à traverser change dans les mêmes proportions.
+    // `degatsCorpsACorps` (phase 7E) : dégâts par seconde infligés à une unité de
+    // Caserne qui bloque cet ennemi (voir Jeu.resoudreCombatsCasernes) — jamais lus
+    // ailleurs, sans effet sur le ciblage des tours à distance. Le Blindé, déjà lent
+    // et résistant, est aussi le plus dangereux au corps à corps : cohérent avec son
+    // rôle de brute lourde plutôt qu'un simple porteur de gros points de vie.
     TYPES_ENNEMIS: {
-        standard: { pointsDeVie: 100, vitesse: 60, recompense: 10, couleur: 'cyan' },
-        rapide: { pointsDeVie: 60, vitesse: 110, recompense: 15, couleur: 'jaune' },
-        blinde: { pointsDeVie: 300, vitesse: 35, recompense: 25, couleur: 'orange' }
+        standard: { pointsDeVie: 100, vitesse: 60, recompense: 10, couleur: 'cyan', degatsCorpsACorps: 8 },
+        rapide: { pointsDeVie: 60, vitesse: 110, recompense: 15, couleur: 'jaune', degatsCorpsACorps: 4 },
+        blinde: { pointsDeVie: 300, vitesse: 35, recompense: 25, couleur: 'orange', degatsCorpsACorps: 20 }
     },
 
     // Nombre de points d'intégrité au départ. Chaque ennemi qui atteint l'arrivée en
@@ -244,13 +256,40 @@ const Config = {
     // ennemis à la fois — contre un ennemi isolé, il reste nettement moins rentable
     // qu'un Canon. Même principe que la portée du Sniper (phase 2A, voir la note
     // juste au-dessus) : sa force ne se lit pas dans un simple ratio dégâts/coût.
+    // La Caserne (phase 7E) ne tire pas : `degats`/`cadence` ci-dessous ne pilotent
+    // jamais un tir (voir Tour.mettreAJour, qui bifurque entièrement sur
+    // typeDegats === 'caserne' avant même de lire ces deux champs pour ça), mais sont
+    // volontairement fixés à des valeurs qui, une fois passées dans la même formule
+    // de montée en niveau que les autres tours (Tour.recalculerStats, inchangée),
+    // produisent exactement les nombres réinterprétés dont la Caserne a besoin :
+    // `cadence: 1` fait que `this.cadence` (générique) *est* directement le
+    // multiplicateur de niveau à appliquer au délai de réapparition
+    // (CASERNE_DELAI_RESPAWN_BASE / this.cadence, voir Tour.mettreAJourCaserne) ; et
+    // `degats: CASERNE_UNITE_DEGATS_BASE` (même valeur que la constante dédiée plus
+    // bas, délibérément) documente que le degatsBase générique de cette tour
+    // correspond bien aux dégâts de base de son unité — même si, par clarté, le
+    // calcul réel des stats de l'unité relit directement les constantes CASERNE_*
+    // dédiées plutôt que `this.degats`, voir Tour.statsUniteAuNiveauActuel.
     TYPES_TOURS: {
         mitrailleuse: { nom: 'Mitrailleuse', portee: 100, degats: 10, cadence: 4, cout: 40, couleur: 'cyan', typeDegats: 'unique' },
         canon: { nom: 'Canon', portee: 120, degats: 45, cadence: 1, cout: 70, couleur: 'orange', typeDegats: 'unique' },
         sniper: { nom: 'Sniper', portee: 200, degats: 80, cadence: 0.5, cout: 100, couleur: 'magenta', typeDegats: 'unique' },
-        flak: { nom: 'Flak', portee: 110, degats: 20, cadence: 1.2, cout: 80, couleur: '#7fff6b', typeDegats: 'zone' }
+        flak: { nom: 'Flak', portee: 110, degats: 20, cadence: 1.2, cout: 80, couleur: '#7fff6b', typeDegats: 'zone' },
+        caserne: { nom: 'Caserne', portee: 60, degats: 15, cadence: 1, cout: 90, couleur: '#3b82f6', typeDegats: 'caserne' }
     },
     TYPE_TOUR_PAR_DEFAUT: 'mitrailleuse',
+
+    // Unité de blocage de la Caserne (phase 7E, voir tour.js/unite.js). Comme pour les
+    // autres tours, ces bases montent avec le niveau de la tour via les mêmes
+    // multiplicateurs d'amélioration que les autres types — jamais de nouvelle
+    // constante d'amélioration dédiée, voir Tour.statsUniteAuNiveauActuel : `degats`
+    // et `pointsDeVie` de l'unité montent avec AMELIORATION_MULTIPLICATEUR_DEGATS
+    // (une Caserne de niveau supérieur forme un soldat plus solide et plus mordant),
+    // et le délai de réapparition diminue avec AMELIORATION_MULTIPLICATEUR_CADENCE
+    // (une Caserne améliorée réagit plus vite à la perte de son unité).
+    CASERNE_DELAI_RESPAWN_BASE: 6,
+    CASERNE_UNITE_PV_BASE: 150,
+    CASERNE_UNITE_DEGATS_BASE: 15,
 
     // Améliorations de tour (phase 2B) : jusqu'à NIVEAU_MAX_TOUR paliers, chacun
     // multipliant dégâts, cadence et portée de base (voir Tour.recalculerStats), ces

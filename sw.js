@@ -6,7 +6,7 @@
 //
 // À incrémenter à chaque mise à jour déployée du jeu : le nom sert aussi de clé de
 // version, voir activate() ci-dessous qui purge tout cache dont le nom diffère.
-const CACHE_NOM = 'defense-neon-v14';
+const CACHE_NOM = 'defense-neon-v16';
 
 // './images/decor-fond.png' (phase 7C bis) : le fichier réellement déposé dans le
 // projet est un .png, pas le .webp initialement prévu par le prompt de cette
@@ -23,6 +23,7 @@ const FICHIERS_A_METTRE_EN_CACHE = [
     './js/carte.js',
     './js/ennemi.js',
     './js/vagues.js',
+    './js/unite.js',
     './js/tour.js',
     './js/progression.js',
     './js/particules.js',
