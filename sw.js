@@ -6,8 +6,13 @@
 //
 // À incrémenter à chaque mise à jour déployée du jeu : le nom sert aussi de clé de
 // version, voir activate() ci-dessous qui purge tout cache dont le nom diffère.
-const CACHE_NOM = 'defense-neon-v3';
+const CACHE_NOM = 'defense-neon-v8';
 
+// './images/decor-fond.png' (phase 7C bis) : le fichier réellement déposé dans le
+// projet est un .png, pas le .webp initialement prévu par le prompt de cette
+// sous-phase (aucun outil de conversion vers WebP disponible dans cet environnement au
+// moment de l'intégrer, voir ARCHITECTURE.md) — le nom et l'extension ci-dessous, dans
+// index.html et dans cette liste, ont été ajustés en conséquence pour rester exacts.
 const FICHIERS_A_METTRE_EN_CACHE = [
     './',
     './index.html',
@@ -22,10 +27,12 @@ const FICHIERS_A_METTRE_EN_CACHE = [
     './js/progression.js',
     './js/particules.js',
     './js/son.js',
+    './js/decor.js',
     './js/interface.js',
     './js/jeu.js',
     './icones/icone-192.png',
-    './icones/icone-512.png'
+    './icones/icone-512.png',
+    './images/decor-fond.png'
 ];
 
 self.addEventListener('install', (evenement) => {

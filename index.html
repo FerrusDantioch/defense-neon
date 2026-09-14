@@ -19,6 +19,30 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 </head>
 <body>
+    <!-- Décor d'arrière-plan en parallaxe (phase 7C), sur un second canvas totalement
+         indépendant du canvas de jeu — voir style.css (position: fixed derrière tout
+         le reste) et js/decor.js. Placé en premier dans le body par convention pour un
+         élément d'arrière-plan, mais son empilement réel vient de son z-index CSS, pas
+         de sa position dans le DOM. -->
+    <canvas id="canvas-decor"></canvas>
+
+    <!-- Image de fond fixe (phase 7C bis), affichée par-dessus le skyline procédural
+         quand elle est disponible, sans jamais le remplacer : c'est le filet de
+         sécurité si l'image est absente ou invalide (voir Decor.initialiserImageFond,
+         js/decor.js). Un vrai <img> plutôt qu'une image de fond CSS, pour pouvoir
+         détecter facilement son chargement (événements load/error) en JavaScript.
+         alt="" + aria-hidden="true" : purement décorative, ne doit jamais être
+         annoncée par un lecteur d'écran. -->
+    <img id="image-decor" class="image-decor" src="./images/decor-fond.png" alt="" aria-hidden="true">
+
+    <!-- Voile sombre entre l'image et le plateau de jeu (phase 7C bis) : une photo
+         réaliste en pleine luminosité nuirait au contraste de l'interface néon posée
+         par-dessus — même principe déjà établi en phase 4A, la lisibilité du jeu
+         passe avant l'esthétique du décor. Toujours présent (pas seulement quand
+         l'image charge) : sans effet visible tant que .image-decor reste à opacity 0,
+         mais rien à conditionner ici non plus. -->
+    <div class="voile-decor"></div>
+
     <h1>Défense Néon</h1>
 
     <!-- Bouton Son (phase 4B), volontairement hors de #barre-hud : il doit rester
@@ -35,7 +59,8 @@
              boutons de durée (#choix-duree) sont générés dynamiquement par
              Interface.initialiser() à partir de Config.DUREES_PARTIE. -->
         <div id="ecran-accueil" class="ecran-superpose">
-            <h2>Défense Néon</h2>
+            <!-- Le titre n'est affiché qu'une fois, en haut de page (<h1>) : pas de
+                 doublon ici. -->
 
             <!-- Niveau et XP du joueur (phase 3A, Progression) : survivent au
                  rechargement de la page, contrairement au reste de cet écran. La
@@ -127,7 +152,7 @@
          interface.js et jeu.js s'appellent mutuellement (voir la note en tête
          d'interface.js) : l'ordre entre ces deux-là n'a donc pas d'importance pour
          les appels, seulement pour que Config, Carte, Vagues, Tour, Progression,
-         Particules et Son existent déjà. -->
+         Particules, Son et Decor existent déjà. -->
     <script src="js/config.js"></script>
     <script src="js/aleatoire.js"></script>
     <script src="js/carte.js"></script>
@@ -137,6 +162,7 @@
     <script src="js/progression.js"></script>
     <script src="js/particules.js"></script>
     <script src="js/son.js"></script>
+    <script src="js/decor.js"></script>
     <script src="js/interface.js"></script>
     <script src="js/jeu.js"></script>
 </body>

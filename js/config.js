@@ -63,6 +63,16 @@ const Config = {
         caseLibre: '#14141f',
         lisere: '#26263a',
         caseChemin: '#33334a',
+
+        // Variantes semi-transparentes de `fond`/`caseLibre` ci-dessus, pour que le
+        // décor d'arrière-plan (phase 7C, decor.js) transparaisse légèrement à travers
+        // le plateau lui-même sur ses cases libres, jamais sur les cases de chemin
+        // (Carte.dessiner continue d'y peindre `caseChemin`, pleinement opaque — voir
+        // plus bas). Mêmes teintes que `fond`/`caseLibre`, seulement rendues
+        // translucides ; aucune des deux valeurs ci-dessus n'est modifiée, toujours
+        // utilisées telles quelles ailleurs si besoin.
+        fondTranslucide: 'rgba(10, 14, 23, 0.7)',
+        caseLibreTranslucide: 'rgba(18, 24, 43, 0.6)',
         depart: '#39ff88',
         arrivee: '#ff2d6b',
         // Teinte distincte par chemin (phase 6A), indexée par cheminIndex : utilisée
@@ -72,7 +82,22 @@ const Config = {
         // ce qui rend un croisement lisible à l'œil : deux chemins qui se touchent
         // restent chacun reconnaissables à leur couleur. Étendre ce tableau si
         // Config.NOMBRE_CHEMINS dépasse un jour sa longueur.
-        cheminsNeon: ['#22e8ff', '#ff2df5']
+        cheminsNeon: ['#22e8ff', '#ff2df5'],
+
+        // Décor d'arrière-plan en parallaxe (phase 7C, contenu additionnel
+        // post-lancement) : deux couches de silhouettes de bâtiments visibles dans les
+        // marges autour du plateau, sur le second canvas dédié (voir decor.js). Ajoutées
+        // ici, dans Config.COULEURS plutôt que dans un objet Config.PALETTE séparé comme
+        // l'esquissait le prompt de cette phase — Config.COULEURS *est* déjà la palette
+        // du jeu depuis la phase 4A ; lui ajouter un second objet parallèle aurait
+        // fragmenté les couleurs en deux sources de vérité sans raison. decorProche est
+        // délibérément plus claire/saturée que decorLointain pour renforcer l'impression
+        // de profondeur (en plus de sa vitesse de défilement supérieure, voir plus bas).
+        decorLointain: '#0d1326',
+        decorProche: '#161f3d',
+        // Fenêtres éclairées, teinte cyan discrète — statiques pour cette phase (pas de
+        // clignotement, voir decor.js).
+        decorFenetre: 'rgba(0, 255, 240, 0.35)'
     },
 
     // Rayon de flou (ctx.shadowBlur) des halos néon (phase 4A). Toujours posé puis
@@ -90,6 +115,22 @@ const Config = {
     HALO_FLOU_TOUR_PAR_NIVEAU: 1.2,
     HALO_FLOU_ENNEMI: 5,
     HALO_FLOU_POINT_CHEMIN: 10,
+    // Halo léger des bâtiments du décor (phase 7C) : ce second canvas ne contient
+    // jamais plus d'une quinzaine de formes au total (DECOR_NOMBRE_BATIMENTS_LOINTAIN +
+    // _PROCHE), sans rapport avec les dizaines d'ennemis ou centaines de particules du
+    // plateau de jeu — voir la note détaillée dans Decor.dessinerCouche (decor.js) sur
+    // pourquoi ce n'est pas une contradiction avec la règle « pas de shadowBlur sur les
+    // éléments nombreux » posée juste au-dessus.
+    DECOR_HALO_FLOU: 8,
+
+    // Décor d'arrière-plan en parallaxe (phase 7C, voir decor.js) : deux couches de
+    // silhouettes de bâtiments, visibles dans les marges autour du plateau de jeu.
+    // Vitesses en pixels par seconde ; la couche proche défile plus vite que la
+    // lointaine, comme dans tout effet de parallaxe.
+    DECOR_VITESSE_LOINTAIN: 4,
+    DECOR_VITESSE_PROCHE: 10,
+    DECOR_NOMBRE_BATIMENTS_LOINTAIN: 8,
+    DECOR_NOMBRE_BATIMENTS_PROCHE: 6,
 
     // Caractéristiques de chaque type d'ennemi. La vitesse est en pixels par seconde,
     // à l'échelle de référence de la carte (20 colonnes) : sur une carte plus large ou
