@@ -41,6 +41,10 @@ class Ennemi {
         this.pointsDeVie = this.pointsDeVieMax;
         this.vitesse = caracteristiques.vitesse;
         this.recompense = caracteristiques.recompense;
+        // Dégâts par seconde infligés à une unité de Caserne qui bloque cet ennemi
+        // (phase 7E) — voir Jeu.resoudreCombatsCasernes, jeu.js. Sans effet en dehors
+        // de ce cas précis (jamais lu par le ciblage des tours à distance).
+        this.degatsCorpsACorps = caracteristiques.degatsCorpsACorps;
         this.couleur = COULEURS_CSS_ENNEMIS[caracteristiques.couleur] || caracteristiques.couleur;
         // Conservé à part de this.couleur (déjà résolue en hexadécimal) pour
         // retrouver la bonne teinte claire/sombre du châssis
@@ -85,11 +89,33 @@ class Ennemi {
         if (!this.vivant || this.arrive) return;
 
         const pointsDePassage = Carte.chemins[this.cheminIndex].pointsDePassage;
-        const cible = pointsDePassage[this.indexPointDePassage + 1];
+        const indexProchainPoint = this.indexPointDePassage + 1;
+        const cible = pointsDePassage[indexProchainPoint];
         if (!cible) {
             this.arrive = true;
             return;
         }
+
+        // Blocage par une unité de Caserne (phase 7E) : si une Caserne a une unité
+        // vivante sur ce même chemin, dont le point de blocage se situe au niveau du
+        // point que cet ennemi s'apprête à atteindre ou avant (indexBlocage <=
+        // indexProchainPoint — un ennemi encore plus loin en amont n'est, lui, pas
+        // encore concerné), l'ennemi reste figé cette frame plutôt que d'avancer :
+        // son combat au corps à corps avec cette unité est résolu ailleurs, une fois
+        // par frame pour toutes les Casernes à la fois (Jeu.resoudreCombatsCasernes,
+        // jeu.js), pas ici. Plusieurs ennemis bloqués au même point s'y superposeront
+        // visuellement plutôt que de former une file organisée — limite assumée,
+        // voir ARCHITECTURE.md.
+        // PHASE 7F : un futur ennemi volant devra ignorer complètement cette
+        // vérification et ne jamais être retenu par un blocage au sol.
+        const bloquePar = Jeu.toursActives.find(tour =>
+            tour.typeDegats === 'caserne'
+            && tour.unite
+            && tour.unite.vivante
+            && tour.unite.cheminIndex === this.cheminIndex
+            && tour.unite.indexPointDePassage <= indexProchainPoint
+        );
+        if (bloquePar) return;
 
         const dx = cible.x - this.x;
         const dy = cible.y - this.y;

@@ -392,6 +392,15 @@ const Interface = {
             return;
         }
 
+        // Contrainte propre à la Caserne (phase 7E) : elle a besoin d'une case de
+        // chemin adjacente où poser son unité de blocage, sans quoi elle n'aurait
+        // aucun endroit où la faire apparaître. Vérifiée ici, uniquement pour ce
+        // type — les quatre autres tours n'ont aucune contrainte de ce genre.
+        if (this.typeSelectionne === 'caserne' && !Carte.estAdjacentAUnChemin(colonne, ligne)) {
+            this.afficherMessageConstruction('Doit être adjacent à un chemin');
+            return;
+        }
+
         // Limite de tours (phase 6B) : vérifiée avant le coût, comme les crédits —
         // aucune tour ne peut être construite au-delà de Jeu.limiteTours, même si les
         // crédits le permettraient largement. Vendre une tour libère naturellement un
@@ -438,9 +447,15 @@ const Interface = {
         // limite de tours atteinte — l'aperçu doit donc rester rouge sur cette case
         // même si elle reste visuellement libre, jusqu'à ce qu'une tour soit vendue.
         const limiteAtteinte = Jeu.toursActives.length >= Jeu.limiteTours;
+        // Phase 7E : même contrainte que tenterConstruireTour pour la Caserne — sans
+        // ce reflet dans l'aperçu, une case pourtant refusée au clic paraîtrait
+        // constructible (contour vert) au survol.
+        const adjacenceCaserneRespectee = this.typeSelectionne !== 'caserne'
+            || Carte.estAdjacentAUnChemin(colonne, ligne);
         const constructible = Carte.estConstructible(colonne, ligne)
             && Jeu.credits >= this.coutConstruction(this.typeSelectionne)
-            && !limiteAtteinte;
+            && !limiteAtteinte
+            && adjacenceCaserneRespectee;
 
         ctx.strokeStyle = constructible ? '#2ecc71' : '#e74c3c';
         ctx.lineWidth = 2;
@@ -502,8 +517,26 @@ const Interface = {
 
         const nom = Config.TYPES_TOURS[tour.type].nom;
         this.elementPanneauTitre.textContent = `${nom} — Niveau ${tour.niveau}`;
-        this.elementPanneauStats.textContent =
-            `Dégâts : ${Math.round(tour.degats)} · Cadence : ${tour.cadence.toFixed(2)}/s · Portée : ${Math.round(tour.portee)}`;
+
+        // La Caserne (phase 7E) ne tire jamais : Dégâts/Cadence/Portée n'auraient
+        // aucun sens pour elle (this.cadence/this.degats existent bien sur l'instance,
+        // voir la note sur TYPES_TOURS.caserne dans config.js, mais pilotent le délai
+        // de réapparition et les stats de l'unité, pas un tir) — affiche à la place
+        // les stats de son unité au niveau actuel, qu'elle soit vivante ou en attente
+        // de réapparition (toujours celles du niveau courant, jamais figées à
+        // l'apparition, pour refléter une amélioration même pendant l'attente).
+        if (tour.typeDegats === 'caserne') {
+            const stats = tour.statsUniteAuNiveauActuel();
+            const delai = Config.CASERNE_DELAI_RESPAWN_BASE
+                / (Config.AMELIORATION_MULTIPLICATEUR_CADENCE ** (tour.niveau - 1));
+            this.elementPanneauStats.textContent =
+                `Points de vie de l'unité : ${stats.pointsDeVieMax} · `
+                + `Dégâts de l'unité : ${Math.round(stats.degats)} · `
+                + `Délai de réapparition : ${delai.toFixed(1)}s`;
+        } else {
+            this.elementPanneauStats.textContent =
+                `Dégâts : ${Math.round(tour.degats)} · Cadence : ${tour.cadence.toFixed(2)}/s · Portée : ${Math.round(tour.portee)}`;
+        }
 
         const coutAmelioration = tour.coutAmelioration();
         if (coutAmelioration === null) {

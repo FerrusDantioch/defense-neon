@@ -1,25 +1,30 @@
 // tour.js — Classes Tour et Projectile.
 //
-// Tour : pose fixe sur une case, cherche une cible parmi les ennemis à portée et tire
-// à cadence régulière. Quatre types de tours (Mitrailleuse, Canon, Sniper, Flak depuis
-// la phase 7D — voir Config.TYPES_TOURS) partagent ce même comportement de ciblage/tir
-// et ne diffèrent que par les valeurs lues dans le constructeur, par leur apparence, et
-// depuis la phase 7D par la façon dont leurs dégâts se répartissent à l'impact
-// (`typeDegats`, voir Projectile.mettreAJour). Une tour peut aussi être améliorée
-// (jusqu'à Config.NIVEAU_MAX_TOUR) ou vendue (phase 2B) : voir recalculerStats,
-// coutAmelioration, ameliorer et montantVente ci-dessous — génériques, aucune de ces
-// méthodes ne fait référence à un type précis, donc valables pour le Flak sans
-// modification.
+// Tour : pose fixe sur une case. Quatre des cinq types (Mitrailleuse, Canon, Sniper,
+// Flak depuis la phase 7D — voir Config.TYPES_TOURS) cherchent une cible parmi les
+// ennemis à portée et tirent à cadence régulière, et ne diffèrent que par les valeurs
+// lues dans le constructeur, par leur apparence, et depuis la phase 7D par la façon
+// dont leurs dégâts se répartissent à l'impact (`typeDegats`, voir
+// Projectile.mettreAJour). Le cinquième, la Caserne (phase 7E, `typeDegats ===
+// 'caserne'`), ne tire jamais : elle fait apparaître une unité statique de blocage
+// (UniteCaserne, voir unite.js) qui combat à sa place — voir mettreAJourCaserne,
+// faireApparaitreUnite et statsUniteAuNiveauActuel ci-dessous, et
+// Jeu.resoudreCombatsCasernes (jeu.js) pour le combat lui-même. Une tour peut aussi
+// être améliorée (jusqu'à Config.NIVEAU_MAX_TOUR) ou vendue (phase 2B) : voir
+// recalculerStats, coutAmelioration, ameliorer et montantVente ci-dessous — génériques,
+// aucune de ces méthodes ne fait référence à un type précis, donc valables pour le
+// Flak comme pour la Caserne sans modification (ameliorer() rafraîchit en plus les
+// stats de l'unité d'une Caserne déjà vivante, seul ajout spécifique nécessaire).
 //
 // Projectile : tiré par une tour, suit sa cible jusqu'à l'impact ou jusqu'à ce que la
 // cible meure avant lui. Recyclé via un pool plutôt que créé/détruit à la volée (voir
 // Jeu.initialiserPoolProjectiles) pour éviter de solliciter le ramasse-miettes en
-// pleine partie.
+// pleine partie. Jamais utilisé par une Caserne, qui ne tire aucun projectile.
 
 class Tour {
-    // `type` est une clé de Config.TYPES_TOURS ('mitrailleuse', 'canon', 'sniper' ou
-    // 'flak'). Conservée sur l'instance (this.type) pour retrouver le coût d'achat de
-    // base au calcul du coût d'une amélioration (voir coutAmelioration).
+    // `type` est une clé de Config.TYPES_TOURS ('mitrailleuse', 'canon', 'sniper',
+    // 'flak' ou 'caserne'). Conservée sur l'instance (this.type) pour retrouver le
+    // coût d'achat de base au calcul du coût d'une amélioration (voir coutAmelioration).
     constructor(colonne, ligne, type) {
         this.colonne = colonne;
         this.ligne = ligne;
@@ -59,6 +64,66 @@ class Tour {
 
         this.tempsDepuisDernierTir = 0;
         this.cible = null;
+
+        // Caserne (phase 7E) : ne cherche jamais de cible ni ne tire (voir
+        // mettreAJour ci-dessous, qui bifurque entièrement avant de lire tempsDepuisDernierTir/cible
+        // ci-dessus pour ce type) ; fait apparaître son unité de blocage à la place,
+        // sur la case de chemin adjacente déterminée une fois pour toutes ici (voir
+        // Carte.trouverPointBlocagePourCaserne) — jamais recalculée ensuite, la tour
+        // reste associée au même point de blocage pour toute sa durée de vie.
+        if (this.typeDegats === 'caserne') {
+            const pointBlocage = Carte.trouverPointBlocagePourCaserne(colonne, ligne);
+            // pointBlocage ne devrait jamais être null ici : Interface.tenterConstruireTour
+            // vérifie déjà Carte.estAdjacentAUnChemin avant de construire une Caserne.
+            // Gardé par robustesse pour un appel direct qui sauterait cette
+            // vérification (ex. un outil de test) — la tour existe alors sans jamais
+            // faire apparaître d'unité, plutôt que de lever une exception.
+            this.cheminIndex = pointBlocage ? pointBlocage.cheminIndex : null;
+            this.indexPointDePassage = pointBlocage ? pointBlocage.indexPointDePassage : null;
+            this.unite = null;
+            this.tempsDepuisDestruction = 0;
+            if (pointBlocage) {
+                // Pas de délai la première fois (voir la section correspondante du
+                // prompt) : seule une unité détruite en cours de partie attend
+                // CASERNE_DELAI_RESPAWN_BASE avant de réapparaître, voir
+                // mettreAJourCaserne.
+                this.faireApparaitreUnite();
+            }
+        }
+    }
+
+    // Points de vie maximum et dégâts de l'unité de Caserne au niveau actuel de la
+    // tour (phase 7E) : mêmes multiplicateurs d'amélioration que les autres tours
+    // (AMELIORATION_MULTIPLICATEUR_DEGATS), appliqués aux bases dédiées de l'unité
+    // (CASERNE_UNITE_PV_BASE/CASERNE_UNITE_DEGATS_BASE) plutôt qu'à degatsBase — les
+    // deux valent le même nombre par construction (voir la note sur TYPES_TOURS.caserne,
+    // config.js) mais restent deux sources distinctes, lues chacune pour ce qu'elle
+    // documente. Le bonus permanent de dégâts du joueur (Progression.multiplicateurDegats,
+    // phase 3B) s'applique aux dégâts de l'unité comme à ceux de n'importe quelle
+    // tour, jamais à ses points de vie (un bonus de dégâts n'a aucune raison de
+    // rendre un soldat plus résistant). Appelée à l'apparition d'une unité
+    // (faireApparaitreUnite) et à chaque amélioration d'une Caserne dont l'unité est
+    // déjà vivante (ameliorer), pour ne calculer cette formule qu'à un seul endroit.
+    statsUniteAuNiveauActuel() {
+        const multiplicateurNiveau = Config.AMELIORATION_MULTIPLICATEUR_DEGATS ** (this.niveau - 1);
+        return {
+            pointsDeVieMax: Math.round(Config.CASERNE_UNITE_PV_BASE * multiplicateurNiveau),
+            degats: Config.CASERNE_UNITE_DEGATS_BASE * multiplicateurNiveau * Progression.multiplicateurDegats()
+        };
+    }
+
+    // Fait apparaître une nouvelle unité de Caserne au point de blocage déterminé à
+    // la construction (this.cheminIndex/indexPointDePassage, jamais recalculés
+    // ensuite). Appelée à la construction (immédiatement) et par mettreAJourCaserne
+    // après le délai de réapparition (voir plus bas).
+    faireApparaitreUnite() {
+        const point = Carte.chemins[this.cheminIndex].pointsDePassage[this.indexPointDePassage];
+        const stats = this.statsUniteAuNiveauActuel();
+        this.unite = new UniteCaserne(
+            point.x, point.y,
+            stats.pointsDeVieMax, stats.degats,
+            this.cheminIndex, this.indexPointDePassage
+        );
     }
 
     // Recalcule degats/cadence/portee à partir des valeurs de base et du niveau
@@ -97,6 +162,32 @@ class Tour {
         this.investissementTotal += this.coutAmelioration();
         this.niveau++;
         this.recalculerStats();
+
+        // Caserne (phase 7E) : une unité déjà vivante voit ses dégâts et son maximum
+        // de points de vie relevés immédiatement au nouveau niveau — comme les
+        // dégâts d'une tour classique s'appliquent dès son prochain tir sans attendre
+        // quoi que ce soit. Le ratio pointsDeVie/pointsDeVieMax est explicitement
+        // préservé plutôt que de fixer this.unite.pointsDeVie à sa valeur d'avant
+        // amélioration : geler la valeur absolue semblait au premier abord la
+        // lecture la plus prudente de « jamais soignée » (aucun point de vie rendu),
+        // mais produit en réalité un artefact contraire à l'intention — une unité
+        // fraîchement apparue, encore à pleine vie, se retrouverait avec un ratio de
+        // vie affiché en chute libre (150/150 → 150/338 après deux paliers, soit
+        // 44 %) sans avoir jamais subi le moindre dégât, ce qui a été détecté en
+        // testant une Caserne montée en niveau immédiatement après construction,
+        // avant tout combat. Une unité déjà endommagée avant l'amélioration ne
+        // regagne donc aucun point de vie en valeur absolue tant que son ratio reste
+        // sous 100 %, seul son plafond change — ni soin gratuit, ni dégât fantôme.
+        // Une unité déjà détruite (this.unite === null) n'a rien à mettre à jour ici :
+        // sa prochaine apparition (faireApparaitreUnite) lira de toute façon le
+        // niveau à jour au moment où elle se produira.
+        if (this.typeDegats === 'caserne' && this.unite && this.unite.vivante) {
+            const ratioVie = this.unite.pointsDeVie / this.unite.pointsDeVieMax;
+            const stats = this.statsUniteAuNiveauActuel();
+            this.unite.pointsDeVieMax = stats.pointsDeVieMax;
+            this.unite.pointsDeVie = stats.pointsDeVieMax * ratioVie;
+            this.unite.degats = stats.degats;
+        }
     }
 
     // Montant remboursé à la vente : un pourcentage de tout ce qui a été investi
@@ -157,6 +248,17 @@ class Tour {
     }
 
     mettreAJour(dt, ennemis, pool) {
+        // Caserne (phase 7E) : ne cherche jamais de cible ni ne tire, sa seule
+        // responsabilité ici est de faire réapparaître son unité après le délai
+        // configuré si elle a été détruite — voir mettreAJourCaserne. Son combat
+        // proprement dit (dégâts échangés avec l'ennemi qu'elle bloque) est résolu
+        // ailleurs, une fois par frame pour toutes les Casernes à la fois (voir
+        // Jeu.resoudreCombatsCasernes, jeu.js), pas ici tour par tour.
+        if (this.typeDegats === 'caserne') {
+            this.mettreAJourCaserne(dt);
+            return;
+        }
+
         this.chercherCible(ennemis);
 
         if (!this.cible) return;
@@ -165,6 +267,28 @@ class Tour {
         if (this.tempsDepuisDernierTir >= 1 / this.cadence) {
             this.tirer(pool);
             this.tempsDepuisDernierTir = 0;
+        }
+    }
+
+    // Fait réapparaître l'unité de Caserne détruite après CASERNE_DELAI_RESPAWN_BASE
+    // secondes, réduit par le multiplicateur de cadence de la tour (une Caserne
+    // améliorée réagit plus vite) — voir la note sur TYPES_TOURS.caserne (config.js)
+    // pour pourquoi ce multiplicateur se lit directement sur `this.cadence`, déjà
+    // recalculé génériquement par recalculerStats() comme pour toute autre tour. Ne
+    // fait rien tant qu'une unité est déjà présente et vivante : son combat est géré
+    // ailleurs (Jeu.resoudreCombatsCasernes), pas ici.
+    mettreAJourCaserne(dt) {
+        if (this.unite && this.unite.vivante) return;
+        // Aucun point de blocage valide déterminé à la construction (voir le
+        // constructeur) : ne devrait normalement jamais arriver en jeu réel, cette
+        // Caserne reste alors sans unité pour toujours plutôt que de lever une
+        // exception à chaque frame.
+        if (this.cheminIndex === null) return;
+
+        this.tempsDepuisDestruction += dt;
+        if (this.tempsDepuisDestruction >= Config.CASERNE_DELAI_RESPAWN_BASE / this.cadence) {
+            this.faireApparaitreUnite();
+            this.tempsDepuisDestruction = 0;
         }
     }
 
@@ -224,23 +348,32 @@ class Tour {
         ctx.stroke();
     }
 
-    // Formes distinctes par type de tour (phase 4A, Flak ajouté en 7D), pour ne plus
-    // dépendre de la lettre M/C/S posée en phase 2A pour les distinguer :
+    // Formes distinctes par type de tour (phase 4A, Flak ajouté en 7D, Caserne en
+    // 7E), pour ne plus dépendre de la lettre M/C/S posée en phase 2A pour les
+    // distinguer :
     // - Mitrailleuse : losange compact, deux canons fins jumelés (cadence élevée) ;
     // - Canon : octogone massif, un seul canon épais (gros dégâts, cadence lente) ;
     // - Sniper : triangle effilé, un canon long et fin (portée très supérieure) ;
     // - Flak : carré large, quatre canons courts en éventail à 45° les uns des
     //   autres (dégâts de zone, voir Projectile.mettreAJour) — évoque une batterie
-    //   antiaérienne à tir multiple plutôt qu'un canon unique.
+    //   antiaérienne à tir multiple plutôt qu'un canon unique ;
+    // - Caserne : pentagone (bâtiment plutôt qu'une arme), sans aucun canon — elle
+    //   ne vise ni ne tire jamais (voir mettreAJourCaserne), son unité (UniteCaserne,
+    //   unite.js) combat à sa place, sur la case de chemin qu'elle bloque.
     // Le halo néon (couleur du type, voir Config.HALO_FLOU_TOUR_BASE) s'intensifie
     // légèrement à chaque amélioration, pour que le niveau d'une tour se lise aussi
-    // d'un coup d'œil sans ouvrir le panneau d'amélioration — même mécanisme pour les
-    // quatre types, y compris le Flak, aucun code spécifique à écrire ici pour lui.
+    // d'un coup d'œil sans ouvrir le panneau d'amélioration — même mécanisme pour
+    // tous les types, aucun code spécifique à écrire ici pour un type en particulier.
     // `ctx.shadowBlur` est remis à 0 avant les canons : le halo doit rester propre au
     // socle, pas baver sur le reste de la scène dessinée ensuite dans la même frame.
     dessiner(ctx) {
         const taille = Carte.tailleCase;
 
+        // Sans cible ni cadran à orienter, une Caserne pointe toujours dans cette
+        // direction par défaut, comme n'importe quelle autre tour qui n'a
+        // actuellement aucune cible (this.cible reste d'ailleurs toujours null pour
+        // elle, voir mettreAJour) — sans conséquence puisqu'elle ne dessine aucun
+        // canon à orienter de toute façon.
         let angle = -Math.PI / 2;
         if (this.cible) {
             angle = Math.atan2(this.cible.y - this.y, this.cible.x - this.x);
@@ -256,9 +389,9 @@ class Tour {
             this.dessinerSoclePolygone(ctx, taille * 0.34, 8, 0);
         } else if (this.type === 'sniper') {
             this.dessinerSoclePolygone(ctx, taille * 0.36, 3, -Math.PI / 2);
-        } else {
-            // Flak : même rotation que la Mitrailleuse (Math.PI/4, cotes=4) — c'est
-            // ce qui donne un carré aux côtés bien à plat plutôt qu'un losange pointu
+        } else if (this.type === 'flak') {
+            // Même rotation que la Mitrailleuse (Math.PI/4, cotes=4) — c'est ce qui
+            // donne un carré aux côtés bien à plat plutôt qu'un losange pointu
             // (vérifié à l'écran : rotation=0 sur un carré à 4 côtés produit un
             // losange, Math.PI/4 un carré bien droit, malgré ce que suggérerait le
             // commentaire « losange » ci-dessus pour la Mitrailleuse — inexact depuis
@@ -267,6 +400,12 @@ class Tour {
             // ici de la taille, de la couleur et du nombre de canons, pas de la forme
             // de base elle-même.
             this.dessinerSoclePolygone(ctx, taille * 0.38, 4, Math.PI / 4);
+        } else {
+            // Caserne : pentagone plutôt qu'un polygone déjà utilisé par un autre
+            // type, pour rester reconnaissable d'un coup d'œil même sans canon —
+            // seul type dans ce cas, l'absence de canon (voir plus bas) suffirait de
+            // toute façon à la distinguer des quatre autres tours, toutes armées.
+            this.dessinerSoclePolygone(ctx, taille * 0.34, 5, -Math.PI / 2);
         }
 
         ctx.shadowBlur = 0;
@@ -279,7 +418,7 @@ class Tour {
             this.dessinerCanon(ctx, angle, taille * 0.3, Math.max(3, taille * 0.12), 0);
         } else if (this.type === 'sniper') {
             this.dessinerCanon(ctx, angle, taille * 0.5, Math.max(1.5, taille * 0.05), 0);
-        } else {
+        } else if (this.type === 'flak') {
             // Quatre canons courts en éventail autour de l'angle de visée, chacun
             // décalé de 45° du suivant (±22,5° et ±67,5° par rapport au centre du
             // faisceau) — pas quatre canons répartis à 90° sur tout le pourtour
@@ -293,6 +432,7 @@ class Tour {
                 this.dessinerCanon(ctx, angle + decalageAngle * (Math.PI / 8), longueur, epaisseur, 0);
             }
         }
+        // Caserne : aucun canon, elle ne vise ni ne tire jamais (voir mettreAJour).
     }
 }
 

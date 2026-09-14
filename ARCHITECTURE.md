@@ -1,8 +1,9 @@
 # Défense Néon — Architecture
 
 HTML/CSS/JS vanilla, sans module ES6 ni dépendance. Fichiers chargés dans cet ordre par
-`index.html` : `config.js`, `aleatoire.js`, `carte.js`, `ennemi.js`, `vagues.js`, `tour.js`,
-`progression.js`, `particules.js`, `son.js`, `decor.js`, `interface.js`, `jeu.js`.
+`index.html` : `config.js`, `aleatoire.js`, `carte.js`, `ennemi.js`, `vagues.js`,
+`unite.js`, `tour.js`, `progression.js`, `particules.js`, `son.js`, `decor.js`,
+`interface.js`, `jeu.js`.
 
 ## Fichiers
 
@@ -25,18 +26,24 @@ HTML/CSS/JS vanilla, sans module ES6 ni dépendance. Fichiers chargés dans cet 
 - **`js/carte.js`** — objet `Carte` : génération et dessin de la carte, à
   `Config.NOMBRE_CHEMINS` chemins distincts depuis la phase 6A (voir « Chemins
   multiples (phase 6A) » ci-dessous pour le détail).
-  État : `grille`, `chemins` (un chemin unique avant la phase 6A), `tailleCase`.
-  Fonctions publiques : `generer(graine)`, `estConstructible(colonne, ligne)`,
-  `pixelsVersCase(x, y)`, `caseVersPixels(colonne, ligne)`, `recalculerPixels()`,
-  `dessiner(ctx)`.
+  État : `grille`, `chemins` (un chemin unique avant la phase 6A), `tailleCase`,
+  `segmentsBordure`/`tachesAsphalte` (phase 7B). Fonctions publiques :
+  `generer(graine)`, `estConstructible(colonne, ligne)`, `estAdjacentAUnChemin(colonne,
+  ligne)`/`trouverPointBlocagePourCaserne(colonne, ligne)` (phase 7E, voir « Tour
+  Caserne (phase 7E) » ci-dessous), `pixelsVersCase(x, y)`,
+  `caseVersPixels(colonne, ligne)`, `recalculerPixels()`, `dessiner(ctx)`.
 - **`js/ennemi.js`** — classe `Ennemi` : une unité qui suit son propre chemin
   (`Carte.chemins[this.cheminIndex].pointsDePassage`, `cheminIndex` fixé à la
   création — un seul chemin global avant la phase 6A). Propriétés : `x`, `y`, `type`,
   `pointsDeVie`, `pointsDeVieMax`, `vitesse`, `cheminIndex`, `indexPointDePassage`,
-  `recompense`, `vivant`, `arrive`. Méthodes : `deplacer(dt)`, `subirDegats(montant)`
-  (sans appelant avant la phase 1C), `dessiner(ctx)`. Une petite table interne
-  (`COULEURS_CSS_ENNEMIS`) convertit les noms de couleur de `Config.TYPES_ENNEMIS`
-  (ex. `'jaune'`) en couleurs CSS valides pour le canvas.
+  `recompense`, `degatsCorpsACorps` (phase 7E, dégâts infligés à une unité de Caserne
+  qui le bloque), `vivant`, `arrive`, `angleDirection` (phase 7A). Méthodes :
+  `deplacer(dt)` (depuis la phase 7E, reste figé sans avancer si une unité de Caserne
+  vivante bloque le point qu'il s'apprête à atteindre — voir « Tour Caserne
+  (phase 7E) » ci-dessous), `subirDegats(montant)` (sans appelant avant la
+  phase 1C), `dessiner(ctx)`. Une petite table interne (`COULEURS_CSS_ENNEMIS`)
+  convertit les noms de couleur de `Config.TYPES_ENNEMIS` (ex. `'jaune'`) en couleurs
+  CSS valides pour le canvas.
 - **`js/vagues.js`** — objet `Vagues` : décide combien d'ennemis apparaissent, de quel
   type et à quel rythme pour chaque vague, et détecte sa fin. État : `numeroVagueActuelle`,
   `enCours`, `ennemisRestantsAGenerer`, `intervalleCourant`,
@@ -47,35 +54,55 @@ HTML/CSS/JS vanilla, sans module ES6 ni dépendance. Fichiers chargés dans cet 
   `Aleatoire.entier(0, Config.NOMBRE_CHEMINS - 1)` — toujours le générateur à graine,
   jamais `Math.random()`, pour que la répartition reste reproductible), `reinitialiser()`.
 - **`js/tour.js`** — classes `Tour` et `Projectile` (phase 1C ; plusieurs types de
-  tours depuis la phase 2A ; niveaux, amélioration et vente depuis la phase 2B).
+  tours depuis la phase 2A ; niveaux, amélioration et vente depuis la phase 2B ; dégâts
+  de zone depuis la phase 7D ; type Caserne, sans tir, depuis la phase 7E).
   `Tour` : `colonne`, `ligne`, `x`, `y` (centre de case), `type` (clé de
   `Config.TYPES_TOURS`), `couleur`, `degatsBase`/`cadenceBase`/`porteeBase` (valeurs du
-  type au niveau 1, jamais modifiées), `niveau` (1 à `Config.NIVEAU_MAX_TOUR`),
+  type au niveau 1, jamais modifiées), `typeDegats` (`'unique'`, `'zone'` ou
+  `'caserne'`, phase 7D, jamais recalculée), `niveau` (1 à `Config.NIVEAU_MAX_TOUR`),
   `investissementTotal` (achat + améliorations payées, base du remboursement à la
   vente), `degats`/`cadence`/`portee` (statistiques effectives courantes, recalculées
-  par `recalculerStats()`), `tempsDepuisDernierTir`, `cible`. Méthodes :
+  par `recalculerStats()`), `tempsDepuisDernierTir`, `cible` — plus, pour une Caserne
+  uniquement (phase 7E) : `cheminIndex`/`indexPointDePassage` (point de blocage,
+  déterminé une fois à la construction via `Carte.trouverPointBlocagePourCaserne` et
+  jamais recalculé ensuite), `unite` (référence à une `UniteCaserne`, ou `null`),
+  `tempsDepuisDestruction`. Méthodes :
   `recalculerStats()` (voir « Niveaux, amélioration et vente » ci-dessous ; intègre
   aussi, depuis la phase 3B, le bonus permanent de dégâts du joueur via
   `Progression.multiplicateurDegats()`), `coutAmelioration()` (idem avec
   `Progression.multiplicateurCoutAmelioration()`, voir « Bonus permanents (phase 3B) »),
-  `ameliorer()`, `montantVente()`, `progressionEnnemi(ennemi)` (phase 6A ; voir
+  `ameliorer()` (rafraîchit en plus les stats de l'unité d'une Caserne déjà vivante),
+  `montantVente()`, `progressionEnnemi(ennemi)` (phase 6A ; voir
   « Chemins multiples (phase 6A) » ci-dessous), `chercherCible(ennemis)`
   (conserve la cible en cours tant qu'elle reste valide et à portée, pour éviter que le
   canon tremble entre deux ennemis à progression égale ; sinon retient l'ennemi à
   portée dont `progressionEnnemi()` est la plus élevée — l'`indexPointDePassage` brut
-  avant la phase 6A, quand un seul chemin existait), `mettreAJour(dt, ennemis,
-  pool)`, `dessiner(ctx)` (formes distinctes par type et halo néon depuis la phase 4A —
-  voir « Identité visuelle cyberpunk (phase 4A) » ci-dessous — plus, depuis la phase 4B,
-  déclenchement du flash de tir et du son au moment où `tirer(pool)` active un
-  projectile).
+  avant la phase 6A, quand un seul chemin existait ; jamais appelée pour une Caserne),
+  `mettreAJour(dt, ennemis, pool)` (bifurque entièrement vers `mettreAJourCaserne(dt)`
+  pour ce type, phase 7E), `statsUniteAuNiveauActuel()`/`faireApparaitreUnite()` (phase
+  7E, voir « Tour Caserne (phase 7E) » ci-dessous), `dessiner(ctx)` (formes distinctes
+  par type et halo néon depuis la phase 4A — voir « Identité visuelle cyberpunk
+  (phase 4A) » ci-dessous — plus, depuis la phase 4B, déclenchement du flash de tir et
+  du son au moment où `tirer(pool)` active un projectile ; la Caserne ne dessine aucun
+  canon, voir phase 7E).
   `Projectile` : `x`, `y`, `cible` (référence directe à un `Ennemi`), `degats`,
   `couleur` (celle de la tour tireuse, phase 4B, utilisée uniquement pour teinter la
-  particule d'impact — le projectile reste dessiné en blanc), `actif`. Méthodes :
-  `activer(x, y, cible, degats, couleur)` (réinitialise une instance du pool au lieu
-  d'en créer une nouvelle), `mettreAJour(dt)` (suit la position courante de la cible,
-  se désactive sans dégâts si la cible est déjà morte, inflige `degats`, déclenche une
-  particule d'impact si la cible survit au coup — phase 4B — et se désactive à
-  l'impact), `dessiner(ctx)`.
+  particule d'impact — le projectile reste dessiné en blanc), `typeDegats` (phase 7D,
+  copié de la tour tireuse), `actif`. Méthodes :
+  `activer(x, y, cible, degats, couleur, typeDegats)` (réinitialise une instance du
+  pool au lieu d'en créer une nouvelle), `mettreAJour(dt, ennemisActifs)` (suit la
+  position courante de la cible, se désactive sans dégâts si la cible est déjà morte ;
+  à l'impact, inflige `degats` à la seule cible si `typeDegats === 'unique'` ou à tout
+  ennemi vivant dans `Config.FLAK_RAYON_EXPLOSION` du point d'impact si `'zone'`
+  (phase 7D, voir « Tour Flak (phase 7D) » ci-dessous) ; déclenche une particule
+  d'impact ou une explosion de zone selon le cas — jamais utilisé par une Caserne, qui
+  ne tire aucun projectile), `dessiner(ctx)`.
+- **`js/unite.js`** — classe `UniteCaserne` (phase 7E, contenu additionnel
+  post-lancement) : l'unité statique posée par une tour Caserne pour bloquer un
+  chemin. Propriétés : `x`, `y` (position du point de blocage, fixée à l'apparition),
+  `pointsDeVie`/`pointsDeVieMax`, `degats`, `cheminIndex`/`indexPointDePassage`
+  (copiés de sa tour), `vivante`. Une seule méthode, `dessiner(ctx)` : son combat est
+  résolu ailleurs, voir « Tour Caserne (phase 7E) » ci-dessous.
 - **`js/progression.js`** — objet `Progression` (phase 3A ; bonus permanents par niveau
   depuis la phase 3B) : le seul état qui survit d'une partie à l'autre (niveau de
   joueur, XP, statistiques cumulées), persistant via `localStorage`, et le seul point
@@ -104,8 +131,10 @@ HTML/CSS/JS vanilla, sans module ES6 ni dépendance. Fichiers chargés dans cet 
   tours (phase 6B) » ci-dessous), `derniereProgression` (résumé de la dernière
   partie terminée pour l'affichage, voir phase 3A). Fonctions publiques :
   `initialiser()`, `redimensionner()`, `initialiserPoolProjectiles()`, `dessinerTout()`,
-  `boucle(horodatage)`, `simuler(dt)`, `verifierFinDePartie()`, `finaliserPartie(estVictoire)`,
-  `demarrerPartie(idDuree)`, `rejouer()`, `retourAccueil()`, `reinitialiser(idDuree, graine)`.
+  `boucle(horodatage)`, `simuler(dt)`, `resoudreCombatsCasernes(dt)` (phase 7E, voir
+  « Tour Caserne (phase 7E) » ci-dessous), `verifierFinDePartie()`,
+  `finaliserPartie(estVictoire)`, `demarrerPartie(idDuree)`, `rejouer()`,
+  `retourAccueil()`, `reinitialiser(idDuree, graine)`.
 - **`outils/serveur-statique.js`** — petit serveur HTTP Node sans dépendance, utilisé
   uniquement pour prévisualiser le jeu pendant le développement (référencé par
   `.claude/launch.json`, aussi bien à la racine du dossier `claude` qu'à la racine de
@@ -1995,6 +2024,214 @@ typique d'un chemin étroit, sans pour autant couvrir une zone si grande qu'elle
 toucherait systématiquement des ennemis sur un chemin voisin au niveau d'un croisement
 (phase 6A/7B).
 
+## Tour Caserne (phase 7E)
+
+Cinquième type de tour, le plus différent des quatre précédents : elle ne tire jamais.
+Elle fait apparaître une unité statique (`UniteCaserne`, `unite.js`) qui bloque
+physiquement une case de chemin et combat au corps à corps ce qui s'y presse, avec
+réapparition différée si elle est détruite.
+
+### Placement contraint à un chemin adjacent (`carte.js`, `interface.js`)
+
+`Carte.estAdjacentAUnChemin(colonne, ligne)` (vraie si au moins une des 4 voisines
+orthogonales est une case de chemin) conditionne la construction d'une Caserne dans
+`Interface.tenterConstruireTour` — uniquement pour ce type, en plus des vérifications
+habituelles (case libre, crédits, limite de tours) ; message dédié « Doit être adjacent
+à un chemin » sinon. Le même critère est répercuté dans `dessinerApercuConstruction`
+pour que l'aperçu au survol ne mente jamais (contour rouge sur une case pourtant
+`LIBRE` mais non adjacente, plutôt que vert).
+
+`Carte.trouverPointBlocagePourCaserne(colonne, ligne)` détermine *quel* point du chemin
+la tour bloquera, une seule fois à la construction (jamais recalculé ensuite, pour
+toute la durée de vie de la tour) : teste les 4 voisines dans l'ordre fixe déjà renvoyé
+par `voisinesOrthogonales` (haut, bas, gauche, droite), retient la première qui
+appartient à un chemin — déterministe, donc reproductible à graine égale même dans un
+angle proche d'un croisement où plusieurs voisines de chemin seraient candidates. Si
+cette case appartient à plusieurs chemins à la fois (croisement, phase 6A), retient le
+premier de `Carte.chemins` qui la contient — la grille elle-même ne distingue de toute
+façon pas lequel.
+
+### Réutilisation des multiplicateurs d'amélioration existants (`config.js`, `tour.js`)
+
+Aucune nouvelle constante d'amélioration : `Config.TYPES_TOURS.caserne` fixe
+délibérément `cadence: 1` et `degats: CASERNE_UNITE_DEGATS_BASE`, pour que
+`Tour.recalculerStats()` — strictement inchangée, partagée avec les quatre autres
+types — produise directement, sans aucun code spécifique, les deux multiplicateurs
+réinterprétés dont la Caserne a besoin : son `this.cadence` générique *est* le
+multiplicateur de niveau (`AMELIORATION_MULTIPLICATEUR_CADENCE ** (niveau - 1)`)
+appliqué au délai de réapparition (`CASERNE_DELAI_RESPAWN_BASE / this.cadence`,
+`Tour.mettreAJourCaserne`). `Tour.statsUniteAuNiveauActuel()` calcule séparément les
+points de vie et les dégâts de l'unité à partir des bases dédiées
+(`CASERNE_UNITE_PV_BASE`/`CASERNE_UNITE_DEGATS_BASE`, distinctes de `degatsBase` par
+clarté même si numériquement égales par construction — voir la note dans
+`config.js`) et du même multiplicateur que `recalculerStats()` utilise pour les
+dégâts (`AMELIORATION_MULTIPLICATEUR_DEGATS`) — le bonus permanent de dégâts du joueur
+(`Progression.multiplicateurDegats`, phase 3B) s'applique aux dégâts de l'unité comme à
+ceux de n'importe quelle tour, jamais à ses points de vie (un bonus de dégâts n'a
+aucune raison de rendre un soldat plus résistant).
+
+### Comportement de la tour (`Tour.mettreAJour`, `Tour.dessiner`)
+
+`Tour.mettreAJour` bifurque entièrement vers `mettreAJourCaserne(dt)` pour ce type,
+avant même de lire `this.cible`/`this.tempsDepuisDernierTir` : aucun ciblage, aucun
+tir. `mettreAJourCaserne` ne fait rien tant qu'une unité est présente et vivante (son
+combat est résolu ailleurs, voir plus bas) ; sinon incrémente
+`this.tempsDepuisDestruction` et fait réapparaître une unité
+(`faireApparaitreUnite()`) une fois le délai écoulé. Une unité apparaît aussi
+immédiatement à la construction (pas de délai la première fois), dans le constructeur
+de `Tour`.
+
+`Tour.dessiner` ajoute un cinquième cas à la chaîne déjà en place depuis la phase 4A :
+un pentagone (`dessinerSoclePolygone(ctx, taille * 0.34, 5, -Math.PI / 2)`), dans
+`Config.COULEURS.neonBleu`, sans aucun canon — seul type dans ce cas, l'absence de
+canon suffit à elle seule à la distinguer des quatre autres tours, toutes armées.
+
+### Blocage et combat corps à corps (`ennemi.js`, `jeu.js`)
+
+`Ennemi.deplacer(dt)` vérifie, avant de faire avancer l'ennemi, l'existence d'une
+Caserne dont l'unité est vivante, sur le même `cheminIndex`, dont l'index de blocage
+est inférieur ou égal à l'index du point que l'ennemi s'apprête à atteindre
+(`indexPointDePassage + 1`) — référence directe à `Jeu.toursActives`, comme
+`Jeu.facteurEchelle` déjà lu de la même façon dans cette méthode depuis la phase 1B,
+sans changement de signature. Si bloqué, l'ennemi reste figé cette frame, sans avancer.
+
+`Jeu.resoudreCombatsCasernes(dt)`, nouvelle étape de `Jeu.simuler()` juste après le
+déplacement des ennemis et avant le nettoyage mort/arrivée : pour chaque Caserne dont
+l'unité est vivante, trouve parmi les ennemis actuellement bloqués sur son chemin
+(même prédicat que `deplacer`, évalué depuis la tour) celui le plus proche du point de
+blocage, puis échange des dégâts continus (`ennemi.degatsCorpsACorps * dt` à l'unité,
+`unite.degats * dt` via `ennemi.subirDegats` — exactement comme le ferait un
+projectile). La mort de l'ennemi est traitée par la boucle de nettoyage déjà en place
+juste après (récompense, explosion, son), sans aucun code dupliqué : c'est cette
+réutilisation, pas un traitement spécial, qui garantit qu'une Caserne rapporte des
+crédits comme n'importe quelle autre tour. La mort de l'unité, elle, est gérée ici
+directement (aucun système générique équivalent n'existe pour une tour) :
+`vivante = false`, `tour.unite = null`, `tempsDepuisDestruction` remis à zéro, petite
+explosion de particules à sa position.
+
+### Écart par rapport au prompt : silhouette de la tour elle-même
+
+Le prompt ne décrivait la silhouette (Section 2) que pour l'unité, jamais pour le
+bâtiment de la Caserne elle-même — contrairement au Flak (phase 7D), dont la Section 3
+détaillait explicitement le socle de la tour. Sans forme dédiée, une Caserne serait
+tombée dans la branche `else` existante (héritée du Flak) et se serait affichée par
+erreur comme un Flak vert à quatre canons. Comblé avec un pentagone sans canon (voir
+plus haut) : une forme cohérente avec les quatre autres (même famille de polygones,
+même halo par niveau) tout en restant sans ambiguïté la seule tour désarmée.
+
+### Bug découvert et corrigé en testant : amélioration et points de vie de l'unité
+
+`Tour.ameliorer()` fixait initialement `this.unite.pointsDeVieMax` au nouveau plafond
+sans jamais toucher `this.unite.pointsDeVie` (la valeur courante), avec l'intention de
+ne jamais « soigner gratuitement » l'unité. Testé en améliorant une Caserne flambant
+neuve (unité au maximum, jamais encore touchée) jusqu'au niveau 3 avant tout combat :
+son ratio de vie affiché s'effondrait à 44 % (150/150 → 150/338) sans qu'elle n'ait
+jamais subi le moindre dégât — un artefact contraire à l'intention plutôt que le
+comportement voulu. Corrigé en préservant explicitement le *ratio*
+`pointsDeVie / pointsDeVieMax` à travers l'amélioration plutôt que la valeur absolue :
+une unité à pleine vie reste à pleine vie après amélioration (aucun soin nécessaire
+puisqu'il n'y a rien à régénérer), une unité déjà endommagée conserve exactement le
+même pourcentage de dégâts subis, ni soignée ni artificiellement réendommagée par le
+changement de plafond. Vérifié dans les deux cas après correction (unité fraîche :
+100 % avant et après ; unité à 50 % forcée artificiellement : toujours exactement 50 %
+après une amélioration supplémentaire).
+
+### Limite assumée, telle que documentée par le prompt
+
+Deux ennemis (ou plus) du même chemin bloqués à proximité du même point se
+superposeront visuellement plutôt que de former une file organisée — compromis
+volontaire du prompt, non résolu ici, aucune logique de circulation complète n'a été
+tentée.
+
+### Comportement observé en testant, au-delà de cette limite déjà documentée
+
+La condition de blocage (index de blocage ≤ index du point visé par l'ennemi) reste
+vraie pour *tout* point situé après le point de blocage sur le chemin, pas seulement
+pour le point de blocage lui-même. En jeu normal, sans interruption, ceci est
+invisible : le premier ennemi à atteindre le point de blocage s'y fige, et tous les
+suivants s'y accumulent avant même d'avoir pu le dépasser. Mais si l'unité meurt puis
+qu'un ou plusieurs ennemis parviennent à dépasser ce point *pendant* le délai de
+réapparition, et que l'unité réapparaît ensuite (toujours au même point, jamais
+ailleurs) pendant que ces ennemis progressent déjà plus loin sur le même chemin, ces
+ennemis déjà passés se figent de nouveau — comme si la Caserne, une fois son unité de
+retour, refermait tout le chemin derrière elle plutôt que de ne bloquer que sa propre
+case. Reproduit délibérément dans un test dédié (unité tuée, un ennemi laissé
+progresser sur plusieurs points pendant le délai, puis l'unité relancée manuellement) :
+confirmé que l'ennemi déjà avancé (`indexPointDePassage` bien supérieur à celui de la
+tour) cesse d'avancer dès la réapparition de l'unité, alors qu'il l'avait déjà
+dépassée. Non corrigé, dans le même esprit que la limite ci-dessus déjà assumée par le
+prompt (pas de vraie logique de circulation pour cette phase) et fidèle à l'algorithme
+exact qu'il demande (comparaison `<=`, pas `==`) — mais suffisamment différent d'un
+« simple point d'arrêt » pour mériter d'être signalé explicitement plutôt que découvert
+en jouant.
+
+### Vérification
+
+Testé en navigateur (serveur local) :
+
+- **placement** : construction refusée avec le message « Doit être adjacent à un
+  chemin » sur une case libre mais isolée ; acceptée sur une case libre adjacente, avec
+  apparition immédiate de l'unité (pas de délai) à la position exacte du point de
+  blocage déterminé ;
+- **blocage et combat** : un ennemi réel (`Vagues.demarrer`, pas un objet de synthèse)
+  s'immobilise exactement au point de blocage, les deux camps perdent des points de vie
+  proportionnellement à `dt` (vérifié à la frame près : un ennemi Standard inflige
+  8 dégâts/s à l'unité, l'unité inflige 15 dégâts/s à l'ennemi, valeurs mesurées
+  cohérentes avec le temps réellement écoulé) ;
+- **un seul ennemi payé par explosion** : découle de la structure même de la boucle
+  (une seule itération sur `ennemisActifs`, jamais deux) plutôt que d'un filet de
+  sécurité ajouté après coup — comme pour le Flak (phase 7D) ;
+- **destruction et réapparition** : une unité réduite à 0 PV déclenche bien
+  `vivante = false`, une explosion de particules (10, la taille par défaut d'une
+  « petite » explosion), `tour.unite = null`, `tempsDepuisDestruction` remis à zéro ;
+  le chemin redevient immédiatement praticable (l'ennemi qui la combattait reprend sa
+  progression) ; une nouvelle unité réapparaît exactement au délai attendu
+  (`CASERNE_DELAI_RESPAWN_BASE / this.cadence`, vérifié à la frame près à 6,0s au
+  niveau 1), à la même position ;
+- **crédits à la mort par une Caserne** : un ennemi affaibli puis achevé par l'unité
+  disparaît de `ennemisActifs` et rapporte exactement sa récompense de base — aucune
+  différence avec une mort par tour classique ;
+- **amélioration (niveau 1 à 7)** : points de vie et dégâts de l'unité déjà vivante
+  suivent exactement `AMELIORATION_MULTIPLICATEUR_DEGATS ** (niveau - 1)` appliqué aux
+  bases dédiées, le délai de réapparition suit exactement
+  `CASERNE_DELAI_RESPAWN_BASE / AMELIORATION_MULTIPLICATEUR_CADENCE ** (niveau - 1)` à
+  chaque palier (valeurs mesurées : 150→225→338→506→759→1139→1709 PV,
+  6,0→5,2→4,5→3,9→3,4→3,0→2,6 s) — voir aussi le bug de ratio de vie découvert et
+  corrigé ci-dessus ;
+- **vente** : montant remboursé exact
+  (`investissementTotal * VENTE_POURCENTAGE_REMBOURSEMENT`), tour retirée, case
+  redevenue `'LIBRE'` ;
+- **panneau d'amélioration** : libellés « Points de vie de l'unité »/« Dégâts de
+  l'unité »/« Délai de réapparition » affichés pour une Caserne sélectionnée, à la
+  place de « Dégâts/Cadence/Portée » ;
+- **régression des quatre types existants** : Mitrailleuse/Canon/Sniper/Flak testés
+  isolément après tous les changements de cette phase (y compris le changement de
+  signature indirect d'`Ennemi.deplacer`, qui ne les concerne pas) — dégâts exacts sur
+  la seule cible verrouillée (10/45/80/20), aucun effet sur un ennemi voisin non ciblé,
+  comportement strictement identique à avant cette phase ;
+- **fluidité** : 6 Casernes actives simultanément (12 entités supplémentaires à
+  dessiner/mettre à jour par frame en comptant leurs unités) contre 60 ennemis répartis
+  sur les deux chemins pour forcer des empilements derrière les points de blocage
+  (scénario explicitement demandé par le critère d'acceptation 8) — 0,67 ms en moyenne
+  par frame, aucune perte de fluidité mesurable ;
+- **aucune erreur console** dans tous les scénarios ci-dessus, y compris avec des
+  ennemis accumulés derrière un même point de blocage.
+
+**Résumé demandé par le prompt** : au niveau 1, une unité de base (150 PV, 15 dégâts/s)
+perd nettement contre un Blindé isolé (300 PV, 20 dégâts corps-à-corps/s) — l'unité
+meurt en 7,5 s sans jamais achever le Blindé, qui ne perd que 112,5 PV sur ses 300
+(37,5 %) avant qu'elle ne tombe. Un Blindé « casse » donc bel et bien une unité de base
+trop vite pour qu'un seul combat suffise à s'en débarrasser, sans que ce soit
+nécessairement un défaut d'équilibrage : l'écart se referme vite avec le niveau — dès
+le niveau 3 (338 PV, 33,75 dégâts/s), l'unité inverse le rapport de force et abat le
+même Blindé en 8,9 s en conservant 160 PV (47 %). Une Caserne isolée au niveau 1 face à
+des Blindés en solo se comporte donc plutôt comme un ralentisseur temporaire et une
+source de crédits (elle finit par tomber, mais le Blindé aura perdu du temps et pris
+des dégâts) que comme un vrai mur, ce qui semble d'ailleurs cohérent avec un coût de
+construction (90) proche de celui du Flak (80) plutôt que d'un Canon (70) : elle
+suppose une amélioration assez rapide pour tenir sa fonction de blocage contre les
+ennemis les plus résistants, plutôt que d'être un mur fiable dès sa construction.
+
 ## Avancement (feuille de route)
 
 - **1A — Socle et carte** : fait. Génération, affichage, redimensionnement, reproductibilité
@@ -2169,3 +2406,20 @@ post-lancement » ci-dessus pour la liste complète des sous-phases à venir) :
   8 tours actives contre 60 ennemis groupés (0,52 ms/frame). Écart signalé : aucun
   système d'« encoches » de niveau n'existe dans ce dépôt — l'indicateur réel (halo
   intensifié) s'applique déjà au Flak sans code spécifique.
+- **Tour Caserne (« phase 7E »)** : fait. Voir « Tour Caserne (phase 7E) » ci-dessus :
+  cinquième type de tour, le seul qui ne tire jamais — fait apparaître une unité
+  statique (`UniteCaserne`, nouveau fichier `unite.js`) qui bloque physiquement une
+  case de chemin adjacente à la construction (`Carte.estAdjacentAUnChemin`) et combat
+  au corps à corps ce qui s'y presse, avec réapparition différée après destruction.
+  Réutilise telles quelles les formules de montée en niveau des autres tours
+  (réinterprétées : dégâts/PV de l'unité montent avec le multiplicateur de dégâts,
+  délai de réapparition diminue avec le multiplicateur de cadence). Amélioration,
+  vente et crédits à la mort fonctionnent nativement, vérifié en jouant. Bug découvert
+  et corrigé en testant : une amélioration figeait la valeur absolue des PV de l'unité
+  au lieu de préserver son ratio, faisant chuter artificiellement le pourcentage de vie
+  affiché d'une unité pourtant jamais touchée. Comportement observé au-delà de la
+  limite déjà assumée par le prompt (ennemis superposés) : un ennemi ayant dépassé le
+  point de blocage pendant que l'unité était morte se refige si celle-ci réapparaît
+  ensuite — fidèle à l'algorithme demandé, documenté comme tel. Fluide à 6 Casernes
+  actives contre 60 ennemis répartis sur deux chemins (0,67 ms/frame). Aucune
+  régression sur les quatre types existants.

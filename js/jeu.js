@@ -215,6 +215,12 @@ const Jeu = {
         Carte.dessiner(this.ctx);
         for (const tour of this.toursActives) {
             tour.dessiner(this.ctx);
+            // Unité de Caserne (phase 7E) : dessinée juste après sa tour, sur la case
+            // de chemin qu'elle bloque plutôt que sur celle de la tour elle-même.
+            // UniteCaserne.dessiner() se retire elle-même si vivante est fausse.
+            if (tour.unite) {
+                tour.unite.dessiner(this.ctx);
+            }
         }
         for (const ennemi of this.ennemisActifs) {
             ennemi.dessiner(this.ctx);
@@ -290,6 +296,13 @@ const Jeu = {
 
         Particules.mettreAJour(dt);
 
+        // Combats corps à corps des Casernes (phase 7E) : après le déplacement (donc
+        // après que le blocage de cette frame, voir Ennemi.deplacer, soit déjà
+        // déterminé) et avant le nettoyage ci-dessous, pour qu'un ennemi tué par une
+        // unité soit traité par ce même nettoyage — récompense, explosion, son —
+        // exactement comme une mort par tour, sans dupliquer cette logique ici.
+        this.resoudreCombatsCasernes(dt);
+
         // On parcourt le tableau à l'envers pour pouvoir le modifier (splice) pendant
         // l'itération sans sauter un élément sur deux, comme cela arriverait avec une
         // boucle classique du début vers la fin.
@@ -316,6 +329,65 @@ const Jeu = {
         }
 
         this.verifierFinDePartie();
+    },
+
+    // Résout, pour chaque Caserne dont l'unité est vivante, le combat au corps à
+    // corps contre l'ennemi qu'elle bloque (phase 7E) — une seule fois par frame
+    // pour toutes les Casernes à la fois, plutôt que dans Tour.mettreAJour (qui ne
+    // gère que la réapparition de l'unité, voir tour.js), pour rester au même
+    // niveau que le reste de la simulation inter-entités (comme les impacts de
+    // projectiles, qui vivent eux aussi dans jeu.js/tour.js et non isolément par
+    // tour). Même prédicat de blocage qu'Ennemi.deplacer (indexBlocage <=
+    // indexProchainPoint), évalué ici du point de vue de la Caserne plutôt que de
+    // l'ennemi.
+    resoudreCombatsCasernes(dt) {
+        for (const tour of this.toursActives) {
+            if (tour.typeDegats !== 'caserne') continue;
+
+            const unite = tour.unite;
+            if (!unite || !unite.vivante) continue;
+
+            // Parmi les ennemis actuellement bloqués sur le chemin de cette unité, le
+            // plus proche de son point de blocage — dans le cas le plus courant, il
+            // n'y en aura qu'un (voir la limite assumée dans Ennemi.deplacer :
+            // plusieurs ennemis bloqués au même point s'y superposent visuellement
+            // plutôt que de former une file, ce n'est délibérément pas résolu ici).
+            // PHASE 7F : un futur ennemi volant ne devra jamais pouvoir être choisi
+            // ici, exactement comme il ne devra jamais être retenu par le blocage
+            // dans Ennemi.deplacer.
+            let ennemiProche = null;
+            let distanceMinimale = Infinity;
+            for (const ennemi of this.ennemisActifs) {
+                if (!ennemi.vivant || ennemi.arrive) continue;
+                if (ennemi.cheminIndex !== unite.cheminIndex) continue;
+                if (ennemi.indexPointDePassage + 1 < unite.indexPointDePassage) continue;
+
+                const distance = Math.hypot(ennemi.x - unite.x, ennemi.y - unite.y);
+                if (distance < distanceMinimale) {
+                    distanceMinimale = distance;
+                    ennemiProche = ennemi;
+                }
+            }
+
+            if (!ennemiProche) continue;
+
+            // Dégâts continus des deux côtés, proportionnels à dt comme tout le
+            // reste de la simulation — pas un dégât fixe par frame, qui dépendrait
+            // sinon de la fréquence d'images.
+            unite.pointsDeVie -= ennemiProche.degatsCorpsACorps * dt;
+            // subirDegats, comme le ferait un projectile : c'est ce qui déclenche
+            // ennemi.vivant = false le cas échéant, repéré et traité (récompense,
+            // explosion, son) par le nettoyage juste après l'appel à cette méthode.
+            ennemiProche.subirDegats(unite.degats * dt);
+
+            if (unite.pointsDeVie <= 0) {
+                unite.pointsDeVie = 0;
+                unite.vivante = false;
+                Particules.creerExplosion(unite.x, unite.y, tour.couleur);
+                tour.unite = null;
+                tour.tempsDepuisDestruction = 0;
+            }
+        }
     },
 
     // La défaite survient dès que l'intégrité tombe à 0, sans attendre que les

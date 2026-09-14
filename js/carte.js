@@ -62,6 +62,50 @@ const Carte = {
         return colonne >= 0 && colonne < Config.COLONNES && ligne >= 0 && ligne < Config.LIGNES;
     },
 
+    // Vraie si au moins une des 4 cases orthogonalement voisines appartient à un
+    // chemin (phase 7E) : condition de construction propre à la tour Caserne, qui a
+    // besoin d'un chemin adjacent où poser son unité — voir
+    // Interface.tenterConstruireTour, seul appelant qui applique cette règle
+    // uniquement pour ce type de tour.
+    estAdjacentAUnChemin(colonne, ligne) {
+        for (const voisine of this.voisinesOrthogonales(colonne, ligne)) {
+            if (this.dansLaGrille(voisine.colonne, voisine.ligne)
+                && this.grille[voisine.ligne][voisine.colonne] === 'CHEMIN') {
+                return true;
+            }
+        }
+        return false;
+    },
+
+    // Détermine le point de blocage d'une Caserne construite en (colonne, ligne)
+    // (phase 7E) : la première case de chemin trouvée parmi ses 4 voisines
+    // orthogonales, dans l'ordre fixe déjà renvoyé par voisinesOrthogonales (haut,
+    // bas, gauche, droite) — déterministe, sans notion de « meilleur » choix, pour
+    // qu'un coin proche d'un croisement (plusieurs voisines de chemin possibles)
+    // retienne toujours la même case d'une partie à l'autre à graine égale. Si cette
+    // case appartient à plusieurs chemins à la fois (croisement, phase 6A), retient
+    // le premier de Carte.chemins qui la contient — la grille elle-même ne
+    // distingue de toute façon pas lequel (voir la note en tête de ce fichier).
+    // Renvoie { cheminIndex, indexPointDePassage } ou null si estAdjacentAUnChemin
+    // renverrait faux pour cette case (ne devrait normalement jamais arriver ici,
+    // l'appelant étant censé avoir déjà vérifié cette condition avant de construire).
+    trouverPointBlocagePourCaserne(colonne, ligne) {
+        for (const voisine of this.voisinesOrthogonales(colonne, ligne)) {
+            if (!this.dansLaGrille(voisine.colonne, voisine.ligne)) continue;
+            if (this.grille[voisine.ligne][voisine.colonne] !== 'CHEMIN') continue;
+
+            for (let cheminIndex = 0; cheminIndex < this.chemins.length; cheminIndex++) {
+                const indexPointDePassage = this.chemins[cheminIndex].chemin.findIndex(
+                    c => c.colonne === voisine.colonne && c.ligne === voisine.ligne
+                );
+                if (indexPointDePassage !== -1) {
+                    return { cheminIndex, indexPointDePassage };
+                }
+            }
+        }
+        return null;
+    },
+
     // Vraie si la ligne fait partie de la bande autorisée pour un chemin. On exclut
     // la toute première et la toute dernière ligne : un chemin qui longerait un bord
     // ne laisserait poser des tours que d'un seul côté, et la ligne opposée resterait
