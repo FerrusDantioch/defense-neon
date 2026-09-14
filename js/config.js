@@ -111,7 +111,17 @@ const Config = {
         decorProche: '#161f3d',
         // Fenêtres éclairées, teinte cyan discrète — statiques pour cette phase (pas de
         // clignotement, voir decor.js).
-        decorFenetre: 'rgba(0, 255, 240, 0.35)'
+        decorFenetre: 'rgba(0, 255, 240, 0.35)',
+
+        // Tour Flak (phase 7D, contenu additionnel post-lancement) : teinte
+        // militaire/toxique, distincte des trois couleurs de tour existantes (cyan,
+        // orange, magenta — voir TYPES_TOURS ci-dessous). Nommée ici comme demandé,
+        // mais `TYPES_TOURS.flak.couleur` en répète la valeur littéralement plutôt que
+        // de lire `Config.COULEURS.neonVert` : les quatre types de tour stockent déjà
+        // chacun leur couleur en dur (`'cyan'`, `'orange'`, `'magenta'`), jamais via
+        // une référence à Config.COULEURS, et un objet en cours de construction ne
+        // peut de toute façon pas encore se lire lui-même à ce stade du fichier.
+        neonVert: '#7fff6b'
     },
 
     // Rayon de flou (ctx.shadowBlur) des halos néon (phase 4A). Toujours posé puis
@@ -225,10 +235,20 @@ const Config = {
     // qui lui permet de tirer sur un ennemi bien avant que celui-ci n'entre dans la
     // portée des deux autres types sur un même chemin. Une tour n'a donc pas besoin
     // d'être rentable en dégâts/coût pour être utile.
+    // `typeDegats` ('unique' ou 'zone', phase 7D) rend explicite partout, plutôt que
+    // supposé par défaut, comment une tour répartit ses dégâts à l'impact — voir
+    // Projectile.mettreAJour (tour.js) qui bifurque dessus. Le Flak est pour l'instant
+    // la seule tour à valoir 'zone' : ses dégâts unitaires sont volontairement
+    // modestes (comparables à la Mitrailleuse), parce que sa valeur ne vient pas d'un
+    // gros dégât sur une cible mais du fait qu'il touche potentiellement plusieurs
+    // ennemis à la fois — contre un ennemi isolé, il reste nettement moins rentable
+    // qu'un Canon. Même principe que la portée du Sniper (phase 2A, voir la note
+    // juste au-dessus) : sa force ne se lit pas dans un simple ratio dégâts/coût.
     TYPES_TOURS: {
-        mitrailleuse: { nom: 'Mitrailleuse', portee: 100, degats: 10, cadence: 4, cout: 40, couleur: 'cyan' },
-        canon: { nom: 'Canon', portee: 120, degats: 45, cadence: 1, cout: 70, couleur: 'orange' },
-        sniper: { nom: 'Sniper', portee: 200, degats: 80, cadence: 0.5, cout: 100, couleur: 'magenta' }
+        mitrailleuse: { nom: 'Mitrailleuse', portee: 100, degats: 10, cadence: 4, cout: 40, couleur: 'cyan', typeDegats: 'unique' },
+        canon: { nom: 'Canon', portee: 120, degats: 45, cadence: 1, cout: 70, couleur: 'orange', typeDegats: 'unique' },
+        sniper: { nom: 'Sniper', portee: 200, degats: 80, cadence: 0.5, cout: 100, couleur: 'magenta', typeDegats: 'unique' },
+        flak: { nom: 'Flak', portee: 110, degats: 20, cadence: 1.2, cout: 80, couleur: '#7fff6b', typeDegats: 'zone' }
     },
     TYPE_TOUR_PAR_DEFAUT: 'mitrailleuse',
 
@@ -258,6 +278,13 @@ const Config = {
     PROJECTILE_VITESSE: 400,
     PROJECTILE_RAYON_IMPACT: 6,
     TAILLE_POOL_PROJECTILES: 200,
+
+    // Rayon de l'explosion d'un tir de Flak (phase 7D), en pixels à l'échelle de
+    // référence — multiplié par Jeu.facteurEchelle au moment de l'impact, comme toute
+    // autre distance du jeu (voir Projectile.mettreAJour, tour.js). Un ennemi vivant
+    // situé à moins de cette distance du point d'impact reçoit les dégâts, qu'il ait
+    // été la cible verrouillée du projectile ou non.
+    FLAK_RAYON_EXPLOSION: 45,
 
     // Progression du joueur (phase 3A) : niveau et XP qui survivent d'une partie à
     // l'autre (voir Progression dans progression.js), sans aucun effet de gameplay
@@ -319,6 +346,12 @@ const Config = {
     // créées avec `new` en cours de partie.
     PARTICULES_TAILLE_POOL: 300,
     PARTICULE_NOMBRE_EXPLOSION: 10,
+    // Explosion d'un tir de Flak (phase 7D) : nettement plus fournie qu'une explosion
+    // de mort ordinaire, pour bien matérialiser l'étendue de la zone touchée — voir
+    // Particules.creerExplosion (particules.js), dont le nombre de particules est
+    // désormais un paramètre optionnel (par défaut PARTICULE_NOMBRE_EXPLOSION
+    // ci-dessus, pour ne rien changer aux explosions de mort existantes).
+    PARTICULE_NOMBRE_EXPLOSION_ZONE: 16,
     PARTICULE_NOMBRE_IMPACT: 3,
     PARTICULE_NOMBRE_TIR: 3,
     PARTICULE_DUREE_VIE_EXPLOSION: 0.4,

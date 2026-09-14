@@ -1844,6 +1844,157 @@ départ/arrivée restent affichés normalement, capture d'écran à l'appui ; r�
 immédiatement une fois `Vagues.enCours` repassé à `false` (fin de vague). Aucune erreur
 console.
 
+## Tour Flak (phase 7D)
+
+Quatrième type de tour, à dégâts de zone plutôt qu'à cible unique — et future seule tour
+capable de viser un ennemi volant (phase 7F, hors périmètre ici). Dégâts unitaires
+volontairement modestes (comparables à la Mitrailleuse, voir `Config.TYPES_TOURS.flak`) :
+sa valeur ne vient pas d'un gros dégât sur une cible mais du fait qu'elle touche
+potentiellement plusieurs ennemis à la fois — même principe que la portée du Sniper
+(phase 2A) : sa force ne se lit pas dans un simple ratio dégâts/coût.
+
+### `typeDegats`, explicite pour les quatre types (`config.js`, `tour.js`)
+
+`Config.TYPES_TOURS` porte désormais un `typeDegats` (`'unique'` ou `'zone'`) pour
+chaque type, y compris les trois existants (auparavant implicite) : `Tour.typeDegats`
+le lit à la construction comme `degatsBase`, jamais recalculé (le type de dégâts d'une
+tour ne change jamais avec son niveau), et `Tour.tirer()` le transmet au projectile à
+l'activation.
+
+### Dégâts de zone (`tour.js`)
+
+Changement de signature : `Projectile.mettreAJour(dt)` devient
+`Projectile.mettreAJour(dt, ennemisActifs)` — répercuté dans `Jeu.simuler` (jeu.js) et
+dans `outils/simulation-equilibrage.js` (qui duplique cette boucle pour ses propres
+besoins), pour tous les projectiles, pas seulement ceux du Flak : les trois autres
+types reçoivent ce paramètre sans jamais s'en servir, comportement inchangé pour eux
+(vérifié explicitement, voir Vérification ci-dessous).
+
+À l'impact, `Projectile.mettreAJour` bifurque sur `this.typeDegats` : `'unique'` garde
+le comportement d'avant (seule `this.cible` reçoit les dégâts) ; `'zone'` parcourt
+`ennemisActifs` une seule fois et applique `subirDegats(this.degats)` à tout ennemi
+vivant à moins de `Config.FLAK_RAYON_EXPLOSION * Jeu.facteurEchelle` du point d'impact
+réel (`this.x`/`this.y`, pas la position de `this.cible`) — un seul passage sur le
+tableau garantit qu'un ennemi ne peut être compté qu'une fois par explosion, sans filet
+de sécurité supplémentaire à écrire. `Particules.creerExplosion` est déclenchée à chaque
+impact de Flak, avec `Config.PARTICULE_NOMBRE_EXPLOSION_ZONE` (16, plus fourni qu'une
+explosion de mort ordinaire) particules, **inconditionnellement** — même si personne
+n'est touché, pour que le joueur voie toujours où se situe la zone d'effet.
+`Particules.creerExplosion(x, y, couleur, nombre)` accepte désormais ce quatrième
+paramètre optionnel (par défaut `Config.PARTICULE_NOMBRE_EXPLOSION`, comportement
+inchangé pour la mort d'un ennemi).
+
+### Silhouette (`tour.js`)
+
+Carré large (`dessinerSoclePolygone(ctx, taille * 0.38, 4, Math.PI / 4)`) et quatre
+canons courts en éventail, chacun décalé de 45° du suivant autour de l'angle de visée
+(±22,5° et ±67,5°, pas quatre canons répartis à 90° sur tout le pourtour qui ne
+pointeraient pas vers la cible comme les trois autres types) — évoque une batterie
+antiaérienne à tir multiple. Teinte `Config.COULEURS.neonVert` (`'#7fff6b'`, militaire/
+toxique, distincte des trois couleurs de tour existantes). Même indicateur de niveau
+que les trois autres types (intensité du halo, `Config.HALO_FLOU_TOUR_PAR_NIVEAU`) —
+partagé par tous les types via le code commun de `dessiner()`, aucun code spécifique à
+écrire pour le Flak.
+
+**Piège de rotation rencontré en testant** : `dessinerSoclePolygone(ctx, rayon, 4, 0)`
+(cotes=4, sans rotation) produit un **losange** (sommets aux quatre points cardinaux),
+pas un carré — vérifié à l'écran avant de choisir la valeur finale. `rotation =
+Math.PI/4` donne au contraire un carré aux côtés bien à plat, la forme demandée par le
+prompt (« un socle carré ») ; c'est la même rotation que celle déjà utilisée par la
+Mitrailleuse, dont le commentaire de phase 4A la décrit pourtant comme un « losange »
+— inexact depuis cette phase, sans lien avec le travail actuel, non corrigé ici (hors
+périmètre de cette sous-phase). Rester distinct de la Mitrailleuse à l'écran vient donc
+de la taille (0,38 contre 0,32), de la couleur et du nombre de canons, pas de
+l'orientation du socle lui-même — confirmé par une capture des quatre types de tour
+côte à côte.
+
+### Écart par rapport au prompt : indicateur de niveau « en encoches »
+
+Le prompt demandait d'appliquer « le même indicateur de niveau en encoches que les
+autres tours (phase 4A, section 3) ». **Aucun système d'encoches n'existe dans ce
+dépôt** (vérifié : aucune occurrence de « encoche » dans le code ni dans ce document) —
+le seul indicateur de niveau réellement posé en phase 4A est l'intensification du halo
+néon (`Config.HALO_FLOU_TOUR_PAR_NIVEAU`, voir `Tour.dessiner`). Appliqué tel quel au
+Flak, comme aux trois autres types, puisque c'est le mécanisme partagé et générique déjà
+en place — même nature d'écart que les précédentes références à un `Config.PALETTE` ou
+une phase antérieure qui n'existaient pas non plus dans ce dépôt.
+
+### Barre de sélection et systèmes existants (`interface.js`)
+
+Aucune modification : `Interface.initialiser()` génère déjà les boutons de type de tour
+en itérant sur `Object.entries(Config.TYPES_TOURS)`, et le coût, le grisage (crédits
+insuffisants, limite de tours de la phase 6B) et l'aperçu de portée au survol lisent
+tous `Config.TYPES_TOURS[type]`/`this.typeSelectionne` de façon générique — le Flak est
+donc apparu de lui-même dans la barre, sans changement de code, dès l'ajout de son
+entrée dans `Config.TYPES_TOURS`. Même constat pour l'amélioration, la vente
+(`Tour.coutAmelioration`/`ameliorer`/`montantVente`) et les bonus de progression
+(`Progression.multiplicateurDegats`/`multiplicateurCoutConstruction`/
+`multiplicateurCoutAmelioration`) : tous génériques, aucun ne fait référence à un type
+précis.
+
+### Hors périmètre (`tour.js`)
+
+Commentaire `// PHASE 7F :` laissé dans `Tour.chercherCible`, à l'endroit où il faudra
+exclure les ennemis volants du ciblage des tours qui n'ont pas la capacité de les
+viser — le Flak sera la seule exception. Rien codé pour l'instant, aucun ennemi volant
+n'existe encore.
+
+### Vérification
+
+Testé en navigateur (serveur local) :
+
+- **silhouette** : les quatre types de tour rendus côte à côte à taille agrandie —
+  Flak nettement distinct par la taille, la couleur et l'éventail de quatre canons,
+  capture d'écran à l'appui (voir aussi le piège de rotation ci-dessus) ;
+- **dégâts de zone** : projectile de test activé avec `typeDegats: 'zone'` au milieu de
+  trois ennemis factices (deux à moins du rayon d'explosion, un hors de portée, un déjà
+  mort) — les deux ennemis proches perdent chacun exactement `this.degats` une seule
+  fois, l'ennemi lointain et l'ennemi mort ne reçoivent rien, 16 particules créées
+  (`PARTICULE_NOMBRE_EXPLOSION_ZONE`) ;
+- **un seul passage par explosion** : garanti par construction (une seule itération sur
+  `ennemisActifs`, chaque ennemi n'y apparaissant qu'une fois) plutôt que vérifié par un
+  scénario de test dédié — la boucle ne permet structurellement pas un double comptage ;
+- **régression des trois types existants** : même scénario avec un projectile
+  `typeDegats: 'unique'` — seule la cible verrouillée perd des points de vie, un ennemi
+  non ciblé à 5px de l'impact n'est pas affecté, comportement strictement identique
+  à avant cette phase ;
+- **en conditions de jeu réelles** (pas seulement des projectiles isolés) : Flak
+  construit via `Interface.tenterConstruireTour`, vague réelle lancée via
+  `Vagues.demarrer`, trois ennemis groupés devant la tour perdent chacun exactement
+  20 PV (dégâts de base) après un tir naturel passé par `chercherCible`/`tirer` — le
+  chemin complet fonctionne, pas seulement la logique d'impact isolée ;
+- **amélioration/vente/bonus de progression (section 5 du prompt)** : un Flak réel
+  amélioré du niveau 1 à 7 via `Interface.ameliorerTourSelectionnee()` (dégâts, cadence
+  et portée progressent exactement comme les autres types) ; palier de bonus
+  `bonus_degats` (niveau de joueur 16, +20 %) vérifié appliqué à son `degats` recalculé
+  (ratio exact 1,2) ; palier `reduction_construction` (-5 %) vérifié sur son coût de
+  construction (80 → 76) ; vente via `Interface.vendreTourSelectionnee()` : montant
+  remboursé exact (`investissementTotal * VENTE_POURCENTAGE_REMBOURSEMENT`), tour
+  retirée, case redevenue `'LIBRE'` — tout, sans une seule ligne de code spécifique au
+  Flak dans ces systèmes ;
+- **fluidité** : 8 tours Flak actives simultanément contre 60 ennemis groupés en
+  grappes (scénario dense), 300 frames simulées — 0,52 ms en moyenne par frame pour la
+  boucle complète, aucune perte de fluidité mesurable ;
+- **aucune erreur console** dans tous les scénarios ci-dessus (un message d'erreur
+  rencontré en cours de route provenait d'un artefact du propre test précédent —
+  des ennemis factices sans méthode `deplacer()` laissés dans `Jeu.ennemisActifs`
+  et repris par la boucle `requestAnimationFrame` naturelle du jeu entre deux appels
+  de script — confirmé sans rapport avec le code livré en reproduisant le même
+  scénario réaliste sur un onglet fraîchement ouvert, sans aucune erreur).
+
+**Résumé demandé par le prompt** : oui, le rayon d'explosion (45px de référence) et les
+dégâts (20 par ennemi touché) semblent cohérents contre un groupe rapproché — dans le
+test à 60 ennemis groupés en grappes de 4 espacées de 6px, une seule explosion touchait
+systématiquement plusieurs ennemis de la même grappe, produisant un dégât total par tir
+largement supérieur à celui d'une Mitrailleuse (10) ou même d'un Canon (45) dès que deux
+ennemis ou plus se trouvaient dans le rayon — tout en restant, comme voulu, la tour la
+moins intéressante contre un ennemi strictement isolé (20 dégâts pour un coût de 80,
+contre 45 pour 70 chez le Canon). Le rayon (45px à l'échelle de référence, un peu plus
+d'une case de 40px) semble bien calibré : assez large pour toucher une grappe serrée
+typique d'un chemin étroit, sans pour autant couvrir une zone si grande qu'elle
+toucherait systématiquement des ennemis sur un chemin voisin au niveau d'un croisement
+(phase 6A/7B).
+
 ## Avancement (feuille de route)
 
 - **1A — Socle et carte** : fait. Génération, affichage, redimensionnement, reproductibilité
@@ -2008,3 +2159,13 @@ post-lancement » ci-dessus pour la liste complète des sous-phases à venir) :
   se dessine plus tant que `Vagues.enCours` est vrai, et réapparaît de lui-même à la fin
   de la vague — asphalte, trottoirs et marqueurs départ/arrivée restent, eux, affichés
   sans condition.
+- **Tour Flak (« phase 7D »)** : fait. Voir « Tour Flak (phase 7D) » ci-dessus :
+  quatrième type de tour à dégâts de zone (`typeDegats`, désormais explicite sur les
+  quatre types), socle carré large et quatre canons en éventail dans une teinte vert
+  néon distincte, changement de signature de `Projectile.mettreAJour` répercuté partout
+  sans changer le comportement des trois types existants. Amélioration, vente et bonus
+  de progression fonctionnent nativement, vérifié en jouant (niveau 1 à 7, palier
+  +20 % dégâts, vente). Explosion toujours visible même sans ennemi touché. Fluide à
+  8 tours actives contre 60 ennemis groupés (0,52 ms/frame). Écart signalé : aucun
+  système d'« encoches » de niveau n'existe dans ce dépôt — l'indicateur réel (halo
+  intensifié) s'applique déjà au Flak sans code spécifique.

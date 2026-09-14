@@ -303,7 +303,11 @@ function avancerSimulation(jeuContext, etat, dt) {
         tour.mettreAJour(dt, etat.ennemisActifs, etat.poolProjectiles);
     }
     for (const projectile of etat.poolProjectiles) {
-        projectile.mettreAJour(dt);
+        // Signature alignée sur Jeu.simuler (jeu.js) depuis la phase 7D (dégâts de
+        // zone du Flak) : ce paramètre reste sans effet ici, aucun des types testés
+        // par cet outil n'étant à dégâts de zone, mais une signature qui diverge du
+        // vrai jeu serait une source d'erreur si on en ajoutait un jour un ici.
+        projectile.mettreAJour(dt, etat.ennemisActifs);
     }
 
     for (let i = etat.ennemisActifs.length - 1; i >= 0; i--) {

@@ -58,9 +58,13 @@ const Particules = {
     },
 
     // Explosion à la mort d'un ennemi : direction tirée uniformément entre 0 et 2π,
-    // vitesse aléatoire entre PARTICULE_VITESSE_MIN et PARTICULE_VITESSE_MAX.
-    creerExplosion(x, y, couleur) {
-        for (let i = 0; i < Config.PARTICULE_NOMBRE_EXPLOSION; i++) {
+    // vitesse aléatoire entre PARTICULE_VITESSE_MIN et PARTICULE_VITESSE_MAX. `nombre`
+    // par défaut à PARTICULE_NOMBRE_EXPLOSION (mort d'un ennemi, comportement inchangé
+    // depuis la phase 4B) ; l'explosion d'un tir de Flak (phase 7D) passe
+    // explicitement PARTICULE_NOMBRE_EXPLOSION_ZONE, nettement plus fournie, pour
+    // bien matérialiser l'étendue de sa zone d'effet.
+    creerExplosion(x, y, couleur, nombre = Config.PARTICULE_NOMBRE_EXPLOSION) {
+        for (let i = 0; i < nombre; i++) {
             const angle = Math.random() * Math.PI * 2;
             const vitesse = Config.PARTICULE_VITESSE_MIN
                 + Math.random() * (Config.PARTICULE_VITESSE_MAX - Config.PARTICULE_VITESSE_MIN);
