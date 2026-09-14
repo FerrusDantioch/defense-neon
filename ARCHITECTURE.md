@@ -2,7 +2,7 @@
 
 HTML/CSS/JS vanilla, sans module ES6 ni dépendance. Fichiers chargés dans cet ordre par
 `index.html` : `config.js`, `aleatoire.js`, `carte.js`, `ennemi.js`, `vagues.js`, `tour.js`,
-`progression.js`, `particules.js`, `son.js`, `interface.js`, `jeu.js`.
+`progression.js`, `particules.js`, `son.js`, `decor.js`, `interface.js`, `jeu.js`.
 
 ## Fichiers
 
@@ -87,6 +87,12 @@ HTML/CSS/JS vanilla, sans module ES6 ni dépendance. Fichiers chargés dans cet 
 - **`js/son.js`** — objet `Son` (phase 4B) : tous les effets sonores, entièrement
   synthétisés via l'API Web Audio (`OscillatorNode`/`GainNode`), aucun fichier audio.
   Voir « Particules et son (phase 4B) » ci-dessous.
+- **`js/decor.js`** — objet `Decor` (phase 7C, contenu additionnel post-lancement) :
+  skyline en parallaxe à deux couches sur un second canvas (`#canvas-decor`),
+  totalement indépendant du canvas de jeu. Voir « Décor d'arrière-plan en parallaxe
+  (phase 7C) » ci-dessous. Gère aussi, depuis la phase 7C bis, le chargement et le
+  repli d'une image de fond fixe affichée par-dessus ce skyline — voir « Image de fond
+  fixe (phase 7C bis) » ci-dessous.
 - **`js/interface.js`** — objet `Interface` (phase 1D) : tout ce qui concerne l'affichage
   et les interactions — écrans superposés, HUD, clics et survol sur le canvas, messages
   temporaires. Voir « Interface et états de partie » ci-dessous.
@@ -1011,6 +1017,408 @@ inchangé) et la reproduction visuelle de l'aperçu (capture d'écran après un 
 tap : contour et cercle de portée bien affichés, aucune tour construite). Aucune
 erreur console dans les deux modes.
 
+## Contenu additionnel post-lancement
+
+Nouvelle vague de contenu, discutée et planifiée en dehors de Claude Code, ouverte après
+la clôture des chemins multiples et de la limite de tours (phases 6A/6B). Regroupe
+plusieurs sous-phases indépendantes ; seul leur ordre d'arrivée dans ce document reflète
+l'ordre dans lequel elles sont traitées, pas nécessairement leur numérotation finale (le
+prompt de la première sous-phase à être implémentée l'identifiait comme « 7C », sans
+préciser à quoi correspondraient 7A/7B pour les autres — cette numérotation n'est donc
+pas reprise ici tant qu'elle n'est pas confirmée pour chacune) :
+
+- Tours spéciales (nouveaux types au-delà des trois existants, voir « Types de tours et
+  sélection » ci-dessus) — non commencé.
+- Ennemi volant (un type qui ignore le tracé au sol ?) — non commencé.
+- Vagues de boss — non commencé.
+- Mode difficile — non commencé.
+- **Décor d'arrière-plan animé (« phase 7C » selon le prompt qui l'a introduite)** —
+  fait, voir « Décor d'arrière-plan en parallaxe (phase 7C) » ci-dessous. Complété par
+  une **image de fond fixe (« phase 7C bis »)** — fait, code et fichier réel tous deux en
+  place et vérifiés (`images/decor-fond.png`, déposé par l'utilisateur ; voir « Image de
+  fond fixe (phase 7C bis) » ci-dessous pour le détail, y compris l'écart de format
+  `.webp` → `.png`). Un correctif de transparence du plateau est aussi venu s'y greffer,
+  voir « Transparence du plateau (correctif post-7C) ».
+- Ennemis et chemins restylés — non commencé.
+
+## Décor d'arrière-plan en parallaxe (phase 7C)
+
+Skyline animé en parallaxe à deux couches, visible dans les marges qui entourent le
+plateau de jeu — purement scénographique, sans aucun effet sur le déroulement ou
+l'équité d'une partie.
+
+### Un second canvas, jamais un ajout au canvas de jeu
+
+`#canvas-decor` (`index.html`) est un second élément `<canvas>`, entièrement séparé du
+canvas de jeu (`#canvas-jeu`) et de son contexte 2D. Nécessaire parce que le canvas de
+jeu dessine un fond opaque sur toute sa surface depuis la phase 1A (renforcé en 4A) :
+rien ne peut apparaître « à travers » lui. En CSS (`style.css`), `#canvas-decor` est
+`position: fixed; inset: 0` avec `width`/`height: 100%` (un `<canvas>` est un élément
+remplacé — `inset` seul ne l'étire pas comme il le ferait pour une boîte ordinaire à
+dimensions automatiques) et `z-index: -1` : suffisant pour passer derrière tout le reste
+du contenu de `body`, puisqu'aucun autre enfant direct de `body` n'a de `z-index` propre
+ni de position créant son propre contexte d'empilement — ce `z-index` négatif s'applique
+donc bien dans le contexte d'empilement racine de toute la page, pas seulement
+localement. Résultat : le décor n'est visible que dans les marges autour de
+`.conteneur-canvas` (`max-width: 900px`) — plus larges sur desktop, quasi absentes sous
+900px de large où ce conteneur occupe déjà toute la largeur disponible. Aucune tentative
+de faire apparaître le décor à travers le plateau lui-même, comme demandé : ça aurait
+été un risque inutile pour la lisibilité déjà validée en phase 4A (confirmée sans
+régression après cette phase, voir « Vérification » plus bas).
+
+### Génération des bâtiments (`decor.js`)
+
+`Decor.initialiser()` (appelée par `Jeu.initialiser()`) génère une seule fois, au
+chargement de la page, `Config.DECOR_NOMBRE_BATIMENTS_LOINTAIN` (8) et `_PROCHE` (6)
+bâtiments par couche (`genererCouche`) — jamais régénérés ensuite, y compris à un
+redimensionnement (seul le canvas lui-même l'est, voir plus bas). Chaque bâtiment est un
+simple rectangle : largeur moyenne dérivée de `window.innerWidth` au chargement (pour
+que `nombre` bâtiments couvrent environ deux fois la largeur de la fenêtre, de la marge
+avant qu'un défilement ne devienne visible), hauteur tirée dans une fourchette propre à
+la couche (`[50, 140]` pour la lointaine, `[90, 220]` pour la proche — plus haute, pour
+renforcer l'impression de profondeur en plus du contraste de couleur entre
+`Config.COULEURS.decorLointain`/`decorProche`). Environ six bâtiments sur dix reçoivent
+deux ou trois petites fenêtres (`Config.COULEURS.decorFenetre`) à des positions fixes,
+statiques pour cette phase (pas de clignotement).
+
+**Exception délibérée à la règle du générateur à graine** : `Math.random()` est utilisé
+directement dans `genererCouche`, plutôt que `Aleatoire` comme partout ailleurs dans le
+jeu depuis la phase 1A. Le décor n'a aucun effet sur le déroulement ni l'équité d'une
+partie — c'est de la scénographie pure — donc aucune raison de payer le coût d'une
+dépendance à la reproductibilité pour l'aspect de bâtiments purement décoratifs. Même
+raisonnement déjà appliqué aux tirages de `particules.js` (phase 4B).
+
+### Défilement, recyclage, et un détail de temporisation important (`decor.js`, `jeu.js`)
+
+`Decor.mettreAJour(dt)` déplace chaque bâtiment de `vitesse * dt` vers la gauche
+(`Config.DECOR_VITESSE_LOINTAIN` = 4 px/s, `_PROCHE` = 10 px/s). Un bâtiment dont le bord
+droit sort de l'écran par la gauche est replacé juste après le bâtiment le plus à droite
+de sa propre couche, avec un nouvel espacement aléatoire — même principe de recyclage que
+les projectiles (`tour.js`) ou les particules (`particules.js`), mais appliqué à un
+simple repositionnement plutôt qu'à un pool actif/inactif : le nombre de bâtiments par
+couche reste constant, invisible pour le joueur puisque ce recyclage n'a lieu que hors
+champ.
+
+Appelée depuis `Jeu.boucle()` (`jeu.js`), **sans condition sur `etatPartie` ni
+`enPause`** — contrairement à `Jeu.simuler()` — pour que le décor continue de défiler
+pendant une pause, sur l'écran d'accueil, ou sur les écrans de victoire/défaite : c'est
+un arrière-plan ambiant, pas une partie de la simulation de jeu. Reçoit le `dt` déjà
+plafonné à `Config.DT_MAXIMUM` mais **avant** la multiplication par `Jeu.vitesseJeu`
+(contrairement au `dt` transmis à `Jeu.simuler()` juste après dans `boucle()`) : la
+vitesse de défilement du décor ne varie jamais avec le bouton Vitesse ×2, à la différence
+de la vitesse des ennemis/tours/projectiles.
+
+### Dessin (`decor.js`)
+
+`Decor.dessiner(ctx)` : couche lointaine d'abord, couche proche par-dessus, sur un fond
+plein (`Config.COULEURS.fond`) posé avant les deux — nécessaire ici, contrairement au
+canvas de jeu, puisque ce canvas n'a pas de fond opaque garanti par ailleurs (voir
+Section 0 du prompt de cette phase) : sans lui, l'espace entre deux bâtiments espacés
+laisserait un bord non dessiné. Un `shadowBlur` léger (`Config.DECOR_HALO_FLOU`) est
+utilisé sur les bâtiments, toujours reposé à 0 immédiatement après (même règle
+qu'ailleurs dans le jeu). **Ce n'est pas une contradiction avec la règle posée en phase
+4A** (éviter `shadowBlur` sur les éléments nombreux et redessinés chaque frame — la
+grille de 240 cases, ou les particules potentiellement par centaines) : c'est la même
+règle, appliquée cohéremment à un cas différent — ce canvas ne contient jamais plus d'une
+quinzaine de formes au total (8 + 6), sans rapport avec l'échelle des éléments du plateau
+de jeu, donc le coût de rendu par appel (proportionnel au nombre d'appels) reste
+négligeable ici.
+
+### Écart par rapport au prompt (7C)
+
+Le prompt de cette phase donnait les couleurs du décor sous la forme `PALETTE.decorX`,
+suggérant un objet `Config.PALETTE` séparé. Aucun tel objet n'existe dans ce dépôt —
+`Config.COULEURS` *est* déjà la palette du jeu depuis la phase 4A (`fond`, `depart`,
+`arrivee`, `cheminsNeon`, halos...). Les trois nouvelles couleurs
+(`decorLointain`/`decorProche`/`decorFenetre`) y ont donc été ajoutées directement plutôt
+que dans un second objet parallèle, qui aurait fragmenté les couleurs du jeu en deux
+sources de vérité sans raison. `Config.DECOR_HALO_FLOU` a aussi été ajouté (non listé
+explicitement dans le prompt) pour rester cohérent avec la règle « aucune constante
+numérique magique dans le code » déjà appliquée à tous les autres halos du jeu
+(`HALO_FLOU_TOUR_BASE`, etc.) — le prompt demandait explicitement un `shadowBlur`
+« léger » sans en préciser la valeur.
+
+### Vérification
+
+Testé en navigateur (serveur local) : skyline à deux couches visible dans les marges à
+1400px et 1000px de large (captures d'écran), plateau de jeu inchangé et parfaitement
+lisible une fois une partie démarrée (aucune régression). `requestAnimationFrame` ne
+tournant pas dans l'onglet du navigateur intégré de développement utilisé pour ce projet
+tant qu'il n'est pas réellement au premier plan (`document.hidden` reste vrai même après
+mise au premier plan via l'outil dédié — limite déjà rencontrée lors de vérifications
+précédentes, voir la phase 3A), les frames ont été pilotées manuellement via des appels
+directs et successifs à `Jeu.boucle(horodatage)` avec un horodatage croissant, pour
+tester précisément :
+
+- **ratio de vitesse entre couches** : déplacement mesuré sur 1 seconde simulée,
+  `depProche / depLointain` = 2,50 — exactement `Config.DECOR_VITESSE_PROCHE /
+  Config.DECOR_VITESSE_LOINTAIN` ;
+- **vitesse ×2 sans effet** : déplacement du décor identique (à l'arrondi près) avec
+  `Jeu.vitesseJeu = 2` qu'avec `1`, pendant une partie réellement démarrée
+  (`Jeu.demarrerPartie`) ;
+- **pause sans effet** : déplacement identique avec `Jeu.enPause = true` ;
+- **recyclage** : un bâtiment forcé juste sous le bord d'écran (bord droit < 0) se
+  retrouve, une frame plus tard, replacé juste après le bâtiment le plus à droite de sa
+  couche — même tableau, même nombre de bâtiments, aucun objet recréé ;
+- **redimensionnement** : `Decor.canvas.width`/`height` suivent `window.innerWidth`/
+  `innerHeight` dès qu'un événement `resize` est réellement déclenché sur `window`
+  (testé via `dispatchEvent(new Event('resize'))`, qui contourne une limite de l'outil
+  de test utilisé — un changement de viewport émulé via cet outil ne déclenche pas
+  toujours l'événement natif `resize`, sans rapport avec le code du jeu lui-même,
+  confirmé par un appel manuel réussi de `Decor.redimensionner()` juste avant) ; le
+  canvas de jeu, lui, reste inchangé par un redimensionnement du décor (et
+  réciproquement), les deux étant redimensionnés par deux écouteurs `resize` entièrement
+  indépendants.
+
+Aucune erreur console dans aucun de ces scénarios.
+
+## Image de fond fixe (phase 7C bis)
+
+Image de fond fixe et réaliste, affichée par-dessus le skyline procédural (phase 7C)
+quand elle est disponible, sans jamais le supprimer : le skyline reste le filet de
+sécurité si l'image est absente ou invalide.
+
+### Fichier attendu
+
+`images/decor-fond.png`, référencé en chemin relatif (`./images/decor-fond.png`, jamais
+absolu, comme partout ailleurs dans le projet). **Absent du dépôt au moment où cette
+phase a été codée** (vérifié : ni `images/` ni aucune image de décor n'existaient avant
+que cette phase ne crée le dossier vide) — prévu et géré comme un cas normal par le code
+ci-dessous, pas comme une erreur, exactement comme demandé. Les deux comportements
+(repli sans image, puis image affichée) ont depuis été vérifiés concrètement une fois le
+fichier réellement ajouté au projet par l'utilisateur — voir « Vérification » ci-dessous.
+
+**Écart de format** : le prompt de cette sous-phase prévoyait un `.webp`
+(`images/decor-fond.webp`). Le fichier réellement déposé dans le projet est un `.png`
+(1408×768, photo de ville néon sous la pluie) ; aucun outil de conversion vers WebP
+n'était disponible dans cet environnement au moment de l'intégrer (`convert` résolvait
+vers l'utilitaire Windows `convert.exe`, sans rapport avec ImageMagick — confirmé en
+l'invoquant directement, qui a renvoyé une erreur explicite de système de fichiers, pas
+une erreur de conversion). Le nom et l'extension ont donc été ajustés en conséquence,
+partout où ils apparaissent (`index.html`, `sw.js` ×2), plutôt que de bloquer sur un
+format indisponible — le choix du format (`.webp` vs `.png`) n'a aucune incidence
+fonctionnelle ici, `<img>` et `cache.addAll()` traitant les deux de façon identique.
+
+### Superposition (`index.html`, `style.css`)
+
+`#image-decor` (`<img>`, pas une image de fond CSS — pour pouvoir détecter facilement son
+chargement en JavaScript) et `.voile-decor` (un `<div>`) sont insérés dans le DOM juste
+après `#canvas-decor`, dans cet ordre. Les trois partagent `z-index: -1` : leur ordre
+d'empilement relatif vient alors de leur ordre dans le DOM (canvas peint en premier/en
+dessous, puis l'image, puis le voile par-dessus) plutôt que de trois valeurs de
+`z-index` distinctes — suffisant pour rester, comme `#canvas-decor`, derrière tout le
+contenu normal de `body` (voir le raisonnement détaillé dans le commentaire CSS de
+`#canvas-decor`, phase 7C ci-dessus, qui s'applique à l'identique ici). `.image-decor`
+utilise `position: fixed` (pas `absolute`, contrairement à l'esquisse CSS du prompt de
+cette phase) pour couvrir tout le viewport exactement comme `#canvas-decor` qu'elle
+recouvre — cohérence avec l'instruction du prompt de la positionner « exactement comme »
+ce canvas, qui est lui-même en `fixed`. `object-fit: cover` remplit la zone sans déformer
+l'image quel que soit son ratio d'origine.
+
+Masquée par défaut (`opacity: 0`), rendue visible par la classe `.image-decor--visible`
+(transition douce de 0,6s) ajoutée uniquement au chargement réussi — jamais pour masquer
+un échec, voir plus bas. `.voile-decor` (`rgba(11, 11, 20, 0.5)`, la teinte de
+`Config.COULEURS.fond` à 50 % d'opacité) est toujours présent, pas seulement quand
+l'image est visible : sans effet perceptible tant que `.image-decor` reste à `opacity: 0`
+(il assombrit alors légèrement le seul skyline procédural, d'une teinte déjà proche de la
+sienne), donc rien à conditionner ici non plus.
+
+### Chargement et repli (`decor.js`)
+
+`Decor.initialiserImageFond()` (appelée depuis `Decor.initialiser()`) pose deux
+écouteurs sur `#image-decor` : `load` ajoute `.image-decor--visible` ; `error` se
+contente d'un `console.warn()` explicite — l'image reste à `opacity: 0`, invisible, et le
+skyline procédural en dessous (`Decor.mettreAJour`/`dessiner`, jamais interrompus,
+aucune des deux méthodes ne lit l'état de l'image) reste seul visible. C'est ce qui rend
+ce repli gratuit : rien de spécial à faire en cas d'échec, seulement à ne rien faire de
+plus en cas de succès.
+
+**Piège de course rencontré et corrigé en le découvrant** : un `<img src="...">`
+commence à charger dès que le HTML est analysé par le navigateur, bien avant que
+`DOMContentLoaded` (et donc `Decor.initialiser()`) ne s'exécute. Sur le serveur local
+utilisé pour tester, la réponse 404 à une image absente revient si vite que le
+chargement était déjà résolu — en échec — au moment où `initialiserImageFond()` posait
+ses écouteurs : vérifié directement (`image.complete === true`, `image.naturalWidth ===
+0`, alors qu'aucun des deux écouteurs n'avait encore tourné), et par l'absence de
+l'avertissement attendu dans la console malgré un échec de chargement bien réel. Un
+écouteur posé après coup ne se redéclenche jamais pour un événement déjà passé. Corrigé
+en testant `image.complete` juste après avoir posé les écouteurs : si déjà vrai
+(chargement déjà résolu, succès ou échec), appelle manuellement le bon gestionnaire —
+`image.naturalWidth > 0` distinguant les deux cas déjà résolus. Un serveur de production
+plus lent (ou une image plus lourde) n'aurait peut-être jamais révélé ce piège ; détecté
+ici uniquement parce que le repli était systématiquement testé, l'image étant absente du
+projet à ce stade.
+
+### Mise en cache PWA (`sw.js`)
+
+`./images/decor-fond.png` ajouté à `FICHIERS_A_METTRE_EN_CACHE`, `CACHE_NOM` incrémenté
+à `v7` (fichier encore absent, install cassée par construction — voir ci-dessous), puis à
+`v8` (renommage `.webp` → `.png`).
+
+**Alerte, comme demandé explicitement par le prompt de cette phase** : tant que le
+fichier était absent du dépôt, `cache.addAll()` — atomique, une seule entrée en échec
+(404) fait échouer *toute* la mise en cache, pas seulement celle de l'image — échouait
+systématiquement. Vérifié concrètement à ce stade : après un
+`navigator.serviceWorker.register('./sw.js')` frais, le cache `defense-neon-v7` était
+bien créé (par `caches.open()`, qui précède `cache.addAll()`) mais restait vide (0
+fichier), et la registration n'atteignait jamais l'état `active`. Le jeu lui-même
+continuait de fonctionner normalement en attendant (repli implicite du navigateur sur le
+réseau, sans service worker actif) : pas une régression sur le jeu, mais bien
+l'installation/le mode hors ligne (phase 5) qui restait cassée.
+
+**Depuis que l'image a été déposée dans le projet** (fichier `images/decor-fond.png`,
+référence mise à jour dans `sw.js` v8) : revérifié avec un service worker et des caches
+entièrement purgés, sur un onglet neuf. `registration.active` bien présent, un seul
+cache `defense-neon-v8` contenant les dix-neuf fichiers attendus (les dix-huit fichiers
+de code/PWA plus `images/decor-fond.png`), aucune erreur console. L'installation/le mode
+hors ligne fonctionne donc désormais pleinement.
+
+### Écart par rapport au prompt
+
+Comme pour la phase 7C, le prompt de cette sous-phase référençait `PALETTE.fondPrincipal`
+pour la teinte du voile — `Config.PALETTE` n'existe toujours pas dans ce dépôt (voir
+l'écart déjà documenté en phase 7C) ; utilisé `Config.COULEURS.fond` à la place, comme
+partout ailleurs. `position: absolute` (esquissé dans le prompt pour `.image-decor`) a
+été remplacé par `position: fixed`, pour véritablement correspondre au positionnement de
+`#canvas-decor` comme demandé — ce dernier utilise `fixed`, pas `absolute` (voir la
+phase 7C ci-dessus).
+
+### Vérification
+
+**Cas 1 — image absente** (testé en premier, avant l'ajout du fichier par l'utilisateur) :
+
+- `console.warn` attendu bien affiché (une fois le piège de course ci-dessus corrigé) ;
+- `#image-decor` reste à `opacity: 0` (`getComputedStyle`), jamais la classe
+  `.image-decor--visible` ;
+- skyline procédural inchangé, toujours visible et défilant normalement dans les marges ;
+- aucune erreur JS autre que les 404 réseau intrinsèques à une ressource absente ;
+- jeu pleinement fonctionnel malgré l'échec d'installation du service worker documenté
+  ci-dessus (capture d'écran à l'appui : accueil, décor visible dans les marges, aucune
+  apparence cassée).
+
+**Cas 2 — image présente** (`images/decor-fond.png`, après ajout par l'utilisateur) :
+retesté service worker et caches entièrement purgés, sur un onglet neuf.
+
+- `#image-decor` : `complete: true`, `naturalWidth: 1408`, `naturalHeight: 768`, classe
+  `.image-decor--visible` bien ajoutée (le correctif de piège de course fonctionne aussi
+  dans le sens du succès, pas seulement de l'échec) ;
+- capture d'écran à l'accueil et en cours de partie : image (ville néon sous la pluie)
+  bien visible dans les marges, assombrie par `.voile-decor`, plateau et HUD pleinement
+  lisibles et non déformés ; à travers les cases libres du plateau (rendues
+  semi-transparentes par le correctif ci-dessous), on distingue en plus une légère
+  transparence vers ce décor, cohérent avec ce correctif ;
+- service worker : `registration.active` présent, cache `defense-neon-v8` contenant les
+  dix-neuf fichiers attendus (voir section précédente) ;
+- aucune erreur console sur un onglet neuf avec cache/service worker fraîchement purgés.
+  (Deux 404 sur `decor-fond.webp` ont été observés une fois au cours des tests, mais
+  confirmés être des entrées historiques de l'ancien nom de fichier conservées dans le
+  journal réseau d'un onglet resté ouvert depuis avant le renommage — pas une erreur
+  actuelle ; disparues dès la vérification refaite sur un onglet neuf.)
+
+`getComputedStyle(image).opacity` a occasionnellement renvoyé `"0"` malgré la classe
+`.image-decor--visible` déjà présente et un ordre des règles CSS pourtant vérifié correct
+— écart resté sans conséquence sur le rendu réel (confirmé par capture d'écran), très
+probablement une particularité de l'environnement de test sur onglet non premier-plan
+(voir la même limitation déjà documentée pour `document.hidden`/`requestAnimationFrame`
+plus bas dans ce document) plutôt qu'un bug du jeu — aucun signe similaire n'apparaît sur
+les pixels réellement rendus.
+
+## Transparence du plateau (correctif post-7C)
+
+Rend le fond des cases libres du plateau semi-transparent, pour que le décor
+d'arrière-plan (phase 7C ci-dessus) transparaisse légèrement à travers le plateau
+lui-même — jamais sur les cases de chemin, qui restent pleinement opaques.
+
+### Écart par rapport au prompt
+
+Le prompt de ce correctif faisait référence à un objet `Config.PALETTE`
+(`PALETTE.fondPrincipal`, `PALETTE.fondCase`, `PALETTE.chemin`...) et à une « image de
+fond » posée par une « phase 7C bis » censée avoir déjà eu lieu. **Aucun des deux
+n'existe dans ce dépôt** : vérifié à la fois par `git log` (aucun commit au-delà de ceux
+déjà connus) et par recherche de `PALETTE`/`image` dans `js/` avant de commencer — la
+seule mention de `PALETTE` dans tout le code est un commentaire expliquant pourquoi cet
+objet n'a *pas* été créé en phase 7C (voir plus haut). La palette du jeu reste
+`Config.COULEURS`, comme depuis la phase 4A, et il n'existait, *au moment de ce
+correctif*, aucun système de chargement d'image d'arrière-plan — seul le skyline
+procédural de la phase 7C servait de décor (lui-même toujours en attente de commit/push
+à cette date). Le vrai prompt de la phase 7C bis (image de fond, voir la section dédiée
+ci-dessus) a été retrouvé et traité juste après ce correctif : la remarque ci-dessus
+reste donc un instantané exact de l'état du dépôt à l'instant où ce correctif a été
+écrit, pas de son état final. Implémenté
+en conséquence contre le code réel plutôt que contre les noms donnés par le prompt : les
+deux nouvelles teintes ont été ajoutées à `Config.COULEURS` sous les noms
+`fondTranslucide`/`caseLibreTranslucide` (qui correspondent aux propriétés existantes
+`fond`/`caseLibre` qu'elles rendent translucides), avec les valeurs `rgba` exactes
+demandées par le prompt. L'effet reste valable indépendamment de la nature du décor
+affiché derrière (procédural aujourd'hui, une image le jour où elle existera) : la
+transparence posée ici n'a aucune connaissance de ce qui se trouve sur le canvas de
+décor, elle laisse simplement transparaître, en aval, quoi que ce soit.
+
+### Modifications (`config.js`, `carte.js`)
+
+`Config.COULEURS.fondTranslucide` (`'rgba(10, 14, 23, 0.7)'`) remplace `fond` pour le
+remplissage de fond général du canvas dans `Carte.dessiner(ctx)` ;
+`Config.COULEURS.caseLibreTranslucide` (`'rgba(18, 24, 43, 0.6)'`) remplace `caseLibre`
+pour le remplissage des cases `'LIBRE'`/`'OCCUPEE'` (une tour est de toute façon dessinée
+par-dessus). `fond` et `caseLibre` eux-mêmes ne sont pas modifiés, toujours utilisés tels
+quels ailleurs si besoin (aucun autre appelant actuellement). Le remplissage des cases
+`'CHEMIN'` (`Config.COULEURS.caseChemin`) et le liseré de grille (`Config.COULEURS.lisere`)
+ne changent pas : c'est ce qui garantit que le décor ne transparaît jamais à travers le
+tracé du chemin.
+
+### Bug découvert et corrigé au passage : absence de `clearRect` (`jeu.js`)
+
+`Jeu.dessinerTout()` ne vidait jamais le canvas de jeu avant de redessiner — sans
+conséquence tant que `Carte.dessiner` recouvrait chaque frame l'intégralité du canvas
+d'un fond pleinement opaque (`fillRect` en mode de composition par défaut
+« source-over » *remplace* la destination quand la source est opaque). Avec des
+remplissages semi-transparents, ce n'est plus le cas : une source translucide se
+*compose* avec le contenu déjà présent sur le canvas plutôt que de le remplacer. Sans
+`clearRect`, chaque frame ajoutait donc un peu plus d'opacité par-dessus celle,
+déjà composée, de la frame précédente — jamais réinitialisée — et l'effet de
+transparence convergeait visiblement vers l'opacité totale au bout de quelques secondes
+de jeu réel (vérifié : après 300 frames simulées sans le correctif, une case libre
+passait de l'alpha attendu (~225/255) à 255/255 plein). Détecté en vérifiant la
+*stabilité* de l'effet dans le temps plutôt qu'une seule image, pas seulement sa
+présence à l'instant du premier rendu. Corrigé par un `ctx.clearRect(0, 0,
+this.canvas.width, this.canvas.height)` ajouté en tout début de
+`Jeu.dessinerTout()` — `Decor.dessiner()` (phase 7C) le faisait déjà correctement dès le
+départ, sur son propre canvas.
+
+### Vérification
+
+Testé en navigateur (serveur local), au niveau du pixel plutôt qu'à l'œil
+(`ctx.getImageData` sur `Jeu.ctx`, à la fois immédiatement après le premier rendu et
+après 300 frames simulées pilotées manuellement — même limite de `requestAnimationFrame`
+en onglet non réellement au premier plan que pour la phase 7C ci-dessus) :
+
+- **case libre** : alpha stable à 225/255 (≈ 0,88, cohérent avec la composition de
+  `fondTranslucide` (0,7) puis `caseLibreTranslucide` (0,6) l'un sur l'autre — vérifié de
+  façon isolée sur un `<canvas>` de test avant d'incriminer le pipeline de rendu réel),
+  identique avant et après 300 frames — confirme que le correctif `clearRect` élimine
+  bien la dérive vers l'opacité totale ;
+- **case chemin** : alpha stable à 255/255 (pleinement opaque) dans les deux lectures —
+  jamais traversée par le décor, comme attendu ;
+- **lisibilité** : deux tours construites (crédits/son ajustés en console pour éviter
+  l'erreur `AudioContext` déjà documentée en phase 4B — un contexte audio ne se crée
+  qu'au premier clic réel sur Jouer, jamais présent dans ce test scripté) restent
+  parfaitement lisibles à l'écran (halo, socle, chemin en pointillés) une fois la
+  transparence en place — capture d'écran à l'appui.
+
+**Piège de test rencontré et documenté pour de futures vérifications** : la première
+tentative de vérification par pixel donnait un résultat incohérent (case libre à
+l'ancienne couleur *opaque*, alpha 255 dès le premier rendu) — pas un bug du correctif,
+mais le service worker (phase 5), déjà enregistré et actif dans cet onglet depuis les
+vérifications de la phase 7C précédente, servant `carte.js`/`config.js` depuis son cache
+(`cache-first`, voir `sw.js`) plutôt que depuis le disque fraîchement modifié. Résolu en
+purgeant les caches et désenregistrant le service worker dans l'onglet de test avant de
+recharger. `CACHE_NOM` incrémenté à `v6` en conséquence (`carte.js`, `config.js` et
+`jeu.js` ont tous les trois changé) — sans quoi ce même correctif n'aurait jamais atteint
+un appareil ayant déjà installé une version antérieure du jeu, exactement comme lors des
+deux précédents oublis de version de cache.
+
+Aucune erreur console dans aucun de ces scénarios.
+
 ## Avancement (feuille de route)
 
 - **1A — Socle et carte** : fait. Génération, affichage, redimensionnement, reproductibilité
@@ -1104,3 +1512,33 @@ Mises à jour de contenu postérieures au plan initial :
   `PROPORTION_LIMITE_TOURS` n'est pas encore stabilisée par du jeu réel, et la relancer
   maintenant risquerait de devoir être refaite une nouvelle fois après un premier
   ajustement.
+
+Nouvelle vague de contenu additionnel post-lancement (voir « Contenu additionnel
+post-lancement » ci-dessus pour la liste complète des sous-phases à venir) :
+
+- **Décor d'arrière-plan en parallaxe (« phase 7C »)** : fait. Voir « Décor
+  d'arrière-plan en parallaxe (phase 7C) » ci-dessus : skyline à deux couches sur un
+  second canvas (`#canvas-decor`) indépendant du canvas de jeu, visible dans les marges
+  autour du plateau, défilement continu (couche proche plus rapide que la lointaine)
+  jamais affecté par la pause, l'écran d'accueil, les écrans de fin ou la vitesse ×2,
+  recyclage des bâtiments hors champ, `shadowBlur` léger justifié par le faible nombre
+  de formes (une quinzaine). Aucune régression sur le rendu du plateau de jeu.
+- **Image de fond fixe (« phase 7C bis »)** : fait, code et fichier réel. Voir « Image
+  de fond fixe (phase 7C bis) » ci-dessus : `<img id="image-decor">` + voile sombre,
+  superposés au skyline procédural sans jamais le remplacer, fondu à l'apparition en cas
+  de succès, simple avertissement console en cas d'échec (piège de course avec le
+  chargement de l'image, déjà résolu au moment où le script s'exécute, détecté et corrigé
+  au passage — vérifié dans les deux sens, succès et échec). **`images/decor-fond.png`**
+  (renommé depuis `.webp`, prévu par le prompt initial mais aucun outil de conversion
+  disponible dans cet environnement) **est désormais présent et vérifié** : image bien
+  visible en fondu par-dessus le skyline, voile appliqué, plateau et HUD inchangés, et
+  l'installation du service worker (mode hors ligne, phase 5) réussit à nouveau
+  pleinement — les dix-neuf fichiers du jeu, image comprise, sont mis en cache.
+- **Transparence du plateau (correctif post-7C)** : fait. Voir « Transparence du
+  plateau (correctif post-7C) » ci-dessus : fond des cases libres du plateau rendu
+  semi-transparent (`Config.COULEURS.fondTranslucide`/`caseLibreTranslucide`) pour
+  laisser transparaître le décor à travers le plateau lui-même, cases de chemin
+  toujours pleinement opaques. A aussi révélé et corrigé un bug latent (absence de
+  `ctx.clearRect` dans `Jeu.dessinerTout()`, sans conséquence tant que tous les
+  remplissages étaient opaques) qui aurait fait dériver l'effet vers l'opacité totale
+  au fil du temps sans ce correctif.

@@ -89,6 +89,10 @@ const Jeu = {
         // pool de particules (phase 4B, voir particules.js).
         this.initialiserPoolProjectiles();
         Particules.initialiser();
+        // Décor d'arrière-plan (phase 7C) : son propre canvas, son propre
+        // redimensionnement, sa propre boucle de défilement (voir boucle() plus bas) —
+        // totalement indépendant du reste de l'initialisation ci-dessous.
+        Decor.initialiser();
 
         Interface.initialiser();
 
@@ -154,7 +158,20 @@ const Jeu = {
     // Dessine l'état courant du jeu : carte, tours, ennemis, projectiles actifs,
     // particules (phase 4B, toujours par-dessus le reste de la scène pour rester
     // visibles), puis l'aperçu de construction (Interface) en tout dernier.
+    //
+    // ctx.clearRect() en tout premier (phase 7C, correctif transparence) : jusqu'ici
+    // inutile puisque Carte.dessiner recouvrait déjà tout le canvas d'un fond
+    // pleinement opaque à chaque frame, ce qui en tenait lieu de facto. Depuis que ce
+    // fond (et celui des cases libres) est devenu semi-transparent
+    // (Config.COULEURS.fondTranslucide/caseLibreTranslucide), un remplissage
+    // translucide ne *remplace* plus le contenu déjà présent sur le canvas — il se
+    // *compose* par-dessus (composite « source-over », le mode par défaut). Sans ce
+    // clearRect, chaque frame ajouterait un peu plus d'opacité par-dessus celle de la
+    // frame précédente, jamais réinitialisée : l'effet de transparence convergerait
+    // visiblement vers l'opacité totale au bout de quelques secondes de jeu réel,
+    // plutôt que de rester stable.
     dessinerTout() {
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         Carte.dessiner(this.ctx);
         for (const tour of this.toursActives) {
             tour.dessiner(this.ctx);
@@ -186,6 +203,15 @@ const Jeu = {
         let dt = (horodatage - this.dernierHorodatage) / 1000;
         this.dernierHorodatage = horodatage;
         dt = Math.min(dt, Config.DT_MAXIMUM);
+
+        // Décor d'arrière-plan (phase 7C) : mis à jour et dessiné à chaque frame, sans
+        // condition sur etatPartie ni enPause — c'est un arrière-plan ambiant, pas une
+        // partie de la simulation de jeu, il continue de défiler pendant une pause, sur
+        // l'écran d'accueil ou sur les écrans de fin. Reçoit ce dt déjà plafonné mais
+        // *avant* la multiplication par vitesseJeu ci-dessous : sa vitesse de
+        // défilement ne doit jamais varier avec le bouton Vitesse ×2.
+        Decor.mettreAJour(dt);
+        Decor.dessiner(Decor.ctx);
 
         // Le multiplicateur de vitesse ne s'applique qu'à la simulation, et
         // seulement après le plafonnement ci-dessus : appliquer l'ordre inverse

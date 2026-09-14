@@ -29,10 +29,86 @@ body {
     gap: 12px;
 }
 
+/* Décor d'arrière-plan en parallaxe (phase 7C, decor.js) : un second canvas
+   indépendant du canvas de jeu, épinglé derrière tout le reste de la page. `position:
+   fixed` + `inset: 0` le fait couvrir tout le viewport ; `width`/`height: 100%` sont
+   nécessaires en plus (un <canvas> est un élément remplacé, `inset` seul ne suffit pas
+   à l'étirer comme il le ferait pour une boîte ordinaire à dimensions automatiques).
+   `z-index: -1` suffit à le faire passer derrière tout le reste du contenu de `body`
+   (aucun de ses autres enfants directs — <h1>, #bouton-son, .conteneur-canvas, etc. —
+   n'a de z-index propre ni de position qui créerait un contexte d'empilement séparé,
+   donc ce z-index négatif s'applique bien dans le contexte d'empilement racine de la
+   page entière, pas seulement localement). Le canvas de jeu, lui, garde son fond
+   opaque habituel (depuis la phase 1A, renforcé en 4A) : ce décor n'est donc visible
+   que dans les marges qui entourent .conteneur-canvas — plus larges sur desktop, quasi
+   absentes sous 900px de large où .conteneur-canvas occupe déjà toute la largeur
+   disponible. Redimensionné indépendamment du canvas de jeu par Decor.redimensionner()
+   (voir decor.js), sur son propre écouteur resize. */
+#canvas-decor {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    display: block;
+}
+
+/* Image de fond fixe (phase 7C bis) : positionnée exactement comme #canvas-decor
+   ci-dessus (`position: fixed; inset: 0`, plutôt que `position: absolute` — pour
+   couvrir tout le viewport, y compris pendant un défilement de page, exactement comme
+   le canvas de décor qu'elle recouvre), un niveau au-dessus de lui et en dessous de
+   `.conteneur-canvas` : même `z-index: -1`, l'ordre entre les deux vient alors de leur
+   ordre dans le DOM (canvas d'abord, image ensuite, voir index.html), pas d'un
+   `z-index` distinct. `object-fit: cover` pour remplir la zone sans déformer l'image
+   quel que soit son ratio d'origine. Masquée par défaut (`opacity: 0`) : le skyline
+   procédural en dessous reste seul visible tant que l'image ne s'est pas chargée avec
+   succès (voir Decor.initialiserImageFond, decor.js, qui ajoute `.image-decor--visible`
+   sur l'événement `load`) — la transition ne fait qu'adoucir cette apparition, jamais
+   utilisée pour masquer une erreur de chargement. `pointer-events: none` : purement
+   décorative, ne doit jamais intercepter un clic destiné au jeu en dessous. */
+.image-decor {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0;
+    transition: opacity 0.6s ease;
+    pointer-events: none;
+    z-index: -1;
+}
+
+.image-decor--visible {
+    opacity: 1;
+}
+
+/* Voile sombre entre l'image de fond et le plateau de jeu (phase 7C bis) : une photo
+   réaliste en pleine luminosité nuirait au contraste de l'interface néon posée
+   par-dessus (même principe qu'en phase 4A : la lisibilité du jeu passe avant
+   l'esthétique du décor). Même teinte que Config.COULEURS.fond (#0b0b14 = rgb(11, 11,
+   20)) à 50 % d'opacité, plutôt qu'un nouvel objet Config.PALETTE qui n'existe pas
+   dans ce dépôt (voir l'écart documenté dans ARCHITECTURE.md). Toujours présent, pas
+   seulement quand l'image est visible : sans effet perceptible tant que
+   .image-decor reste à opacity 0 (il assombrit alors uniquement le skyline
+   procédural, d'une teinte déjà proche de la sienne), donc rien à conditionner ici. */
+.voile-decor {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(11, 11, 20, 0.5);
+    pointer-events: none;
+    z-index: -1;
+}
+
 h1 {
-    font-size: 1.25rem;
+    /* Seul titre de la page (l'écran d'accueil n'en a plus de doublon, voir
+       index.html) : sensiblement plus grand que les <h2> des écrans superposés
+       (Victoire/Défaite) pour bien se lire comme LE titre, pas un sous-titre. */
+    font-size: 2rem;
     margin: 0;
     text-align: center;
+    letter-spacing: 0.02em;
     color: #00e5ff;
     text-shadow: 0 0 8px rgba(0, 229, 255, 0.6);
 }

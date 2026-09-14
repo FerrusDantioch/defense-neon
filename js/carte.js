@@ -328,7 +328,12 @@ const Carte = {
     dessiner(ctx) {
         const taille = this.tailleCase;
 
-        ctx.fillStyle = Config.COULEURS.fond;
+        // Fond translucide (phase 7C, correctif transparence) plutôt qu'opaque : laisse
+        // transparaître le décor d'arrière-plan (Decor, sur son propre canvas fixé
+        // derrière celui-ci, voir style.css) à travers tout le canvas de jeu — y
+        // compris les marges hors grille éventuelles, sans conséquence puisque la
+        // grille elle-même recouvre déjà tout l'espace utile dessiné ci-dessous.
+        ctx.fillStyle = Config.COULEURS.fondTranslucide;
         ctx.fillRect(0, 0, Config.COLONNES * taille, Config.LIGNES * taille);
 
         for (let ligne = 0; ligne < Config.LIGNES; ligne++) {
@@ -340,11 +345,15 @@ const Carte = {
                 // Toutes les cases 'CHEMIN' partagent la même teinte de base, qu'il
                 // s'agisse d'un croisement entre deux chemins ou non (phase 6A) : la
                 // distinction entre chemins se fait uniquement via le flux animé et
-                // les marqueurs départ/arrivée dessinés par-dessus, plus bas.
+                // les marqueurs départ/arrivée dessinés par-dessus, plus bas. Cette
+                // case reste pleinement opaque (phase 7C, correctif transparence) —
+                // c'est ce qui garantit que le décor d'arrière-plan ne transparaît
+                // jamais à travers le tracé du chemin, contrairement aux cases
+                // 'LIBRE'/'OCCUPEE' juste en dessous, rendues translucides.
                 if (etat === 'CHEMIN') {
                     ctx.fillStyle = Config.COULEURS.caseChemin;
                 } else {
-                    ctx.fillStyle = Config.COULEURS.caseLibre;
+                    ctx.fillStyle = Config.COULEURS.caseLibreTranslucide;
                 }
                 ctx.fillRect(x, y, taille, taille);
 
