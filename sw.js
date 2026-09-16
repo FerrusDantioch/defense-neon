@@ -6,7 +6,7 @@
 //
 // À incrémenter à chaque mise à jour déployée du jeu : le nom sert aussi de clé de
 // version, voir activate() ci-dessous qui purge tout cache dont le nom diffère.
-const CACHE_NOM = 'defense-neon-v18';
+const CACHE_NOM = 'defense-neon-v19';
 
 // './images/decor-fond.png' (phase 7C bis) : le fichier réellement déposé dans le
 // projet est un .png, pas le .webp initialement prévu par le prompt de cette

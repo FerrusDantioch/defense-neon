@@ -16,6 +16,16 @@ const Vagues = {
     tempsDepuisDerniereGeneration: 0,
     multiplicateurPointsDeVie: 1,
 
+    // Vagues de boss (phase 7G) : `estVagueBoss` reste vrai pour toute la durée d'une
+    // vague qui en est une (utilisé nulle part en dehors de demarrer() pour l'instant,
+    // mais conservé sur l'instance plutôt qu'en variable locale pour rester
+    // inspectable, comme le reste de l'état de vague ci-dessus). `bossEnAttente`
+    // vaut vrai jusqu'à ce que le boss ait effectivement été généré (voir
+    // mettreAJour) : c'est ce qui garantit qu'il apparaît bien en tête de file, un
+    // seul boss par vague de ce type, jamais généré une deuxième fois.
+    estVagueBoss: false,
+    bossEnAttente: false,
+
     // Crédits accumulés à la fin des vagues, récupérés par Jeu.boucle et ajoutés à
     // Jeu.credits (la monnaie dépensée pour construire des tours).
     credits: 0,
@@ -55,13 +65,41 @@ const Vagues = {
 
         this.numeroVagueActuelle = numero;
         this.enCours = true;
-        this.ennemisRestantsAGenerer = 5 + numero * 2;
         this.intervalleCourant = this.calculerIntervalle(numero);
         this.multiplicateurPointsDeVie = 1 + (numero - 1) * 0.15;
 
         // Le premier ennemi apparaît tout de suite : attendre un intervalle complet
         // après le clic du joueur donnerait une impression de délai injustifié.
         this.tempsDepuisDerniereGeneration = 0;
+
+        const nombreNormalEnnemis = 5 + numero * 2;
+
+        // Vagues de boss (phase 7G) : tous les Config.VAGUE_INTERVALLE_BOSS paliers,
+        // un simple modulo sur le numéro de vague — valable aussi bien en mode Sans
+        // fin qu'au-delà du nombre de vagues d'une partie Standard/Longue, puisqu'il
+        // ne dépend jamais de Jeu.nombreDeVagues. `bossEnAttente` est consommé au tout
+        // premier ennemi généré ci-dessous (mettreAJour), garantissant qu'il apparaît
+        // en tête de file avant même le premier ennemi d'escorte.
+        this.estVagueBoss = numero % Config.VAGUE_INTERVALLE_BOSS === 0;
+        this.bossEnAttente = this.estVagueBoss;
+
+        if (this.estVagueBoss) {
+            const tailleEscorte = Math.max(1, Math.round(nombreNormalEnnemis * Config.PROPORTION_ESCORTE_VAGUE_BOSS));
+            this.ennemisRestantsAGenerer = 1 + tailleEscorte;
+
+            // Bandeau d'annonce et son d'alerte, une seule fois au tout début de la
+            // vague (jamais répétés en boucle, demarrer() n'étant appelée qu'une fois
+            // par vague grâce au garde-fou this.enCours en tête de cette méthode) —
+            // réutilise le même mécanisme d'affichage temporaire que les messages de
+            // construction (Interface.afficherMessageConstruction, généralisé pour
+            // accepter une durée différente de son défaut de 1,5 s), avec une durée
+            // plus longue pour rester bien visible malgré son caractère plus
+            // exceptionnel qu'une simple erreur de construction.
+            Interface.afficherMessageConstruction('⚠ VAGUE DE BOSS', 3);
+            Son.jouerAlerteBoss();
+        } else {
+            this.ennemisRestantsAGenerer = nombreNormalEnnemis;
+        }
     },
 
     // À appeler une fois par frame avec le dt courant et le tableau des ennemis actifs
@@ -74,33 +112,45 @@ const Vagues = {
             this.tempsDepuisDerniereGeneration -= dt;
 
             if (this.tempsDepuisDerniereGeneration <= 0) {
-                // Drone (phase 7F) : décidé par un tirage dédié, séparé de
-                // tirerTypeEnnemi (qui ne concerne que les trois types au sol
-                // assignés à un chemin) — à partir de VAGUE_APPARITION_DRONE,
-                // PROPORTION_DRONE des apparitions sont des drones plutôt que
-                // d'emprunter un chemin. Un seul Aleatoire.nombre() consommé dans un
-                // cas comme dans l'autre (jamais les deux à la fois), pour que la
-                // suite de tirages reste déterministe à graine égale quelle que soit
-                // l'issue de ce tirage.
-                const estDrone = this.numeroVagueActuelle >= Config.VAGUE_APPARITION_DRONE
-                    && Aleatoire.nombre() < Config.PROPORTION_DRONE;
-
-                if (estDrone) {
-                    // Ni cheminIndex ni position de départ liée à un chemin : le
-                    // drone tire lui-même son propre trajet en ligne droite dans son
-                    // constructeur (voir ennemi.js) à partir des seules dimensions de
-                    // la grille.
-                    listeEnnemis.push(new Ennemi('drone', this.multiplicateurPointsDeVie, null));
-                } else {
-                    const type = this.tirerTypeEnnemi(this.numeroVagueActuelle);
-                    // Chemins multiples (phase 6A) : chaque ennemi se voit assigner
-                    // l'un des Config.NOMBRE_CHEMINS chemins dès sa création, toujours
-                    // via le générateur à graine (jamais Math.random()) pour que la
-                    // répartition reste reproductible à graine égale — voir la note
-                    // sur Aleatoire dans particules.js pour la raison inverse
-                    // (pourquoi les particules, elles, n'y passent pas).
+                if (this.bossEnAttente) {
+                    // Boss (phase 7G) : un ennemi au sol ordinaire à tous égards, donc
+                    // toujours assigné à un chemin comme les trois types classiques
+                    // (jamais `null`, contrairement au drone) — seul son type est
+                    // imposé plutôt que tiré par tirerTypeEnnemi/le tirage du drone,
+                    // qu'on saute donc entièrement ici, une seule fois par vague de
+                    // boss (bossEnAttente repasse à `false` juste en dessous).
                     const cheminIndex = Aleatoire.entier(0, Config.NOMBRE_CHEMINS - 1);
-                    listeEnnemis.push(new Ennemi(type, this.multiplicateurPointsDeVie, cheminIndex));
+                    listeEnnemis.push(new Ennemi('boss', this.multiplicateurPointsDeVie, cheminIndex));
+                    this.bossEnAttente = false;
+                } else {
+                    // Drone (phase 7F) : décidé par un tirage dédié, séparé de
+                    // tirerTypeEnnemi (qui ne concerne que les trois types au sol
+                    // assignés à un chemin) — à partir de VAGUE_APPARITION_DRONE,
+                    // PROPORTION_DRONE des apparitions sont des drones plutôt que
+                    // d'emprunter un chemin. Un seul Aleatoire.nombre() consommé dans un
+                    // cas comme dans l'autre (jamais les deux à la fois), pour que la
+                    // suite de tirages reste déterministe à graine égale quelle que soit
+                    // l'issue de ce tirage.
+                    const estDrone = this.numeroVagueActuelle >= Config.VAGUE_APPARITION_DRONE
+                        && Aleatoire.nombre() < Config.PROPORTION_DRONE;
+
+                    if (estDrone) {
+                        // Ni cheminIndex ni position de départ liée à un chemin : le
+                        // drone tire lui-même son propre trajet en ligne droite dans son
+                        // constructeur (voir ennemi.js) à partir des seules dimensions de
+                        // la grille.
+                        listeEnnemis.push(new Ennemi('drone', this.multiplicateurPointsDeVie, null));
+                    } else {
+                        const type = this.tirerTypeEnnemi(this.numeroVagueActuelle);
+                        // Chemins multiples (phase 6A) : chaque ennemi se voit assigner
+                        // l'un des Config.NOMBRE_CHEMINS chemins dès sa création, toujours
+                        // via le générateur à graine (jamais Math.random()) pour que la
+                        // répartition reste reproductible à graine égale — voir la note
+                        // sur Aleatoire dans particules.js pour la raison inverse
+                        // (pourquoi les particules, elles, n'y passent pas).
+                        const cheminIndex = Aleatoire.entier(0, Config.NOMBRE_CHEMINS - 1);
+                        listeEnnemis.push(new Ennemi(type, this.multiplicateurPointsDeVie, cheminIndex));
+                    }
                 }
 
                 this.ennemisRestantsAGenerer--;
@@ -129,5 +179,7 @@ const Vagues = {
         this.tempsDepuisDerniereGeneration = 0;
         this.multiplicateurPointsDeVie = 1;
         this.credits = 0;
+        this.estVagueBoss = false;
+        this.bossEnAttente = false;
     }
 };
