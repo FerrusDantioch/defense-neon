@@ -4,11 +4,24 @@
 // néon depuis la phase 4A, une teinte distincte par chemin depuis la phase 6A).
 
 const Carte = {
-    // Grille d'état : grille[ligne][colonne] vaut 'LIBRE', 'CHEMIN' ou 'OCCUPEE'
-    // (une tour posée sur la case, voir Jeu.tenterConstruireTour dans jeu.js). Une
-    // case 'CHEMIN' peut appartenir à plusieurs chemins à la fois (un croisement) :
-    // la grille ne distingue pas lequel, seul Carte.chemins le sait.
+    // Grille d'état : grille[ligne][colonne] vaut 'LIBRE', 'CHEMIN', 'OCCUPEE' (une
+    // tour posée sur la case, voir Jeu.tenterConstruireTour dans jeu.js) ou, depuis
+    // le contenu additionnel post-lancement traitant des cases inconstructibles,
+    // 'BLOQUEE' (obstacle généré une fois pour toute la carte, voir
+    // genererCasesBloquees ci-dessous — jamais constructible, y compris pour une
+    // Caserne adjacente à un chemin). Une case 'CHEMIN' peut appartenir à plusieurs
+    // chemins à la fois (un croisement) : la grille ne distingue pas lequel, seul
+    // Carte.chemins le sait.
     grille: [],
+
+    // Gravats (contenu additionnel post-lancement) : gravats[ligne][colonne] vaut un
+    // tableau de morceaux de débris si cette case est 'BLOQUEE', `null` sinon — même
+    // principe de lookup en O(1) par case que `grille` elle-même, plutôt qu'une liste
+    // plate cherchée par colonne/ligne à chaque frame dessinée (voir dessiner()).
+    // Chaque morceau : { xFraction, yFraction, largeurFraction, hauteurFraction,
+    // angle }, en fraction de tailleCase / radians — même principe que
+    // `tachesAsphalte` ci-dessous (converti en pixels réels seulement au dessin).
+    gravats: [],
 
     // Un élément par chemin (Config.NOMBRE_CHEMINS au total), chacun avec :
     // - chemin : suite ordonnée des cases du chemin, du départ à l'arrivée,
@@ -77,19 +90,32 @@ const Carte = {
         return false;
     },
 
-    // Détermine le point de blocage d'une Caserne construite en (colonne, ligne)
-    // (phase 7E) : la première case de chemin trouvée parmi ses 4 voisines
-    // orthogonales, dans l'ordre fixe déjà renvoyé par voisinesOrthogonales (haut,
-    // bas, gauche, droite) — déterministe, sans notion de « meilleur » choix, pour
-    // qu'un coin proche d'un croisement (plusieurs voisines de chemin possibles)
-    // retienne toujours la même case d'une partie à l'autre à graine égale. Si cette
-    // case appartient à plusieurs chemins à la fois (croisement, phase 6A), retient
-    // le premier de Carte.chemins qui la contient — la grille elle-même ne
-    // distingue de toute façon pas lequel (voir la note en tête de ce fichier).
-    // Renvoie { cheminIndex, indexPointDePassage } ou null si estAdjacentAUnChemin
-    // renverrait faux pour cette case (ne devrait normalement jamais arriver ici,
-    // l'appelant étant censé avoir déjà vérifié cette condition avant de construire).
-    trouverPointBlocagePourCaserne(colonne, ligne) {
+    // Détermine toutes les cases de chemin candidates pour le point de blocage d'une
+    // Caserne construite en (colonne, ligne) — ses voisines orthogonales qui
+    // appartiennent à un chemin, dans l'ordre fixe déjà renvoyé par
+    // voisinesOrthogonales (haut, bas, gauche, droite) — déterministe, pour qu'à
+    // graine égale l'ordre des candidates (et donc, dans le cas à une seule
+    // candidate, le choix automatique) reste toujours le même d'une partie à
+    // l'autre. Si une case appartient à plusieurs chemins à la fois (croisement,
+    // phase 6A), retient le premier de Carte.chemins qui la contient — la grille
+    // elle-même ne distingue de toute façon pas lequel (voir la note en tête de ce
+    // fichier).
+    //
+    // Renvoie un tableau (potentiellement vide si estAdjacentAUnChemin renverrait
+    // faux pour cette case — ne devrait normalement jamais arriver ici, l'appelant
+    // étant censé avoir déjà vérifié cette condition avant de construire) d'objets
+    // `{ colonne, ligne, cheminIndex, indexPointDePassage }` — `colonne`/`ligne`
+    // (contenu additionnel post-lancement, absents avant) identifient la case
+    // elle-même, nécessaires pour la mettre en surbrillance et détecter qu'un clic
+    // du joueur y tombe bien (voir Interface.caserneEnAttenteChoix) ; les deux
+    // autres champs, comme avant cette phase, identifient le point de passage du
+    // chemin que l'unité viendra bloquer (Tour.faireApparaitreUnite). Avant cette
+    // phase, un unique appelant (le constructeur de Tour) ne retenait que la
+    // première candidate trouvée ; il continue de le faire pour le cas à une seule
+    // candidate, mais peut désormais aussi recevoir plusieurs candidates à faire
+    // choisir au joueur.
+    candidatsBlocagePourCaserne(colonne, ligne) {
+        const candidats = [];
         for (const voisine of this.voisinesOrthogonales(colonne, ligne)) {
             if (!this.dansLaGrille(voisine.colonne, voisine.ligne)) continue;
             if (this.grille[voisine.ligne][voisine.colonne] !== 'CHEMIN') continue;
@@ -99,11 +125,12 @@ const Carte = {
                     c => c.colonne === voisine.colonne && c.ligne === voisine.ligne
                 );
                 if (indexPointDePassage !== -1) {
-                    return { cheminIndex, indexPointDePassage };
+                    candidats.push({ colonne: voisine.colonne, ligne: voisine.ligne, cheminIndex, indexPointDePassage });
+                    break;
                 }
             }
         }
-        return null;
+        return candidats;
     },
 
     // Vraie si la ligne fait partie de la bande autorisée pour un chemin. On exclut
@@ -359,6 +386,61 @@ const Carte = {
         }
     },
 
+    // Cases inconstructibles près des chemins (contenu additionnel post-lancement) :
+    // pour chaque case 'LIBRE' orthogonalement adjacente à au moins une case de
+    // chemin (réutilise estAdjacentAUnChemin, déjà écrite pour la Caserne en phase
+    // 7E — la condition est exactement la même), tire via Aleatoire si elle devient
+    // 'BLOQUEE', avec une probabilité de Config.PROPORTION_CASES_BLOQUEES_PRES_CHEMIN.
+    // Appelée par generer() juste après avoir marqué les cases 'CHEMIN' dans la
+    // grille (dont dépend estAdjacentAUnChemin) et AVANT tout calcul dépendant du
+    // nombre de cases 'LIBRE' restantes — en particulier la limite de tours (phase
+    // 6B, Jeu.reinitialiser), qui compte les cases 'LIBRE' juste après l'appel à
+    // Carte.generer() : comme cette méthode s'exécute entièrement à l'intérieur de
+    // generer(), avant qu'il ne rende la main, ce comptage se fait déjà sur la grille
+    // définitive, cases bloquées comprises, sans aucune modification nécessaire côté
+    // jeu.js (vérifié plutôt que supposé, voir ARCHITECTURE.md).
+    //
+    // Une case bloquée le reste pour toute la partie : ni cette méthode ni aucune
+    // autre n'est rappelée en cours de partie, exactement comme le tracé des chemins
+    // lui-même.
+    genererCasesBloquees() {
+        this.gravats = [];
+        for (let ligne = 0; ligne < Config.LIGNES; ligne++) {
+            const rangeeGravats = [];
+            for (let colonne = 0; colonne < Config.COLONNES; colonne++) {
+                rangeeGravats.push(null);
+            }
+            this.gravats.push(rangeeGravats);
+        }
+
+        for (let ligne = 0; ligne < Config.LIGNES; ligne++) {
+            for (let colonne = 0; colonne < Config.COLONNES; colonne++) {
+                if (this.grille[ligne][colonne] !== 'LIBRE') continue;
+                if (!this.estAdjacentAUnChemin(colonne, ligne)) continue;
+                if (Aleatoire.nombre() >= Config.PROPORTION_CASES_BLOQUEES_PRES_CHEMIN) continue;
+
+                this.grille[ligne][colonne] = 'BLOQUEE';
+
+                // Trois morceaux de débris par case bloquée, tirés via Aleatoire pour
+                // rester reproductibles à graine égale (même principe que
+                // genererTachesAsphalte ci-dessus) — un rendu simple (rectangles
+                // légèrement pivotés) suffit, l'important étant que la case se
+                // distingue clairement d'une case libre, pas un décor élaboré.
+                const morceaux = [];
+                for (let i = 0; i < 3; i++) {
+                    morceaux.push({
+                        xFraction: 0.2 + Aleatoire.nombre() * 0.6,
+                        yFraction: 0.2 + Aleatoire.nombre() * 0.6,
+                        largeurFraction: 0.18 + Aleatoire.nombre() * 0.22,
+                        hauteurFraction: 0.14 + Aleatoire.nombre() * 0.18,
+                        angle: Aleatoire.nombre() * Math.PI
+                    });
+                }
+                this.gravats[ligne][colonne] = morceaux;
+            }
+        }
+    },
+
     // Point d'entrée de la génération : initialise l'aléatoire avec la graine donnée,
     // puis génère Config.NOMBRE_CHEMINS chemins l'un après l'autre (chemin 0, puis
     // chemin 1, etc.), chacun avec sa propre entrée et sortie espacées des entrées et
@@ -425,6 +507,13 @@ const Carte = {
             }
         }
 
+        // Cases inconstructibles près des chemins (contenu additionnel
+        // post-lancement) : juste après le tracé des chemins (dont dépend
+        // estAdjacentAUnChemin, utilisée ci-dessous) et avant tout calcul dépendant
+        // du nombre de cases 'LIBRE' restantes — voir la note de genererCasesBloquees
+        // ci-dessus pour le détail sur la limite de tours (phase 6B).
+        this.genererCasesBloquees();
+
         // Chemins façon route (phase 7B) : les deux dépendent de la grille
         // définitive ci-dessus (trottoirs : quelles arêtes sont extérieures ; taches :
         // quelles cases sont des cases de chemin), donc calculés seulement maintenant,
@@ -434,7 +523,12 @@ const Carte = {
         this.genererTachesAsphalte();
     },
 
-    // Vraie si la case existe et peut recevoir une construction.
+    // Vraie si la case existe et peut recevoir une construction. Une case 'BLOQUEE'
+    // (contenu additionnel post-lancement) y est déjà refusée sans aucune
+    // modification de cette fonction : elle ne renvoie vrai que pour une égalité
+    // stricte avec 'LIBRE', jamais par élimination des seuls états 'CHEMIN'/'OCCUPEE'
+    // — vérifié plutôt que supposé, comme le reste des vérifications listées dans le
+    // prompt de cette phase (voir ARCHITECTURE.md).
     estConstructible(colonne, ligne) {
         return this.dansLaGrille(colonne, ligne) && this.grille[ligne][colonne] === 'LIBRE';
     },
@@ -513,6 +607,27 @@ const Carte = {
                 ctx.strokeStyle = Config.COULEURS.lisere;
                 ctx.lineWidth = 1;
                 ctx.strokeRect(x + 0.5, y + 0.5, taille - 1, taille - 1);
+
+                // Gravats (contenu additionnel post-lancement) : dessinés ici, dans la
+                // même passe que le fond/liseré de leur propre case, jamais dans une
+                // passe séparée comme les taches d'asphalte ou les trottoirs plus bas
+                // — contrairement à ceux-ci, un morceau de débris reste toujours
+                // contenu à l'intérieur des 20 %-80 % de sa case (xFraction/
+                // yFraction ci-dessus), jamais à cheval sur une case voisine, donc
+                // aucun risque qu'une case dessinée juste après dans cette même
+                // boucle ne le recouvre partiellement.
+                if (etat === 'BLOQUEE') {
+                    ctx.fillStyle = Config.COULEURS.gravats;
+                    for (const morceau of this.gravats[ligne][colonne]) {
+                        ctx.save();
+                        ctx.translate(x + morceau.xFraction * taille, y + morceau.yFraction * taille);
+                        ctx.rotate(morceau.angle);
+                        const largeur = morceau.largeurFraction * taille;
+                        const hauteur = morceau.hauteurFraction * taille;
+                        ctx.fillRect(-largeur / 2, -hauteur / 2, largeur, hauteur);
+                        ctx.restore();
+                    }
+                }
             }
         }
 

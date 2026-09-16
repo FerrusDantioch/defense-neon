@@ -94,6 +94,17 @@ const Interface = {
     // message de construction affiché dans le HUD ("Case invalide", etc.).
     dureeRestanteMessageConstruction: 0,
 
+    // Choix du point de blocage d'une Caserne (contenu additionnel post-lancement) :
+    // `{ tour, candidats }` pendant l'attente d'un choix (plusieurs cases de chemin
+    // adjacentes à la Caserne qui vient d'être construite, voir Tour et
+    // Carte.candidatsBlocagePourCaserne), `null` sinon — y compris dans le cas le
+    // plus fréquent, une seule candidate, jamais mis en attente. Tant que non nul,
+    // gererClicCanvas n'accepte plus qu'un clic sur l'une de ces candidates (voir
+    // resoudreChoixBlocageCaserne) : aucune autre interaction du plateau (construire
+    // une autre tour, sélectionner une tour existante) n'a d'effet — pas
+    // d'annulation possible, la Caserne est déjà construite et payée.
+    caserneEnAttenteChoix: null,
+
     initialiser() {
         this.ecranAccueil = document.getElementById('ecran-accueil');
         this.ecranVictoire = document.getElementById('ecran-victoire');
@@ -322,6 +333,16 @@ const Interface = {
         const { colonne, ligne } = this.convertirEvenementEnCase(evenement);
         if (!Carte.dansLaGrille(colonne, ligne)) return;
 
+        // Choix du point de blocage d'une Caserne en attente (contenu additionnel
+        // post-lancement) : intercepté avant toute autre logique de clic, construction
+        // d'une autre tour et sélection d'une tour existante comprises — un clic
+        // ailleurs qu'une case candidate n'a rigoureusement aucun effet tant que ce
+        // choix n'est pas résolu.
+        if (this.caserneEnAttenteChoix) {
+            this.resoudreChoixBlocageCaserne(colonne, ligne);
+            return;
+        }
+
         const etat = Carte.grille[ligne][colonne];
 
         if (etat === 'OCCUPEE') {
@@ -417,10 +438,37 @@ const Interface = {
             return;
         }
 
-        Jeu.toursActives.push(new Tour(colonne, ligne, this.typeSelectionne));
+        const tour = new Tour(colonne, ligne, this.typeSelectionne);
+        Jeu.toursActives.push(tour);
         Carte.grille[ligne][colonne] = 'OCCUPEE';
         Jeu.credits -= cout;
         Son.jouerConstruction();
+
+        // Choix du point de blocage d'une Caserne (contenu additionnel
+        // post-lancement) : `candidatsBlocageEnAttente` n'est posé par le
+        // constructeur de Tour que lorsque plusieurs cases de chemin sont
+        // adjacentes — jamais dans le cas simple à une seule candidate, qui reste
+        // résolu automatiquement comme avant cette phase, sans passer par cet état
+        // d'attente.
+        if (tour.candidatsBlocageEnAttente) {
+            this.caserneEnAttenteChoix = { tour, candidats: tour.candidatsBlocageEnAttente };
+            this.afficherMessageConstruction('Choisissez la case à bloquer (en surbrillance)');
+        }
+    },
+
+    // Résout le choix du joueur pour le point de blocage d'une Caserne en attente
+    // (contenu additionnel post-lancement) : un clic hors des cases candidates
+    // (`choisi` alors `undefined`) n'a strictement aucun effet, conformément au
+    // comportement demandé (pas d'annulation possible une fois la Caserne
+    // construite et payée) — seul un clic sur l'une des cases en surbrillance fait
+    // avancer l'état du jeu.
+    resoudreChoixBlocageCaserne(colonne, ligne) {
+        const { tour, candidats } = this.caserneEnAttenteChoix;
+        const choisi = candidats.find(c => c.colonne === colonne && c.ligne === ligne);
+        if (!choisi) return;
+
+        tour.resoudreChoixBlocage(choisi);
+        this.caserneEnAttenteChoix = null;
     },
 
     // Affiche un message temporaire superposé au HUD, 1,5 seconde par défaut — les
@@ -439,8 +487,17 @@ const Interface = {
     // Dessine, par-dessus tout le reste (carte, tours, ennemis, projectiles), l'aperçu
     // de construction sous la case survolée : contour vert si la case est
     // constructible et les crédits suffisants, rouge sinon, plus un cercle
-    // semi-transparent représentant la portée de la tour à construire.
+    // semi-transparent représentant la portée de la tour à construire. Détourné
+    // (contenu additionnel post-lancement) pour dessiner plutôt la surbrillance des
+    // cases candidates pendant un choix de blocage de Caserne en attente — aucun
+    // aperçu de construction normal n'a de sens tant que ce choix n'est pas résolu,
+    // seule interaction encore possible sur le plateau (voir gererClicCanvas).
     dessinerApercuConstruction(ctx) {
+        if (this.caserneEnAttenteChoix) {
+            this.dessinerSurbrillanceChoixCaserne(ctx);
+            return;
+        }
+
         if (!this.caseSurvolee) return;
 
         const { colonne, ligne } = this.caseSurvolee;
@@ -478,6 +535,23 @@ const Interface = {
         ctx.strokeStyle = 'rgba(58, 142, 230, 0.4)';
         ctx.lineWidth = 1;
         ctx.stroke();
+    },
+
+    // Met en surbrillance chaque case candidate pendant un choix de blocage de
+    // Caserne en attente (contenu additionnel post-lancement) — un contour distinct
+    // dans Config.COULEURS.neonBleu, la couleur déjà associée à la Caserne (phase
+    // 7E), pour rester cohérent avec son identité visuelle plutôt que réutiliser le
+    // vert/rouge de l'aperçu de construction normal, qui signifierait ici tout
+    // autre chose (permis/refusé plutôt que « choisissez-moi »).
+    dessinerSurbrillanceChoixCaserne(ctx) {
+        const taille = Carte.tailleCase;
+        ctx.strokeStyle = Config.COULEURS.neonBleu;
+        ctx.lineWidth = 3;
+        for (const candidat of this.caserneEnAttenteChoix.candidats) {
+            const x = candidat.colonne * taille;
+            const y = candidat.ligne * taille;
+            ctx.strokeRect(x + 2, y + 2, taille - 4, taille - 4);
+        }
     },
 
     // Déduit le coût du palier suivant et améliore la tour sélectionnée. Ne fait rien

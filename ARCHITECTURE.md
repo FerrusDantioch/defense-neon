@@ -26,11 +26,15 @@ HTML/CSS/JS vanilla, sans module ES6 ni dépendance. Fichiers chargés dans cet 
 - **`js/carte.js`** — objet `Carte` : génération et dessin de la carte, à
   `Config.NOMBRE_CHEMINS` chemins distincts depuis la phase 6A (voir « Chemins
   multiples (phase 6A) » ci-dessous pour le détail).
-  État : `grille`, `chemins` (un chemin unique avant la phase 6A), `tailleCase`,
+  État : `grille` (un quatrième état, `'BLOQUEE'`, depuis le contenu additionnel
+  post-lancement traitant des cases inconstructibles — voir « Cases inconstructibles
+  près des chemins » ci-dessous), `gravats` (idem, morceaux de débris par case
+  bloquée), `chemins` (un chemin unique avant la phase 6A), `tailleCase`,
   `segmentsBordure`/`tachesAsphalte` (phase 7B). Fonctions publiques :
   `generer(graine)`, `estConstructible(colonne, ligne)`, `estAdjacentAUnChemin(colonne,
-  ligne)`/`trouverPointBlocagePourCaserne(colonne, ligne)` (phase 7E, voir « Tour
-  Caserne (phase 7E) » ci-dessous), `pixelsVersCase(x, y)`,
+  ligne)`/`candidatsBlocagePourCaserne(colonne, ligne)` (phase 7E, étendue depuis le
+  contenu additionnel post-lancement pour renvoyer toutes les candidates plutôt que la
+  seule première — voir « Tour Caserne (phase 7E) » ci-dessous), `pixelsVersCase(x, y)`,
   `caseVersPixels(colonne, ligne)`, `recalculerPixels()`, `dessiner(ctx)`.
 - **`js/ennemi.js`** — classe `Ennemi` : une unité qui suit son propre chemin
   (`Carte.chemins[this.cheminIndex].pointsDePassage`, `cheminIndex` fixé à la
@@ -82,9 +86,11 @@ HTML/CSS/JS vanilla, sans module ES6 ni dépendance. Fichiers chargés dans cet 
   vente), `degats`/`cadence`/`portee` (statistiques effectives courantes, recalculées
   par `recalculerStats()`), `tempsDepuisDernierTir`, `cible` — plus, pour une Caserne
   uniquement (phase 7E) : `cheminIndex`/`indexPointDePassage` (point de blocage,
-  déterminé une fois à la construction via `Carte.trouverPointBlocagePourCaserne` et
-  jamais recalculé ensuite), `unite` (référence à une `UniteCaserne`, ou `null`),
-  `tempsDepuisDestruction`. Méthodes :
+  déterminé une fois à la construction via `Carte.candidatsBlocagePourCaserne` et
+  jamais recalculé ensuite ; `null` tant qu'un choix entre plusieurs candidates reste
+  en attente, voir `candidatsBlocageEnAttente` et « Choix du point de blocage »
+  ci-dessous, contenu additionnel post-lancement), `unite` (référence à une
+  `UniteCaserne`, ou `null`), `tempsDepuisDestruction`. Méthodes :
   `recalculerStats()` (voir « Niveaux, amélioration et vente » ci-dessous ; intègre
   aussi, depuis la phase 3B, le bonus permanent de dégâts du joueur via
   `Progression.multiplicateurDegats()`), `coutAmelioration()` (idem avec
@@ -99,7 +105,9 @@ HTML/CSS/JS vanilla, sans module ES6 ni dépendance. Fichiers chargés dans cet 
   qu'un `indexPointDePassage`) est la plus élevée),
   `mettreAJour(dt, ennemis, pool)` (bifurque entièrement vers `mettreAJourCaserne(dt)`
   pour ce type, phase 7E), `statsUniteAuNiveauActuel()`/`faireApparaitreUnite()` (phase
-  7E, voir « Tour Caserne (phase 7E) » ci-dessous), `dessiner(ctx)` (formes distinctes
+  7E, voir « Tour Caserne (phase 7E) » ci-dessous), `resoudreChoixBlocage(candidat)`
+  (contenu additionnel post-lancement, voir « Choix du point de blocage » ci-dessous),
+  `dessiner(ctx)` (formes distinctes
   par type et halo néon depuis la phase 4A — voir « Identité visuelle cyberpunk
   (phase 4A) » ci-dessous — plus, depuis la phase 4B, déclenchement du flash de tir et
   du son au moment où `tirer(pool)` active un projectile ; la Caserne ne dessine aucun
@@ -146,7 +154,9 @@ HTML/CSS/JS vanilla, sans module ES6 ni dépendance. Fichiers chargés dans cet 
   temporaires. Voir « Interface et états de partie » ci-dessous. `afficherMessageConstruction(texte, duree)`
   accepte, depuis la phase 7G, une durée optionnelle (1,5 s par défaut) — réutilisée par
   `Vagues.demarrer` pour son bandeau de vague de boss, voir « Vagues de boss (phase 7G) »
-  ci-dessous.
+  ci-dessous. `caserneEnAttenteChoix` (contenu additionnel post-lancement, voir « Choix
+  du point de blocage » ci-dessous) intercepte `gererClicCanvas` en priorité sur toute
+  autre interaction du plateau tant qu'un choix de blocage de Caserne reste en attente.
 - **`js/jeu.js`** — objet `Jeu` : point d'entrée, état de partie et boucle de simulation
   (l'affichage et les interactions vivent dans `interface.js`). État : `etatPartie`,
   `nombreDeVagues`, `idDureeActuelle`, `vitesseJeu`, `ennemisActifs`, `toursActives`,
@@ -1102,7 +1112,12 @@ pas reprise ici tant qu'elle n'est pas confirmée pour chacune) :
   fond fixe (phase 7C bis) » ci-dessous pour le détail, y compris l'écart de format
   `.webp` → `.png`). Un correctif de transparence du plateau est aussi venu s'y greffer,
   voir « Transparence du plateau (correctif post-7C) ».
-- Ennemis et chemins restylés — non commencé.
+- Ennemis et chemins restylés — fait, voir « Silhouettes robotiques (phase 7A) » et
+  « Chemins façon route (phase 7B) » ci-dessous.
+- **Choix du point de blocage de la Caserne** — fait, voir « Choix du point de
+  blocage (contenu additionnel post-lancement) » ci-dessous.
+- **Cases inconstructibles près des chemins** — fait, voir « Cases inconstructibles
+  près des chemins (contenu additionnel post-lancement) » ci-dessous.
 
 ## Décor d'arrière-plan en parallaxe (phase 7C)
 
@@ -2071,15 +2086,55 @@ habituelles (case libre, crédits, limite de tours) ; message dédié « Doit ê
 pour que l'aperçu au survol ne mente jamais (contour rouge sur une case pourtant
 `LIBRE` mais non adjacente, plutôt que vert).
 
-`Carte.trouverPointBlocagePourCaserne(colonne, ligne)` détermine *quel* point du chemin
-la tour bloquera, une seule fois à la construction (jamais recalculé ensuite, pour
-toute la durée de vie de la tour) : teste les 4 voisines dans l'ordre fixe déjà renvoyé
-par `voisinesOrthogonales` (haut, bas, gauche, droite), retient la première qui
-appartient à un chemin — déterministe, donc reproductible à graine égale même dans un
-angle proche d'un croisement où plusieurs voisines de chemin seraient candidates. Si
-cette case appartient à plusieurs chemins à la fois (croisement, phase 6A), retient le
-premier de `Carte.chemins` qui la contient — la grille elle-même ne distingue de toute
-façon pas lequel.
+`Carte.candidatsBlocagePourCaserne(colonne, ligne)` détermine *quelles* cases de chemin
+la tour pourrait bloquer : teste les 4 voisines dans l'ordre fixe déjà renvoyé par
+`voisinesOrthogonales` (haut, bas, gauche, droite) et renvoie un tableau de toutes
+celles qui appartiennent à un chemin (potentiellement vide, une, ou plusieurs — voir
+« Choix du point de blocage » ci-dessous pour ce qui change selon le nombre de
+candidates). Si une case appartient à plusieurs chemins à la fois (croisement, phase
+6A), retient le premier de `Carte.chemins` qui la contient — la grille elle-même ne
+distingue de toute façon pas lequel. Remplace, depuis le contenu additionnel
+post-lancement traitant du choix du joueur, l'ancienne
+`Carte.trouverPointBlocagePourCaserne` (phase 7E, ne renvoyait que la première
+candidate trouvée, jamais les autres) : l'ordre de renvoi reste le même, donc le
+comportement du cas à une seule candidate ne change pas non plus.
+
+### Choix du point de blocage (contenu additionnel post-lancement)
+
+Avant cette phase, une Caserne retenait toujours la première case de chemin trouvée
+dans l'ordre fixe ci-dessus, sans aucun contrôle du joueur — frustrant près d'un
+croisement, où plusieurs cases de chemin sont adjacentes. `Tour`, dans son
+constructeur, distingue maintenant les deux cas à partir de
+`Carte.candidatsBlocagePourCaserne` :
+
+- **une seule candidate (le cas le plus fréquent, inchangé)** : retenue
+  automatiquement comme avant, `faireApparaitreUnite()` appelée immédiatement à la
+  construction ;
+- **plusieurs candidates** : `this.cheminIndex`/`this.indexPointDePassage` restent à
+  `null`, aucune unité n'apparaît, et la liste de candidates est posée sur
+  `this.candidatsBlocageEnAttente` — lue une seule fois par
+  `Interface.tenterConstruireTour` juste après la construction, qui bascule alors
+  `Interface.caserneEnAttenteChoix` à `{ tour, candidats }` et affiche un message
+  temporaire invitant à choisir (mécanisme déjà en place, voir « Messages temporaires
+  du HUD » plus haut).
+
+Tant que `caserneEnAttenteChoix` n'est pas `null`, `Interface.gererClicCanvas`
+l'intercepte avant toute autre logique de clic (construction d'une autre tour,
+sélection d'une tour existante) : un clic sur l'une des cases candidates
+(`Interface.resoudreChoixBlocageCaserne`) appelle `Tour.resoudreChoixBlocage(candidat)`
+— qui fixe `cheminIndex`/`indexPointDePassage` puis `faireApparaitreUnite()`, exactement
+comme le cas automatique — et referme l'attente ; un clic ailleurs n'a strictement
+aucun effet, conformément à la demande : la Caserne est déjà construite et payée, il
+n'y a pas d'annulation possible, seulement un choix à faire. `Interface.
+dessinerApercuConstruction` (détournée pour l'occasion, voir son propre commentaire
+dans `interface.js`) dessine à la place un contour `Config.COULEURS.neonBleu` autour de
+chaque candidate tant que l'attente dure, via `dessinerSurbrillanceChoixCaserne` — la
+couleur déjà associée à la Caserne depuis la phase 7E, plutôt que le vert/rouge de
+l'aperçu de construction normal qui signifierait ici tout autre chose.
+`Jeu.reinitialiser` remet `caserneEnAttenteChoix` à `null` à chaque nouvelle partie,
+comme `caseEnAttenteConfirmation` (correctif mobile) juste au-dessus — une référence
+vers une Caserne d'une partie précédente n'aurait sinon plus de sens sur la carte
+nouvellement générée.
 
 ### Réutilisation des multiplicateurs d'amélioration existants (`config.js`, `tour.js`)
 
@@ -2592,6 +2647,96 @@ déséquilibre du Flak face au drone (phase 7F, corrigé), qui allait à l'encon
 l'équilibre demandé. Les 2000 PV de base sont donc conservés tels quels, sans
 multiplicateur réduit pour les premières vagues de boss.
 
+## Cases inconstructibles près des chemins (contenu additionnel post-lancement)
+
+Avant cette phase, toute case `'LIBRE'` adjacente à un chemin était constructible sans
+aucune contrainte, permettant de tapisser un chemin de tours sur toute sa longueur.
+Traitée avant le choix du point de blocage de la Caserne (voir « Choix du point de
+blocage » plus haut) parce qu'elle modifie la génération de la carte, dont dépend
+indirectement le calcul de la limite de tours (phase 6B).
+
+### Un quatrième état de case (`carte.js`)
+
+`Carte.grille` accepte désormais `'BLOQUEE'` en plus de `'LIBRE'`, `'CHEMIN'` et
+`'OCCUPEE'` — un obstacle permanent pour toute la durée de la carte, jamais
+constructible, y compris pour une Caserne qui la trouverait adjacente à un chemin.
+`Carte.genererCasesBloquees()`, appelée par `generer()` juste après avoir marqué les
+cases `'CHEMIN'` dans la grille (dont dépend `estAdjacentAUnChemin`, réutilisée telle
+quelle) et avant tout calcul dépendant du nombre de cases `'LIBRE'` restantes : pour
+chaque case encore `'LIBRE'` adjacente à au moins un chemin, tire via `Aleatoire` si
+elle devient `'BLOQUEE'`, avec une probabilité de
+`Config.PROPORTION_CASES_BLOQUEES_PRES_CHEMIN` (0,3) — reproductible à graine égale,
+comme le tracé du chemin lui-même.
+
+**Ordre des opérations, vérifié plutôt que modifié** : la limite de tours (phase 6B,
+`Jeu.reinitialiser`) compte les cases `'LIBRE'` juste après l'appel à `Carte.generer()`.
+Comme `genererCasesBloquees()` s'exécute entièrement à l'intérieur de `generer()`, avant
+qu'il ne rende la main, ce comptage se fait déjà sur la grille définitive, cases
+bloquées comprises — confirmé par test (`Jeu.limiteTours === Math.floor(casesLibres *
+Config.PROPORTION_LIMITE_TOURS)` avec `casesLibres` compté après blocage), sans qu'
+aucune ligne de `jeu.js` n'ait eu besoin de changer.
+
+### Vérifications existantes : déjà correctes, vérifiées plutôt que modifiées
+
+`Carte.estConstructible(colonne, ligne)` refusait déjà une case `'BLOQUEE'` sans
+modification : elle ne renvoie vrai que pour une égalité stricte avec `'LIBRE'`, jamais
+par élimination des seuls états `'CHEMIN'`/`'OCCUPEE'`. Par ricochet, tout ce qui en
+dépend généralise aussi nativement : `Interface.tenterConstruireTour` (refuse avec
+« Case invalide », y compris pour une Caserne adjacente à un chemin bloqué),
+`Interface.dessinerApercuConstruction` (aperçu rouge au survol), et
+`Interface.gererClicCanvas` (un clic sur une case bloquée tombe dans la branche `etat
+!== 'LIBRE'`, traité comme un clic sur une case de chemin — désélection sans effet).
+`Carte.estAdjacentAUnChemin` n'a pas eu besoin de changer, comme anticipé par le
+prompt de cette phase : une case bloquée ne devient de toute façon jamais
+sélectionnable pour construire quoi que ce soit, donc sa proximité à un chemin n'a plus
+d'importance pour elle.
+
+### Rendu visuel (`config.js`, `carte.js`)
+
+`Config.COULEURS.gravats` (`'#4a4d55'`, gris sombre neutre — ajoutée directement à la
+palette existante plutôt que dans un objet `PALETTE` séparé, même écart déjà documenté
+pour `neonBlanc`/`neonRouge` plus haut) et trois morceaux de débris rectangulaires par
+case bloquée (position/taille/angle tirés via `Aleatoire` au même moment que le
+blocage lui-même, stockés dans `Carte.gravats[ligne][colonne]` — lookup en O(1) par
+case, même principe que `grille`), dessinés dans la même passe que le fond/liseré de
+leur propre case (`Carte.dessiner`) : contrairement aux taches d'asphalte ou aux
+trottoirs (phase 7B), un morceau de débris reste toujours contenu à l'intérieur de sa
+propre case, jamais à cheval sur une voisine, donc aucun risque qu'une case dessinée
+juste après dans la même boucle ne le recouvre partiellement.
+
+### Vérification
+
+- **~30 % des cases éligibles bloquées** : mesuré sur 50 graines (`Aleatoire`
+  initialisée à chacune), 1097 cases bloquées sur 3702 cases `'LIBRE'`-ou-`'BLOQUEE'`
+  adjacentes à un chemin au total, soit 29,63 % — la variance par carte individuelle
+  (21 % à 40 % observés sur un échantillon de 7 graines, avec seulement 64 à 89 cases
+  éligibles chacune) est le bruit statistique normal d'un tirage indépendant par case
+  sur un petit échantillon, pas un biais du générateur.
+- **Reproductibilité à graine égale** : deux appels à `Carte.generer()` avec la même
+  graine produisent une grille strictement identique (cases bloquées comprises).
+- **Refus de construction sur une case bloquée**, y compris pour une Caserne qui la
+  trouverait adjacente à un chemin : confirmé (`Interface.tenterConstruireTour` affiche
+  « Case invalide » dans les deux cas, aucune tour ajoutée, aucun crédit débité).
+- **Aucune régression** sur la construction des quatre autres types de tours ni sur une
+  vague jouée jusqu'à son terme (partie réelle, 8 tours, ~1050 frames simulées, aucune
+  erreur console).
+
+### Vérification de l'équilibre demandé (30 %)
+
+Sur les 50 graines mesurées, le nombre de cases réellement bloquées reste modeste en
+valeur absolue (une vingtaine en moyenne sur une carte typique) comparé au nombre total
+de cases libres restantes (autour de 150-170) : la contrainte de placement se fait
+sentir surtout aux endroits qui compteraient le plus — le long des chemins, en
+particulier près des croisements et des virages, là où un joueur aurait sinon tendance
+à concentrer ses tours — sans jamais réduire l'espace constructible global au point de
+gêner un placement stratégique ailleurs sur la carte. **30 % me semble un bon
+équilibre** : assez sensible pour casser l'ancien réflexe de tapisser un chemin sur
+toute sa longueur (quelques trous imprévisibles dans n'importe quelle rangée de cases
+adjacentes), sans jamais rendre un chemin totalement injouable (aucune graine testée
+n'a rapporté une file de cases éligibles entièrement bloquée d'un bout à l'autre) — un
+constat à confirmer par du jeu réel plutôt que seulement par cette mesure statistique,
+mais rien dans les chiffres ne suggère un ajustement nécessaire dans l'immédiat.
+
 ## Avancement (feuille de route)
 
 - **1A — Socle et carte** : fait. Génération, affichage, redimensionnement, reproductibilité
@@ -2821,3 +2966,28 @@ post-lancement » ci-dessus pour la liste complète des sous-phases à venir) :
   description (« plus lent que le Blindé », qui vaut 35) — conservée telle quelle, en
   signalant la
   contradiction plutôt qu'en la tranchant unilatéralement.
+- **Cases inconstructibles près des chemins** : fait. Voir « Cases inconstructibles
+  près des chemins (contenu additionnel post-lancement) » ci-dessus : un quatrième
+  état de case, `'BLOQUEE'` (30 % des cases libres adjacentes à un chemin, tirage
+  reproductible à graine égale via `Aleatoire`, généré avant tout calcul dépendant du
+  nombre de cases libres — en particulier la limite de tours, phase 6B, vérifiée
+  plutôt que modifiée puisqu'elle comptait déjà les cases `'LIBRE'` après cette
+  génération sans aucun changement de code nécessaire). `Carte.estConstructible`
+  refusait déjà cet état sans modification, par ricochet toutes les vérifications qui
+  en dépendent (construction, aperçu au survol, clic canvas) généralisent nativement.
+  Rendu en petits tas de gravats gris, cohérent avec le thème des routes (phase 7B).
+  Mesuré sur 50 graines : 29,63 % des cases éligibles bloquées en moyenne, jugé être
+  un bon équilibre (assez sensible pour casser le réflexe de tapisser un chemin, sans
+  jamais le rendre injouable sur les graines testées). Aucune régression sur les
+  quatre autres types de tours ni sur une vague jouée jusqu'à son terme.
+- **Choix du point de blocage de la Caserne** : fait. Voir « Choix du point de
+  blocage (contenu additionnel post-lancement) » ci-dessus : `Carte.
+  candidatsBlocagePourCaserne` renvoie désormais toutes les cases de chemin
+  adjacentes plutôt que la seule première trouvée. Une seule candidate résout le
+  choix automatiquement, exactement comme avant cette phase (vérifié sans
+  régression) ; plusieurs candidates mettent le jeu en attente
+  (`Interface.caserneEnAttenteChoix`) : cases en surbrillance bleue, message
+  d'invite, aucune autre interaction du plateau possible tant qu'un clic ne tombe pas
+  sur l'une d'elles (vérifié via `gererClicCanvas` de bout en bout — construction
+  d'une autre tour et sélection d'une tour existante toutes deux sans effet pendant
+  l'attente) — pas d'annulation possible, conformément à la demande.
