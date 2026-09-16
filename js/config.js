@@ -128,7 +128,16 @@ const Config = {
         // construite dans ce même objet Config, contrairement à TYPES_TOURS.caserne
         // ci-dessous qui répète la valeur en dur pour la même raison qu'expliqué
         // pour neonVert juste au-dessus).
-        neonBleu: '#3b82f6'
+        neonBleu: '#3b82f6',
+
+        // Drone (phase 7F, ennemi.js) : teinte glacée réservée à cet ennemi, pour
+        // qu'il tranche visuellement avec tout le reste du plateau (aucun autre
+        // ennemi ni tour ne s'approche du blanc). Répétée en dur dans la table
+        // COULEURS_CSS_ENNEMIS d'ennemi.js (comme 'cyan'/'jaune'/'orange' déjà
+        // avant elle) plutôt que lue ici par référence — cette table de
+        // correspondance existe justement parce que ces noms ne sont pas tous des
+        // mots-clés CSS valides pour un canvas, indépendamment de Config.COULEURS.
+        neonBlanc: '#e8f4ff'
     },
 
     // Rayon de flou (ctx.shadowBlur) des halos néon (phase 4A). Toujours posé puis
@@ -187,11 +196,33 @@ const Config = {
     // ailleurs, sans effet sur le ciblage des tours à distance. Le Blindé, déjà lent
     // et résistant, est aussi le plus dangereux au corps à corps : cohérent avec son
     // rôle de brute lourde plutôt qu'un simple porteur de gros points de vie.
+    // `vole` (phase 7F) : true seulement pour le drone — aucune notion de chemin, un
+    // trajet en ligne droite du bord haut au bord bas de la grille (voir
+    // Ennemi.deplacer). `degatsCorpsACorps: 0` : un drone ne peut de toute façon
+    // jamais être bloqué par une Caserne (il l'ignore entièrement, voir la note
+    // correspondante dans Ennemi.deplacer), cette valeur ne sera donc jamais lue en
+    // pratique, mais reste posée à 0 plutôt qu'omise pour que la propriété existe de
+    // façon uniforme sur les quatre types, sans condition supplémentaire à écrire
+    // ailleurs pour un champ qui manquerait. Volontairement fragile (50 PV, bien
+    // moins qu'un Standard) : sa menace vient de ce qu'il contourne toute la défense
+    // au sol, pas de sa résistance — un Flak bien placé doit pouvoir l'abattre sans
+    // difficulté excessive.
     TYPES_ENNEMIS: {
         standard: { pointsDeVie: 100, vitesse: 60, recompense: 10, couleur: 'cyan', degatsCorpsACorps: 8 },
         rapide: { pointsDeVie: 60, vitesse: 110, recompense: 15, couleur: 'jaune', degatsCorpsACorps: 4 },
-        blinde: { pointsDeVie: 300, vitesse: 35, recompense: 25, couleur: 'orange', degatsCorpsACorps: 20 }
+        blinde: { pointsDeVie: 300, vitesse: 35, recompense: 25, couleur: 'orange', degatsCorpsACorps: 20 },
+        drone: { pointsDeVie: 50, vitesse: 90, recompense: 20, couleur: 'neonBlanc', vole: true, degatsCorpsACorps: 0 }
     },
+
+    // À partir de quelle vague le drone commence à apparaître, et dans quelle
+    // proportion des ennemis générés ce jour-là (phase 7F) — même mécanisme que
+    // VAGUE_APPARITION_RAPIDE/BLINDE ci-dessous, mais consommé séparément dans
+    // Vagues.mettreAJour (le drone n'est pas un quatrième choix de
+    // Vagues.tirerTypeEnnemi, qui ne concerne que les ennemis au sol assignés à un
+    // chemin : un tirage dédié décide d'abord si cette apparition est un drone,
+    // avant même de songer à un chemin).
+    VAGUE_APPARITION_DRONE: 8,
+    PROPORTION_DRONE: 0.15,
 
     // Nombre de points d'intégrité au départ. Chaque ennemi qui atteint l'arrivée en
     // retire un peu ; à zéro, la partie est perdue.
@@ -270,12 +301,16 @@ const Config = {
     // correspond bien aux dégâts de base de son unité — même si, par clarté, le
     // calcul réel des stats de l'unité relit directement les constantes CASERNE_*
     // dédiées plutôt que `this.degats`, voir Tour.statsUniteAuNiveauActuel.
+    // `peutViserVolant` (phase 7F) : la bascule qui active tout le ciblage du drone —
+    // voir Tour.chercherCible, qui ignore complètement un ennemi volant pour toute
+    // tour dont ce champ n'est pas vrai, comme s'il n'existait pas. Le Flak est pour
+    // l'instant la seule tour à valoir true.
     TYPES_TOURS: {
-        mitrailleuse: { nom: 'Mitrailleuse', portee: 100, degats: 10, cadence: 4, cout: 40, couleur: 'cyan', typeDegats: 'unique' },
-        canon: { nom: 'Canon', portee: 120, degats: 45, cadence: 1, cout: 70, couleur: 'orange', typeDegats: 'unique' },
-        sniper: { nom: 'Sniper', portee: 200, degats: 80, cadence: 0.5, cout: 100, couleur: 'magenta', typeDegats: 'unique' },
-        flak: { nom: 'Flak', portee: 110, degats: 20, cadence: 1.2, cout: 80, couleur: '#7fff6b', typeDegats: 'zone' },
-        caserne: { nom: 'Caserne', portee: 60, degats: 15, cadence: 1, cout: 90, couleur: '#3b82f6', typeDegats: 'caserne' }
+        mitrailleuse: { nom: 'Mitrailleuse', portee: 100, degats: 10, cadence: 4, cout: 40, couleur: 'cyan', typeDegats: 'unique', peutViserVolant: false },
+        canon: { nom: 'Canon', portee: 120, degats: 45, cadence: 1, cout: 70, couleur: 'orange', typeDegats: 'unique', peutViserVolant: false },
+        sniper: { nom: 'Sniper', portee: 200, degats: 80, cadence: 0.5, cout: 100, couleur: 'magenta', typeDegats: 'unique', peutViserVolant: false },
+        flak: { nom: 'Flak', portee: 110, degats: 26, cadence: 1.2, cout: 80, couleur: '#7fff6b', typeDegats: 'zone', peutViserVolant: true },
+        caserne: { nom: 'Caserne', portee: 60, degats: 15, cadence: 1, cout: 90, couleur: '#3b82f6', typeDegats: 'caserne', peutViserVolant: false }
     },
     TYPE_TOUR_PAR_DEFAUT: 'mitrailleuse',
 

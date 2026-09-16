@@ -126,13 +126,20 @@ const Son = {
 
     // Glissando descendant bref à la mort d'un ennemi, légèrement différent par type :
     // plus aigu et plus court pour le Rapide (cohérent avec sa fragilité), plus grave
-    // et plus long pour le Blindé.
+    // et plus long pour le Blindé. Le Drone (phase 7F) rompt avec le triangle/
+    // sawtooth « organique » des trois autres : une onde carrée, aiguë et très
+    // brève, pour un timbre nettement plus électronique/mécanique — cohérent avec un
+    // appareil plutôt qu'une unité au sol, sans reprendre la tonalité de tir déjà
+    // utilisée par la Mitrailleuse (1100 Hz carré) grâce à une fréquence de départ
+    // plus haute encore et un glissando descendant que celle-ci n'a pas.
     jouerMort(type) {
         if (!this.actif) return;
         if (type === 'rapide') {
             this.jouerTonalite({ frequenceDebut: 700, frequenceFin: 300, duree: 0.15, typeOnde: 'triangle' });
         } else if (type === 'blinde') {
             this.jouerTonalite({ frequenceDebut: 350, frequenceFin: 70, duree: 0.32, typeOnde: 'sawtooth' });
+        } else if (type === 'drone') {
+            this.jouerTonalite({ frequenceDebut: 1800, frequenceFin: 900, duree: 0.1, typeOnde: 'square' });
         } else {
             this.jouerTonalite({ frequenceDebut: 500, frequenceFin: 200, duree: 0.22, typeOnde: 'triangle' });
         }
