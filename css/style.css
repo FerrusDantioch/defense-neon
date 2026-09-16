@@ -231,10 +231,16 @@ h2 {
    `position: fixed`/`absolute`, voir son style partagé avec les autres boutons du HUD
    plus haut). Mesuré à nouveau à 360px et 320px (son contenu ne dépend pas de la
    largeur à ces deux tailles, les mêmes quatre boutons de durée y passent déjà sur
-   deux lignes) : 461px de contenu réel, d'où cette marge. */
+   deux lignes) : 461px de contenu réel, d'où cette marge.
+   Relevée à nouveau à 600px (défi du jour, contenu additionnel post-lancement) :
+   l'encart ajouté sous le bouton Jouer (voir .defi-du-jour plus bas) a fait remonter
+   le contenu réel à 557px (mesuré via ecran-accueil.scrollHeight à 375px de large,
+   même chevauchement du bouton Son observé et corrigé avant d'ajuster cette valeur),
+   au-delà des 500px fixés en phase 3B — même cause, même correctif, la marge de
+   sécurité déjà en place s'appliquant à cette nouvelle valeur. */
 @media (max-width: 480px) {
     .conteneur-canvas {
-        min-height: 500px;
+        min-height: 600px;
     }
 }
 
@@ -310,7 +316,27 @@ h2 {
 
 /* Écrans superposés au canvas (accueil, victoire, défaite) : un seul à la fois est
    visible, les autres portent l'attribut `hidden` (basculé par
-   Interface.mettreAJourEcrans). */
+   Interface.mettreAJourEcrans).
+   `overflow-y: auto` (contenu additionnel post-lancement, « phase 7I ») : filet de
+   sécurité générique, plutôt que réservé au seul mode paysage mobile comme jusqu'ici
+   (voir l'ancienne règle dans la media query plus bas, devenue redondante avec
+   celle-ci). L'écran d'accueil (le plus dense des trois écrans superposés) a
+   continué de grossir phase après phase — niveau/XP et paliers (3A/3B), défi du
+   jour, puis difficulté supérieure — et son contenu dépasse désormais la hauteur du
+   canvas (dérivée du seul ratio COLONNES:LIGNES, sans rapport avec la quantité de
+   contenu de l'accueil) même à une largeur de canvas confortable (578px de contenu
+   mesuré pour 540px de hauteur de canvas à 900px de large, la largeur maximale de
+   .conteneur-canvas) — pas seulement sous 480px de large comme le corrigeait la
+   règle mobile ci-dessous jusqu'ici. Un défilement interne à l'écran superposé
+   (plutôt qu'un défilement de la page entière, qui décalerait aussi le canvas et le
+   reste de l'interface) absorbe cet excédent quelle que soit la largeur, sans
+   dépendre d'une valeur de `min-height` sans cesse recalibrée à chaque nouvel ajout
+   de contenu (voir l'historique de ce recalibrage dans la note sur
+   `@media (max-width: 480px)` plus bas, conservée pour donner au canvas une hauteur
+   généreuse sur téléphone, mais qui n'a plus besoin d'être parfaitement exacte
+   puisque ce filet de sécurité couvre désormais le reste). Sans effet visible tant
+   que le contenu tient dans la boîte (seul un contenu qui déborde réellement
+   déclenche la barre de défilement). */
 .ecran-superpose {
     position: absolute;
     inset: 0;
@@ -323,6 +349,7 @@ h2 {
     background: rgba(16, 16, 18, 0.92);
     border-radius: 4px;
     text-align: center;
+    overflow-y: auto;
 }
 
 .choix-duree {
@@ -353,6 +380,52 @@ h2 {
     background: #2f4a5a;
     border-color: #00e5ff;
     box-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+}
+
+/* Difficulté supérieure (contenu additionnel post-lancement, « phase 7I ») :
+   ensemble à part de .choix-duree ci-dessus (gap plus petit, boutons plus étroits)
+   pour rester visuellement distinct — un réglage orthogonal à la durée, jamais une
+   cinquième case dans la même rangée. Teinte d'accent rouge (#e74c3c, déjà utilisée
+   ailleurs pour un signal d'alerte — bouton Vendre, message d'erreur du HUD) plutôt
+   que le cyan de .choix-duree, pour ne jamais laisser croire que les deux groupes
+   de boutons ne forment qu'un seul réglage. */
+.choix-difficulte {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    max-width: 100%;
+}
+
+.choix-difficulte button {
+    min-height: 40px;
+    padding: 0 14px;
+    font-size: 0.85rem;
+    background: #2a2a30;
+    color: #e8e8ec;
+    border: 2px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.choix-difficulte button.selectionne {
+    background: #4a2a2a;
+    border-color: #e74c3c;
+    box-shadow: 0 0 10px rgba(231, 76, 60, 0.5);
+}
+
+.choix-difficulte button:disabled {
+    cursor: not-allowed;
+}
+
+/* Neutralisation visuelle (contenu additionnel post-lancement) pendant toute
+   interaction avec l'encart Défi du jour plus bas (voir Interface.initialiser,
+   js/interface.js) : ce réglage n'a alors aucun effet, l'opacité réduite l'indique
+   sans dépendre de la seule désactivation des boutons (déjà appliquée en JS via
+   `disabled`, voir juste au-dessus), pour rester perceptible même par un survol
+   rapide. */
+.choix-difficulte.difficulte-neutralisee {
+    opacity: 0.4;
 }
 
 /* Niveau et barre d'XP du joueur (phase 3A), affichés sur l'écran d'accueil. */
@@ -433,6 +506,17 @@ h2 {
     color: #f1c40f;
 }
 
+/* Mention de difficulté supérieure sur les écrans de victoire/défaite (contenu
+   additionnel post-lancement, « phase 7I ») : même teinte rouge que .choix-difficulte
+   ci-dessus, pour rester cohérente avec le réglage qu'elle rappelle — jamais un
+   indicateur permanent dans le HUD, seulement ce rappel ponctuel en fin de partie
+   (voir Interface.afficherResumeProgression, js/interface.js). */
+.difficulte-superieure {
+    margin: 0;
+    font-weight: 700;
+    color: #e74c3c;
+}
+
 .description-duree {
     color: #a0a0aa;
     font-size: 0.9rem;
@@ -441,7 +525,8 @@ h2 {
 }
 
 .bouton-principal,
-.bouton-secondaire {
+.bouton-secondaire,
+.bouton-defi-du-jour {
     min-height: 44px;
     padding: 0 24px;
     font-size: 1rem;
@@ -464,6 +549,51 @@ h2 {
 .bouton-secondaire {
     background: #3a3a42;
     color: #e8e8ec;
+}
+
+/* Défi du jour (contenu additionnel post-lancement) : encart distinct des quatre
+   boutons de durée (.choix-duree ci-dessus), sur l'écran d'accueil. Teinté dans
+   Config.COULEURS.arrivee (#ff2d6b, carte.js) plutôt que le cyan déjà associé à
+   la sélection de durée/type de tour — une couleur d'accent différente, en plus
+   du cadre et du fond propres à cette carte, pour qu'il ne puisse jamais se lire
+   comme une cinquième durée parmi les autres au premier coup d'œil. */
+.defi-du-jour {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    max-width: 280px;
+    padding: 10px 14px;
+    background: #1a1a1e;
+    border: 2px solid #ff2d6b;
+    border-radius: 6px;
+    box-shadow: 0 0 10px rgba(255, 45, 107, 0.35);
+}
+
+.defi-du-jour-titre {
+    margin: 0;
+    font-weight: 700;
+    color: #ff2d6b;
+    text-shadow: 0 0 6px rgba(255, 45, 107, 0.5);
+}
+
+.defi-du-jour-date,
+.defi-du-jour-score {
+    margin: 0;
+    font-size: 0.85rem;
+    color: #a0a0aa;
+}
+
+.bouton-defi-du-jour {
+    margin-top: 4px;
+    background: #ff2d6b;
+    color: #10120f;
+    box-shadow: 0 0 10px rgba(255, 45, 107, 0.5);
+}
+
+.bouton-defi-du-jour:hover {
+    background: #e0245c;
 }
 
 .boutons-fin-partie {
@@ -589,14 +719,7 @@ h2 {
         grid-row: 4;
     }
 
-    /* Filet de sécurité : sur le plus petit des téléphones visés par cette media
-       query, le contenu de l'écran d'accueil (le plus dense des trois écrans
-       superposés — niveau/XP, cinq paliers de bonus, boutons de durée) peut rester
-       plus haut que l'espace disponible malgré la hauteur généreuse que le canvas
-       reçoit désormais dans cette mise en page. Un défilement interne à l'écran
-       superposé (plutôt qu'un défilement de la page entière, qui décalerait aussi le
-       canvas et le reste de l'interface) garde tout le reste du jeu stable. */
-    .ecran-superpose {
-        overflow-y: auto;
-    }
+    /* overflow-y: auto sur .ecran-superpose vit désormais dans la règle de base
+       (contenu additionnel post-lancement, « phase 7I ») — plus besoin de la
+       répéter ici spécifiquement pour ce mode paysage mobile, qui en hérite déjà. */
 }

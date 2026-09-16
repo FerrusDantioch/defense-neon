@@ -33,11 +33,39 @@ const Interface = {
     // à un rechargement de page) : une simple variable suffit.
     idDureeSelectionnee: Config.DUREE_PAR_DEFAUT,
 
+    // Difficulté supérieure (contenu additionnel post-lancement, « phase 7I ») :
+    // sélecteur à deux options sur l'écran d'accueil, distinct des boutons de durée
+    // ci-dessus (réglage orthogonal, jamais une cinquième durée) — même principe de
+    // persistance que idDureeSelectionnee, retenue pour la session sans survivre à
+    // un rechargement. Par défaut sur Normal (`false`) à chaque session. Lue
+    // uniquement par le clic sur boutonJouer (Jeu.demarrerPartie), jamais par
+    // boutonDefiDuJour : le Défi du jour reste toujours en difficulté normale, sans
+    // exception (voir Jeu.demarrerDefiDuJour, jeu.js), donc ce champ n'a besoin
+    // d'aucune valeur spéciale ni d'aucune lecture particulière pour ce cas — il
+    // est simplement ignoré par ce second bouton.
+    conteneurDifficulte: null,
+    boutonsDifficulte: [],
+    difficulteSuperieureSelectionnee: false,
+
+    // Écrans de fin, mention de difficulté supérieure (contenu additionnel
+    // post-lancement) — voir afficherResumeProgression.
+    elementDifficulteSuperieureVictoire: null,
+    elementDifficulteSuperieureDefaite: null,
+
     // Niveau/XP du joueur sur l'écran d'accueil (phase 3A, voir Progression).
     elementNiveauJoueurActuel: null,
     elementBarreXpConteneur: null,
     elementBarreXpRemplissage: null,
     elementTexteNiveauMaxJoueur: null,
+
+    // Défi du jour (contenu additionnel post-lancement), sur l'écran d'accueil
+    // (voir mettreAJourDefiDuJour). Distinct de idDureeSelectionnee ci-dessus : le
+    // bouton dédié (boutonDefiDuJour) démarre toujours la partie via
+    // Jeu.demarrerDefiDuJour(), sans jamais lire ni modifier la durée sélectionnée
+    // parmi les quatre boutons habituels.
+    elementDefiDuJourDate: null,
+    elementDefiDuJourScore: null,
+    boutonDefiDuJour: null,
 
     // Liste des paliers de bonus permanents sous la barre d'XP (phase 3B). Les <li>
     // sont créés une seule fois dans initialiser() à partir de
@@ -135,6 +163,19 @@ const Interface = {
         this.elementDescriptionDuree = document.getElementById('description-duree');
         this.boutonJouer = document.getElementById('bouton-jouer');
 
+        // Défi du jour (contenu additionnel post-lancement) : encart séparé des
+        // quatre boutons de durée ci-dessus, voir index.html. Son bouton crée
+        // l'AudioContext au premier clic exactement comme boutonJouer plus bas
+        // (voir la note à cet endroit) puisqu'il peut tout aussi bien être le tout
+        // premier clic de la session.
+        this.elementDefiDuJourDate = document.getElementById('defi-du-jour-date');
+        this.elementDefiDuJourScore = document.getElementById('defi-du-jour-score');
+        this.boutonDefiDuJour = document.getElementById('bouton-defi-du-jour');
+        this.boutonDefiDuJour.addEventListener('click', () => {
+            Son.initialiser();
+            Jeu.demarrerDefiDuJour();
+        });
+
         this.elementNiveauJoueurActuel = document.getElementById('niveau-joueur-actuel');
         this.elementBarreXpConteneur = document.getElementById('barre-xp-conteneur');
         this.elementBarreXpRemplissage = document.getElementById('barre-xp-remplissage');
@@ -156,9 +197,11 @@ const Interface = {
         this.elementIntegriteRestanteVictoire = document.getElementById('integrite-restante-victoire');
         this.elementXpGagneeVictoire = document.getElementById('xp-gagnee-victoire');
         this.elementNiveauSuperieurVictoire = document.getElementById('niveau-superieur-victoire');
+        this.elementDifficulteSuperieureVictoire = document.getElementById('difficulte-superieure-victoire');
         this.elementVagueAtteinteDefaite = document.getElementById('vague-atteinte-defaite');
         this.elementXpGagneeDefaite = document.getElementById('xp-gagnee-defaite');
         this.elementNiveauSuperieurDefaite = document.getElementById('niveau-superieur-defaite');
+        this.elementDifficulteSuperieureDefaite = document.getElementById('difficulte-superieure-defaite');
 
         // Les boutons de durée sont générés depuis Config.DUREES_PARTIE plutôt que
         // codés en dur dans le HTML, pour ne jamais avoir deux sources de vérité sur
@@ -174,6 +217,43 @@ const Interface = {
         }
         this.boutonsDuree = Array.from(conteneurDurees.querySelectorAll('button'));
         this.selectionnerDuree(Config.DUREE_PAR_DEFAUT);
+
+        // Difficulté supérieure (contenu additionnel post-lancement) : sélecteur à
+        // deux options codées en dur dans index.html (contrairement aux boutons de
+        // durée/type ci-dessus, générés depuis Config — un ensemble figé à deux
+        // valeurs fixes ne justifie pas une source de données séparée rien que pour
+        // ces deux boutons). `data-difficulte="superieure"` identifie l'option
+        // Supérieure ; toute autre valeur (ou son absence) vaut Normal.
+        this.conteneurDifficulte = document.getElementById('choix-difficulte');
+        this.boutonsDifficulte = Array.from(this.conteneurDifficulte.querySelectorAll('button'));
+        for (const bouton of this.boutonsDifficulte) {
+            bouton.addEventListener('click', () => {
+                this.selectionnerDifficulte(bouton.dataset.difficulte === 'superieure');
+            });
+        }
+        this.selectionnerDifficulte(false);
+
+        // Neutralise visuellement le sélecteur de difficulté pendant toute
+        // interaction avec l'encart Défi du jour (survol souris ou focus clavier) :
+        // ce réglage ne s'applique jamais à ce mode (voir Jeu.demarrerDefiDuJour,
+        // jeu.js, qui ne le lit jamais), et ce sélecteur n'a de toute façon aucun
+        // effet réel sur lui — mais rester actif à l'écran pendant que le joueur
+        // s'apprête à cliquer « Jouer le défi du jour » laisserait croire à tort
+        // qu'il compte. `pointerenter`/`pointerleave` couvrent la souris,
+        // `focusin`/`focusout` la navigation clavier (tabulation jusqu'au bouton du
+        // défi) ; un tap tactile direct sur le bouton ne laisse de toute façon
+        // aucun état de survol à neutraliser.
+        const conteneurDefiDuJour = document.querySelector('.defi-du-jour');
+        const neutraliserDifficulte = (neutralise) => {
+            this.conteneurDifficulte.classList.toggle('difficulte-neutralisee', neutralise);
+            for (const bouton of this.boutonsDifficulte) {
+                bouton.disabled = neutralise;
+            }
+        };
+        conteneurDefiDuJour.addEventListener('pointerenter', () => neutraliserDifficulte(true));
+        conteneurDefiDuJour.addEventListener('pointerleave', () => neutraliserDifficulte(false));
+        conteneurDefiDuJour.addEventListener('focusin', () => neutraliserDifficulte(true));
+        conteneurDefiDuJour.addEventListener('focusout', () => neutraliserDifficulte(false));
 
         // Les boutons de type de tour sont générés depuis Config.TYPES_TOURS, pour la
         // même raison que ceux de durée : ne jamais avoir deux sources de vérité.
@@ -215,7 +295,7 @@ const Interface = {
             // Jeu.demarrerPartie (dont la simulation pourrait déclencher un son dès sa
             // toute première frame, ex. un ennemi qui apparaît déjà à portée).
             Son.initialiser();
-            Jeu.demarrerPartie(this.idDureeSelectionnee);
+            Jeu.demarrerPartie(this.idDureeSelectionnee, this.difficulteSuperieureSelectionnee);
         });
 
         for (const bouton of document.querySelectorAll('.bouton-rejouer')) {
@@ -271,6 +351,17 @@ const Interface = {
     selectionnerTypeTour(type) {
         this.typeSelectionne = type;
         this.mettreAJourBoutonsTypesTours();
+    },
+
+    // Difficulté supérieure (contenu additionnel post-lancement) : même principe
+    // que selectionnerDuree ci-dessus (fond + liseré distincts sur l'option active,
+    // jamais une teinte seule).
+    selectionnerDifficulte(superieure) {
+        this.difficulteSuperieureSelectionnee = superieure;
+        for (const bouton of this.boutonsDifficulte) {
+            const estSuperieure = bouton.dataset.difficulte === 'superieure';
+            bouton.classList.toggle('selectionne', estSuperieure === superieure);
+        }
     },
 
     // Libellé du bouton Son (phase 4B), rafraîchi immédiatement après chaque clic —
@@ -669,12 +760,36 @@ const Interface = {
         }
     },
 
+    // Rafraîchit l'encart du défi du jour sur l'écran d'accueil (contenu
+    // additionnel post-lancement) : date lisible du jour et meilleure vague déjà
+    // atteinte aujourd'hui, ou une mention dédiée si aucun essai n'a encore eu
+    // lieu aujourd'hui (Progression.defiDuJour.date ne correspond alors pas à la
+    // date actuelle — voir dateDuJourChaine, config.js). Rappelée chaque frame par
+    // mettreAJourEcrans, comme mettreAJourProgressionAccueil juste au-dessus et
+    // pour la même raison : à jour dès le retour à l'accueil après un essai, sans
+    // dépendre d'un rafraîchissement explicite au moment précis où la partie se
+    // termine.
+    mettreAJourDefiDuJour() {
+        this.elementDefiDuJourDate.textContent = dateDuJourLisible();
+
+        const tenteAujourdhui = Progression.defiDuJour.date === dateDuJourChaine();
+        this.elementDefiDuJourScore.textContent = tenteAujourdhui
+            ? `Meilleure vague : ${Progression.defiDuJour.meilleureVague}`
+            : 'Pas encore tenté aujourd\'hui';
+    },
+
     // Affiche l'XP gagnée pendant la partie qui vient de se terminer et, le cas
     // échéant, une mention de passage de niveau, à partir de Jeu.derniereProgression
     // (renseignée une seule fois par Jeu.finaliserPartie, juste avant que l'écran
     // correspondant ne devienne visible). `elementXp` et `elementNiveauSuperieur` sont
     // les éléments de l'écran de victoire ou de défaite, selon lequel vient de s'afficher.
-    afficherResumeProgression(elementXp, elementNiveauSuperieur) {
+    // `elementDifficulte` (contenu additionnel post-lancement) : mention « Difficulté
+    // supérieure », affichée uniquement si la partie qui vient de se terminer l'était
+    // (resume.difficulteSuperieure, copiée depuis Jeu.difficulteSuperieure au moment
+    // de finaliserPartie) — jamais un indicateur permanent dans le HUD, qui est déjà
+    // chargé depuis les phases précédentes, uniquement ce rappel ponctuel en fin de
+    // partie.
+    afficherResumeProgression(elementXp, elementNiveauSuperieur, elementDifficulte) {
         const resume = Jeu.derniereProgression;
         if (!resume) return;
 
@@ -684,6 +799,8 @@ const Interface = {
         if (resume.niveauxGagnes > 0) {
             elementNiveauSuperieur.textContent = `Niveau supérieur ! ${resume.niveauAvant} → ${resume.niveauApres}`;
         }
+
+        elementDifficulte.hidden = !resume.difficulteSuperieure;
     },
 
     // Rappelée chaque frame par Jeu.boucle, quel que soit l'état de la partie : bascule
@@ -704,6 +821,7 @@ const Interface = {
 
         if (Jeu.etatPartie === 'accueil') {
             this.mettreAJourProgressionAccueil();
+            this.mettreAJourDefiDuJour();
         }
 
         if (Jeu.etatPartie === 'enCours') {
@@ -727,7 +845,7 @@ const Interface = {
         if (Jeu.etatPartie === 'victoire') {
             this.elementVaguesFranchisesVictoire.textContent = Vagues.numeroVagueActuelle;
             this.elementIntegriteRestanteVictoire.textContent = Jeu.integrite;
-            this.afficherResumeProgression(this.elementXpGagneeVictoire, this.elementNiveauSuperieurVictoire);
+            this.afficherResumeProgression(this.elementXpGagneeVictoire, this.elementNiveauSuperieurVictoire, this.elementDifficulteSuperieureVictoire);
         }
 
         if (Jeu.etatPartie === 'defaite') {
@@ -735,7 +853,7 @@ const Interface = {
             // En mode Sans fin, la vague atteinte est le score final du joueur : on
             // la met en évidence plutôt que de l'afficher comme une simple statistique.
             this.elementVagueAtteinteDefaite.classList.toggle('score-sansfin', !Number.isFinite(Jeu.nombreDeVagues));
-            this.afficherResumeProgression(this.elementXpGagneeDefaite, this.elementNiveauSuperieurDefaite);
+            this.afficherResumeProgression(this.elementXpGagneeDefaite, this.elementNiveauSuperieurDefaite, this.elementDifficulteSuperieureDefaite);
         }
 
         if (this.dureeRestanteMessageConstruction > 0) {

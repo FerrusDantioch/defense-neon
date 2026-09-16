@@ -82,7 +82,36 @@
 
             <div id="choix-duree" class="choix-duree"></div>
             <p id="description-duree" class="description-duree"></p>
+
+            <!-- Difficulté supérieure (contenu additionnel post-lancement, « phase
+                 7I ») : réglage orthogonal au choix de durée ci-dessus, jamais une
+                 cinquième durée — ensemble de boutons séparé plutôt qu'une cinquième
+                 case dans #choix-duree, pour bien marquer que ce sont deux réglages
+                 indépendants qui se combinent librement. Deux options fixes, codées
+                 en dur plutôt que générées depuis Config (voir Interface.initialiser,
+                 js/interface.js, pour la raison). Neutralisé (grisé) pendant toute
+                 interaction avec l'encart Défi du jour plus bas, qui ignore
+                 totalement ce réglage. -->
+            <div id="choix-difficulte" class="choix-difficulte">
+                <button type="button" data-difficulte="normale">Normal</button>
+                <button type="button" data-difficulte="superieure">Supérieure</button>
+            </div>
+
             <button id="bouton-jouer" type="button" class="bouton-principal">Jouer</button>
+
+            <!-- Défi du jour (contenu additionnel post-lancement) : encart
+                 délibérément à part des quatre boutons de durée ci-dessus, pour ne
+                 jamais laisser croire à une cinquième durée parmi les autres —
+                 c'est un point d'entrée séparé vers les mêmes règles que le mode
+                 Sans fin (voir Jeu.demarrerDefiDuJour, js/jeu.js), sur une carte à
+                 graine fixée par la date plutôt qu'aléatoire. Contenu rafraîchi
+                 par Interface.mettreAJourDefiDuJour(). -->
+            <div class="defi-du-jour">
+                <p class="defi-du-jour-titre">Défi du jour</p>
+                <p id="defi-du-jour-date" class="defi-du-jour-date">-</p>
+                <p id="defi-du-jour-score" class="defi-du-jour-score">-</p>
+                <button id="bouton-defi-du-jour" type="button" class="bouton-defi-du-jour">Jouer le défi du jour</button>
+            </div>
         </div>
 
         <!-- Écran de victoire : seulement atteignable en durée finie (jamais en mode
@@ -93,6 +122,10 @@
             <p>Intégrité restante : <span id="integrite-restante-victoire">-</span></p>
             <p>XP gagnée : <span id="xp-gagnee-victoire">-</span></p>
             <p id="niveau-superieur-victoire" class="niveau-superieur" hidden>-</p>
+            <!-- Difficulté supérieure (contenu additionnel post-lancement) : simple
+                 mention, affichée uniquement si la partie qui vient de se terminer
+                 avait ce réglage actif (Interface.afficherResumeProgression). -->
+            <p id="difficulte-superieure-victoire" class="difficulte-superieure" hidden>Difficulté supérieure</p>
             <div class="boutons-fin-partie">
                 <button type="button" class="bouton-principal bouton-rejouer">Rejouer</button>
                 <button type="button" class="bouton-secondaire bouton-changer-duree">Changer de durée</button>
@@ -107,6 +140,9 @@
             <p>Vague atteinte : <span id="vague-atteinte-defaite" class="vague-atteinte">-</span></p>
             <p>XP gagnée : <span id="xp-gagnee-defaite">-</span></p>
             <p id="niveau-superieur-defaite" class="niveau-superieur" hidden>-</p>
+            <!-- Difficulté supérieure (contenu additionnel post-lancement) : même
+                 principe que sur l'écran de victoire ci-dessus. -->
+            <p id="difficulte-superieure-defaite" class="difficulte-superieure" hidden>Difficulté supérieure</p>
             <div class="boutons-fin-partie">
                 <button type="button" class="bouton-principal bouton-rejouer">Rejouer</button>
                 <button type="button" class="bouton-secondaire bouton-changer-duree">Changer de durée</button>

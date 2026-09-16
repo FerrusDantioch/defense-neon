@@ -66,7 +66,20 @@ const Vagues = {
         this.numeroVagueActuelle = numero;
         this.enCours = true;
         this.intervalleCourant = this.calculerIntervalle(numero);
-        this.multiplicateurPointsDeVie = 1 + (numero - 1) * 0.15;
+        // Difficulté supérieure (contenu additionnel post-lancement, « phase 7I ») :
+        // se combine MULTIPLICATIVEMENT avec le multiplicateur déjà appliqué selon
+        // le numéro de vague (en place depuis la phase 1B), au même point de calcul
+        // — jamais une formule séparée pour un type d'ennemi en particulier. Comme
+        // ce multiplicateur unique est ensuite transmis tel quel à `new Ennemi(...)`
+        // pour absolument tout ennemi généré pendant cette vague (les trois types
+        // classiques, le drone, et le boss, voir mettreAJour ci-dessous), le boss
+        // profite nativement de la difficulté supérieure sans code dédié. Lit
+        // Jeu.difficulteSuperieure directement (même principe que Jeu.nombreDeVagues
+        // plus haut, déjà lu depuis ce fichier) : toujours faux pour un défi du jour
+        // (voir la note sur ce champ dans jeu.js), donc sans effet sur ses PV.
+        const multiplicateurDifficulte = Jeu.difficulteSuperieure
+            ? Config.DIFFICULTE_SUPERIEURE_MULTIPLICATEUR_PV : 1;
+        this.multiplicateurPointsDeVie = (1 + (numero - 1) * 0.15) * multiplicateurDifficulte;
 
         // Le premier ennemi apparaît tout de suite : attendre un intervalle complet
         // après le clic du joueur donnerait une impression de délai injustifié.
@@ -119,7 +132,7 @@ const Vagues = {
                     // imposé plutôt que tiré par tirerTypeEnnemi/le tirage du drone,
                     // qu'on saute donc entièrement ici, une seule fois par vague de
                     // boss (bossEnAttente repasse à `false` juste en dessous).
-                    const cheminIndex = Aleatoire.entier(0, Config.NOMBRE_CHEMINS - 1);
+                    const cheminIndex = Aleatoire.entier(0, Carte.nombreChemins - 1);
                     listeEnnemis.push(new Ennemi('boss', this.multiplicateurPointsDeVie, cheminIndex));
                     this.bossEnAttente = false;
                 } else {
@@ -143,12 +156,15 @@ const Vagues = {
                     } else {
                         const type = this.tirerTypeEnnemi(this.numeroVagueActuelle);
                         // Chemins multiples (phase 6A) : chaque ennemi se voit assigner
-                        // l'un des Config.NOMBRE_CHEMINS chemins dès sa création, toujours
-                        // via le générateur à graine (jamais Math.random()) pour que la
-                        // répartition reste reproductible à graine égale — voir la note
-                        // sur Aleatoire dans particules.js pour la raison inverse
-                        // (pourquoi les particules, elles, n'y passent pas).
-                        const cheminIndex = Aleatoire.entier(0, Config.NOMBRE_CHEMINS - 1);
+                        // l'un des Carte.nombreChemins chemins de la carte en cours (2 la
+                        // plupart du temps, 3 occasionnellement depuis le troisième
+                        // chemin occasionnel, contenu additionnel post-lancement) dès sa
+                        // création, toujours via le générateur à graine (jamais
+                        // Math.random()) pour que la répartition reste reproductible à
+                        // graine égale — voir la note sur Aleatoire dans particules.js
+                        // pour la raison inverse (pourquoi les particules, elles, n'y
+                        // passent pas).
+                        const cheminIndex = Aleatoire.entier(0, Carte.nombreChemins - 1);
                         listeEnnemis.push(new Ennemi(type, this.multiplicateurPointsDeVie, cheminIndex));
                     }
                 }

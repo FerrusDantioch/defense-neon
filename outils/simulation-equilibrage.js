@@ -618,8 +618,10 @@ function executerExperience4(jeuContext, graines, nombreVagues, dt) {
 }
 
 // Phase 6B — Mesure informative (pas une expérience de stratégie) : nombre de cases
-// 'LIBRE' juste après génération d'une carte à Config.NOMBRE_CHEMINS chemins, sur les
-// mêmes huit graines que les expériences précédentes. Sert uniquement à vérifier que
+// 'LIBRE' juste après génération d'une carte (2 chemins la plupart du temps, 3
+// occasionnellement depuis le troisième chemin occasionnel, contenu additionnel
+// post-lancement — voir Carte.nombreChemins dans carte.js), sur les mêmes huit
+// graines que les expériences précédentes. Sert uniquement à vérifier que
 // Config.PROPORTION_LIMITE_TOURS (la limite de tours constructibles est
 // `Math.floor(casesLibres * PROPORTION_LIMITE_TOURS)`, voir Jeu.limiteTours dans
 // jeu.js) donne un ordre de grandeur raisonnable — ni une poignée de tours
@@ -859,7 +861,7 @@ function main() {
 
     console.log('');
     console.log(
-        `=== Phase 6B — Cases libres après génération (${Config.NOMBRE_CHEMINS} chemins, mêmes ${GRAINES_GENERALISATION.length} graines) ===`
+        `=== Phase 6B — Cases libres après génération (2-3 chemins selon la carte, mêmes ${GRAINES_GENERALISATION.length} graines) ===`
     );
     console.log('');
 

@@ -1,6 +1,8 @@
 // verification-chemins.js — Vérifie à grande échelle (500 graines par défaut) que la
 // génération de carte à chemins multiples (phase 6A, voir Carte.generer dans
-// js/carte.js) produit toujours des chemins structurellement valides.
+// js/carte.js — nombre de chemins par carte lui-même variable depuis le troisième
+// chemin occasionnel, contenu additionnel post-lancement, voir Carte.nombreChemins)
+// produit toujours des chemins structurellement valides.
 //
 // Adapté du script de vérification à graine utilisé lors du correctif de la phase 1A
 // (adjacence orthogonale, bande LIGNE_MIN-LIGNE_MAX, chemin de secours) — ce script
@@ -125,12 +127,27 @@ function executer(nombreDeGraines) {
 
     let cartesEnErreur = 0;
     let cheminsSecoursDeclenches = 0;
-    const totalChemins = nombreDeGraines * Config.NOMBRE_CHEMINS;
+    // Troisième chemin occasionnel (contenu additionnel post-lancement) : le nombre
+    // de chemins n'est plus une constante fixe (Config.NOMBRE_CHEMINS, retirée) mais
+    // varie par carte (Carte.nombreChemins, 2 la plupart du temps, 3
+    // occasionnellement) — totalChemins est donc accumulé au fil de la boucle
+    // ci-dessous plutôt que déduit d'un simple produit.
+    let totalChemins = 0;
+    let cartesATroisChemins = 0;
     let cartesAvecCroisement = 0;
     let cartesEchecReproductibilite = 0;
 
     const ecartsEntrees = [];
     const ecartsSorties = [];
+    // Espacement toutes paires confondues (contenu additionnel post-lancement,
+    // troisième chemin occasionnel) : contrairement aux deux tableaux ci-dessus
+    // (bornés au chemin 0 et au chemin 1, conservés tels quels pour ne pas casser
+    // la continuité de cette mesure historique), celui-ci couvre bien un éventuel
+    // troisième chemin — la seule façon de vérifier le critère d'acceptation
+    // « une carte à 3 chemins a bien 3 entrées et 3 sorties distinctes et
+    // suffisamment espacées » plutôt que de le supposer.
+    let cartesSousEspacementMinimal = 0;
+    let pireEcartObserve = Infinity;
 
     // Le chemin de secours affiche un console.warn reconnaissable (voir
     // Carte.genererUnChemin) : on l'intercepte pour compter ses déclenchements sans
@@ -147,6 +164,8 @@ function executer(nombreDeGraines) {
     for (let graine = 1; graine <= nombreDeGraines; graine++) {
         Carte.generer(graine);
         const chemins = Carte.chemins.map(info => info.chemin);
+        totalChemins += chemins.length;
+        if (Carte.nombreChemins === 3) cartesATroisChemins++;
 
         let carteValide = true;
         for (let index = 0; index < chemins.length; index++) {
@@ -159,8 +178,12 @@ function executer(nombreDeGraines) {
         if (!carteValide) cartesEnErreur++;
 
         // Croisement réel : au moins une case commune entre les deux premiers chemins
-        // (mesure purement informative, valable quel que soit Config.NOMBRE_CHEMINS —
-        // ici toujours 2 au moment d'écrire ce script).
+        // (mesure purement informative). Depuis le troisième chemin occasionnel
+        // (contenu additionnel post-lancement), une carte peut en compter 2 ou 3
+        // (Carte.nombreChemins) — cette mesure reste volontairement bornée aux deux
+        // premiers dans les deux cas, un troisième chemin éventuel n'y est pas pris
+        // en compte, cohérent avec le fait qu'elle a toujours été un indicateur
+        // informatif plutôt qu'un critère d'acceptation.
         if (chemins.length >= 2) {
             const casesPremierChemin = new Set(chemins[0].map(c => `${c.colonne},${c.ligne}`));
             const croisement = chemins[1].some(c => casesPremierChemin.has(`${c.colonne},${c.ligne}`));
@@ -174,6 +197,28 @@ function executer(nombreDeGraines) {
             ecartsSorties.push(Math.abs(
                 chemins[0][chemins[0].length - 1].ligne - chemins[1][chemins[1].length - 1].ligne
             ));
+        }
+
+        // Espacement minimal toutes paires confondues (voir la note plus haut) :
+        // couvre le troisième chemin d'une carte qui en compte 3, contrairement aux
+        // deux mesures ci-dessus.
+        const lignesEntrees = chemins.map(c => c[0].ligne);
+        const lignesSorties = chemins.map(c => c[c.length - 1].ligne);
+        let pireEcartCetteCarte = Infinity;
+        for (let i = 0; i < chemins.length; i++) {
+            for (let j = i + 1; j < chemins.length; j++) {
+                pireEcartCetteCarte = Math.min(
+                    pireEcartCetteCarte,
+                    Math.abs(lignesEntrees[i] - lignesEntrees[j]),
+                    Math.abs(lignesSorties[i] - lignesSorties[j])
+                );
+            }
+        }
+        if (pireEcartCetteCarte < Infinity) {
+            pireEcartObserve = Math.min(pireEcartObserve, pireEcartCetteCarte);
+            if (pireEcartCetteCarte < Config.ECART_MIN_ENTREES_SORTIES) {
+                cartesSousEspacementMinimal++;
+            }
         }
 
         // Reproductibilité : régénérer avec la même graine doit produire exactement
@@ -191,21 +236,26 @@ function executer(nombreDeGraines) {
 
     const pourcentageSecours = (cheminsSecoursDeclenches / totalChemins) * 100;
     const pourcentageCroisement = (cartesAvecCroisement / nombreDeGraines) * 100;
+    const pourcentageTroisChemins = (cartesATroisChemins / nombreDeGraines) * 100;
 
     console.log('');
     console.log(`Graines testées : ${nombreDeGraines}`);
-    console.log(`Chemins générés au total : ${totalChemins} (${Config.NOMBRE_CHEMINS} par carte)`);
+    console.log(`Chemins générés au total : ${totalChemins} (2 ou 3 par carte, voir ci-dessous)`);
+    console.log(`Cartes à 3 chemins (troisième chemin occasionnel) : ${cartesATroisChemins}/${nombreDeGraines} (${pourcentageTroisChemins.toFixed(1)} %, attendu ≈ ${(Config.PROBABILITE_TROISIEME_CHEMIN * 100).toFixed(0)} %)`);
     console.log(`Cartes en erreur (structure invalide) : ${cartesEnErreur}`);
     console.log(`Cartes non reproductibles à graine égale : ${cartesEchecReproductibilite}`);
     console.log(`Chemin de secours déclenché : ${cheminsSecoursDeclenches}/${totalChemins} (${pourcentageSecours.toFixed(2)} %)`);
     console.log('');
     console.log('--- Mesures informatives (ni succès ni échec) ---');
-    console.log(`Cartes avec un croisement réel entre les deux chemins : ${cartesAvecCroisement}/${nombreDeGraines} (${pourcentageCroisement.toFixed(1)} %)`);
+    console.log(`Cartes avec un croisement réel entre les deux premiers chemins : ${cartesAvecCroisement}/${nombreDeGraines} (${pourcentageCroisement.toFixed(1)} %)`);
     if (ecartsEntrees.length > 0) {
         const moyenne = (tableau) => tableau.reduce((s, v) => s + v, 0) / tableau.length;
-        console.log(`Écart entre entrées — moyen : ${moyenne(ecartsEntrees).toFixed(2)} lignes, minimum observé : ${Math.min(...ecartsEntrees)}`);
-        console.log(`Écart entre sorties — moyen : ${moyenne(ecartsSorties).toFixed(2)} lignes, minimum observé : ${Math.min(...ecartsSorties)}`);
+        console.log(`Écart entre entrées (chemin 0 vs chemin 1 uniquement) — moyen : ${moyenne(ecartsEntrees).toFixed(2)} lignes, minimum observé : ${Math.min(...ecartsEntrees)}`);
+        console.log(`Écart entre sorties (chemin 0 vs chemin 1 uniquement) — moyen : ${moyenne(ecartsSorties).toFixed(2)} lignes, minimum observé : ${Math.min(...ecartsSorties)}`);
     }
+    console.log('');
+    console.log(`Espacement minimal toutes paires confondues (entrées et sorties, 2 ou 3 chemins) — pire cas observé : ${pireEcartObserve} ligne(s) (seuil visé : ${Config.ECART_MIN_ENTREES_SORTIES})`);
+    console.log(`Cartes sous ce seuil sur au moins une paire : ${cartesSousEspacementMinimal}/${nombreDeGraines} (${(cartesSousEspacementMinimal / nombreDeGraines * 100).toFixed(1)} %) — voir « Troisième chemin occasionnel » dans ARCHITECTURE.md pour la raison (configurations à 3 lignes rares où aucun espacement complet n'est mathématiquement atteignable dans la bande LIGNE_MIN-LIGNE_MAX).`);
     console.log('');
 
     const succes = cartesEnErreur === 0 && cartesEchecReproductibilite === 0;
