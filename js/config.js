@@ -137,7 +137,14 @@ const Config = {
         // avant elle) plutôt que lue ici par référence — cette table de
         // correspondance existe justement parce que ces noms ne sont pas tous des
         // mots-clés CSS valides pour un canvas, indépendamment de Config.COULEURS.
-        neonBlanc: '#e8f4ff'
+        neonBlanc: '#e8f4ff',
+
+        // Boss (phase 7G, ennemi.js) : rouge franc, sans équivalent parmi les couleurs
+        // des trois types au sol existants (cyan/jaune/orange) ni du drone (blanc
+        // glacé) — associe naturellement la teinte à la menace la plus dangereuse du
+        // jeu. Répétée en dur dans COULEURS_CSS_ENNEMIS d'ennemi.js, même écart déjà
+        // documenté pour neonBlanc juste au-dessus.
+        neonRouge: '#ff2b2b'
     },
 
     // Rayon de flou (ctx.shadowBlur) des halos néon (phase 4A). Toujours posé puis
@@ -207,11 +214,30 @@ const Config = {
     // moins qu'un Standard) : sa menace vient de ce qu'il contourne toute la défense
     // au sol, pas de sa résistance — un Flak bien placé doit pouvoir l'abattre sans
     // difficulté excessive.
+    //
+    // `boss` (phase 7G) : un ennemi au sol ordinaire à tous égards (suit un chemin,
+    // peut être bloqué par une Caserne, ciblé par les quatre tours au sol comme
+    // n'importe quel autre type — `vole` explicitement à `false`, comme les trois
+    // types ci-dessus, par symétrie avec le `true` du drone plutôt que pour un effet
+    // fonctionnel différent) sauf son gabarit et ses points de vie, très supérieurs à
+    // tout le reste (2000, contre 300 au maximum jusqu'ici pour le Blindé) : sa
+    // menace vient entièrement de sa capacité d'encaissement.
+    // Écart signalé plutôt que corrigé unilatéralement (voir ARCHITECTURE.md) : le
+    // prompt de cette phase décrit le boss comme « volontairement lent, plus lent que
+    // le Blindé », mais fournit une vitesse de 40, alors que le Blindé (ci-dessus)
+    // vaut 35 — le boss est donc en réalité légèrement plus rapide que le Blindé, pas
+    // plus lent. La valeur numérique explicite du prompt (40) a été conservée telle
+    // quelle plutôt que la description contradictoire, cette dernière n'étant sans
+    // doute qu'une approximation erronée du rapport entre les deux vitesses.
+    // `degatsCorpsACorps: 35`, nettement au-dessus du Blindé (20) : en fait la menace
+    // la plus sérieuse au corps-à-corps contre une unité de Caserne rencontrée
+    // jusqu'ici.
     TYPES_ENNEMIS: {
         standard: { pointsDeVie: 100, vitesse: 60, recompense: 10, couleur: 'cyan', degatsCorpsACorps: 8 },
         rapide: { pointsDeVie: 60, vitesse: 110, recompense: 15, couleur: 'jaune', degatsCorpsACorps: 4 },
         blinde: { pointsDeVie: 300, vitesse: 35, recompense: 25, couleur: 'orange', degatsCorpsACorps: 20 },
-        drone: { pointsDeVie: 50, vitesse: 90, recompense: 20, couleur: 'neonBlanc', vole: true, degatsCorpsACorps: 0 }
+        drone: { pointsDeVie: 50, vitesse: 90, recompense: 20, couleur: 'neonBlanc', vole: true, degatsCorpsACorps: 0 },
+        boss: { pointsDeVie: 2000, vitesse: 40, recompense: 150, couleur: 'neonRouge', vole: false, degatsCorpsACorps: 35 }
     },
 
     // À partir de quelle vague le drone commence à apparaître, et dans quelle
@@ -223,6 +249,16 @@ const Config = {
     // avant même de songer à un chemin).
     VAGUE_APPARITION_DRONE: 8,
     PROPORTION_DRONE: 0.15,
+
+    // Vagues de boss (phase 7G) : tous les VAGUE_INTERVALLE_BOSS paliers (5, 10, 15…,
+    // y compris au-delà du nombre de vagues d'une partie Standard/Longue puisqu'un
+    // simple modulo sur le numéro de vague ne dépend jamais de Jeu.nombreDeVagues —
+    // valable aussi bien en mode Sans fin qu'au-delà de la vague 20), la composition
+    // habituelle d'une vague (voir Vagues.demarrer) est remplacée par un unique boss
+    // en tête de file suivi d'une escorte réduite à environ
+    // PROPORTION_ESCORTE_VAGUE_BOSS fois son effectif normal.
+    VAGUE_INTERVALLE_BOSS: 5,
+    PROPORTION_ESCORTE_VAGUE_BOSS: 0.5,
 
     // Nombre de points d'intégrité au départ. Chaque ennemi qui atteint l'arrivée en
     // retire un peu ; à zéro, la partie est perdue.

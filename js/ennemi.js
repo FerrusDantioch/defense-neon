@@ -10,22 +10,26 @@ const COULEURS_CSS_ENNEMIS = {
     cyan: '#00e5ff',
     jaune: '#f1c40f',
     orange: '#ff8c1a',
-    neonBlanc: '#e8f4ff'
+    neonBlanc: '#e8f4ff',
+    neonRouge: '#ff2b2b'
 };
 
 // Teintes claires/sombres dérivées de la couleur de base de chaque type (phase 7A),
 // pour les détails des châssis robotiques : capteur/« œil » et accent de réacteur en
 // clair, chenilles/plaques d'armure en sombre. Tables volontairement incomplètes —
 // seules les entrées réellement utilisées par un châssis sont présentes (le Rapide
-// n'a pas de partie sombre, voir dessinerChassisRapide plus bas).
+// n'a pas de partie sombre, voir dessinerChassisRapide plus bas ; le Drone n'a ni
+// l'une ni l'autre, voir dessinerChassisDrone).
 const COULEURS_CSS_ENNEMIS_CLAIR = {
     cyan: '#a6f7ff',
     jaune: '#fff3b0',
-    orange: '#ffd9a6'
+    orange: '#ffd9a6',
+    neonRouge: '#ffb3b3'
 };
 const COULEURS_CSS_ENNEMIS_SOMBRE = {
     cyan: '#0a4a52',
-    orange: '#9c4c00'
+    orange: '#9c4c00',
+    neonRouge: '#7a0f0f'
 };
 
 class Ennemi {
@@ -292,7 +296,18 @@ class Ennemi {
     dessiner(ctx) {
         const tailleCase = Carte.tailleCase;
         const pointsDeVieBase = Config.TYPES_ENNEMIS[this.type].pointsDeVie;
-        const rayon = tailleCase * (0.12 + pointsDeVieBase / 1000);
+
+        // Le boss (phase 7G) ne dérive pas sa taille de la formule ci-dessous,
+        // proportionnelle aux points de vie de base : avec 2000 PV contre une
+        // centaine pour les trois types au sol existants, elle donnerait un châssis
+        // totalement disproportionné (plus de 2 fois la taille de référence). Sa
+        // taille est fixée directement à environ 2,5 fois celle du Blindé — le plus
+        // gros châssis existant jusqu'ici — recalculée à partir du rayon du Blindé
+        // plutôt qu'un nombre en dur, pour rester cohérente si jamais
+        // Config.TYPES_ENNEMIS.blinde.pointsDeVie changeait un jour.
+        const rayon = this.type === 'boss'
+            ? tailleCase * (0.12 + Config.TYPES_ENNEMIS.blinde.pointsDeVie / 1000) * 2.5
+            : tailleCase * (0.12 + pointsDeVieBase / 1000);
 
         ctx.save();
         ctx.translate(this.x, this.y);
@@ -304,6 +319,8 @@ class Ennemi {
             this.dessinerChassisBlinde(ctx, rayon);
         } else if (this.type === 'drone') {
             this.dessinerChassisDrone(ctx, rayon);
+        } else if (this.type === 'boss') {
+            this.dessinerChassisBoss(ctx, rayon);
         } else {
             this.dessinerChassisStandard(ctx, rayon);
         }
@@ -332,6 +349,22 @@ class Ennemi {
         ctx.beginPath();
         for (let i = 0; i < 6; i++) {
             const angle = (i / 6) * Math.PI * 2;
+            const px = Math.cos(angle) * rayonX;
+            const py = Math.sin(angle) * rayonY;
+            if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    // Octogone centré sur l'origine (phase 7G), même principe que dessinerHexagone
+    // ci-dessus — utilisé uniquement par le châssis Boss, pour une silhouette
+    // nettement distincte des hexagones des trois types au sol existants, pas
+    // seulement plus grande.
+    dessinerOctogone(ctx, rayonX, rayonY) {
+        ctx.beginPath();
+        for (let i = 0; i < 8; i++) {
+            const angle = (i / 8) * Math.PI * 2;
             const px = Math.cos(angle) * rayonX;
             const py = Math.sin(angle) * rayonY;
             if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
@@ -442,5 +475,34 @@ class Ennemi {
             ctx.arc(boutX, boutY, rayonRotor, 0, Math.PI * 2);
             ctx.fill();
         }
+    }
+
+    // Châssis Boss (phase 7G) : un octogone plutôt qu'un hexagone (voir
+    // dessinerOctogone ci-dessus), avec quatre protubérances d'armure aux quatre
+    // coins diagonaux du corps — contre deux plaques latérales pour le Blindé — et un
+    // capteur central nettement plus large. Distinct du Blindé pas seulement par la
+    // taille (fixée séparément dans dessiner(), voir plus haut) mais par la forme et
+    // le niveau de détail : nettement plus « blindé à l'œil » qu'un simple Blindé mis
+    // à l'échelle.
+    dessinerChassisBoss(ctx, rayon) {
+        ctx.fillStyle = this.couleur;
+        this.dessinerOctogone(ctx, rayon, rayon);
+
+        ctx.fillStyle = COULEURS_CSS_ENNEMIS_SOMBRE[this.nomCouleur];
+        const largeurProtuberance = rayon * 0.42;
+        const hauteurProtuberance = rayon * 0.42;
+        const decalage = rayon * 0.62;
+        const positions = [
+            [decalage, decalage], [decalage, -decalage],
+            [-decalage, decalage], [-decalage, -decalage]
+        ];
+        for (const [dx, dy] of positions) {
+            ctx.fillRect(dx - largeurProtuberance / 2, dy - hauteurProtuberance / 2, largeurProtuberance, hauteurProtuberance);
+        }
+
+        ctx.fillStyle = COULEURS_CSS_ENNEMIS_CLAIR[this.nomCouleur];
+        ctx.beginPath();
+        ctx.arc(rayon * 0.1, 0, rayon * 0.5, 0, Math.PI * 2);
+        ctx.fill();
     }
 }

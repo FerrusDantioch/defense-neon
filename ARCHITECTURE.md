@@ -49,7 +49,10 @@ HTML/CSS/JS vanilla, sans module ES6 ni dépendance. Fichiers chargés dans cet 
   blocage entièrement, voir « Le triangle Flak/Caserne/Drone (phase 7F) » plus bas),
   `subirDegats(montant)` (sans appelant avant la phase 1C), `progression()` (phase 7F,
   généralise le calcul historique de `Tour.progressionEnnemi` — voir « Ciblage des
-  tours » plus haut — à un ennemi volant en plus d'un ennemi au sol), `dessiner(ctx)`.
+  tours » plus haut — à un ennemi volant en plus d'un ennemi au sol), `dessiner(ctx)`
+  (depuis la phase 7G, calcule la taille du châssis Boss séparément de la formule
+  proportionnelle aux PV utilisée par les trois autres types au sol — voir « Vagues de
+  boss (phase 7G) » ci-dessous).
   Une petite table interne (`COULEURS_CSS_ENNEMIS`) convertit les noms de couleur de
   `Config.TYPES_ENNEMIS` (ex. `'jaune'`) en couleurs CSS valides pour le canvas.
 - **`js/vagues.js`** — objet `Vagues` : décide combien d'ennemis apparaissent, de quel
@@ -57,13 +60,17 @@ HTML/CSS/JS vanilla, sans module ES6 ni dépendance. Fichiers chargés dans cet 
   `enCours`, `ennemisRestantsAGenerer`, `intervalleCourant`,
   `tempsDepuisDerniereGeneration`, `multiplicateurPointsDeVie`, `credits` (accumulés en
   fin de vague ; récupérés et remis à zéro par `Jeu.boucle`, voir phase 1C ci-dessous).
-  Fonctions publiques : `demarrer(numero)`, `mettreAJour(dt, listeEnnemis)`
+  Depuis la phase 7G : `estVagueBoss`/`bossEnAttente` (voir « Vagues de boss (phase
+  7G) » ci-dessous). Fonctions publiques : `demarrer(numero)` (compose une vague de
+  boss plutôt que la vague normale tous les `Config.VAGUE_INTERVALLE_BOSS` paliers,
+  phase 7G), `mettreAJour(dt, listeEnnemis)`
   (tire aussi, depuis la phase 6A, le `cheminIndex` de chaque ennemi généré via
   `Aleatoire.entier(0, Config.NOMBRE_CHEMINS - 1)` — toujours le générateur à graine,
   jamais `Math.random()`, pour que la répartition reste reproductible ; depuis la
   phase 7F, un tirage séparé décide d'abord si l'apparition est un drone, auquel cas
   ni type ni `cheminIndex` ne sont tirés — voir « Le triangle Flak/Caserne/Drone
-  (phase 7F) » plus bas), `reinitialiser()`.
+  (phase 7F) » plus bas ; depuis la phase 7G, génère d'abord le boss en tête de file
+  d'une vague de ce type, avant même ce tirage), `reinitialiser()`.
 - **`js/tour.js`** — classes `Tour` et `Projectile` (phase 1C ; plusieurs types de
   tours depuis la phase 2A ; niveaux, amélioration et vente depuis la phase 2B ; dégâts
   de zone depuis la phase 7D ; type Caserne, sans tir, depuis la phase 7E).
@@ -125,7 +132,9 @@ HTML/CSS/JS vanilla, sans module ES6 ni dépendance. Fichiers chargés dans cet 
   projectiles. Voir « Particules et son (phase 4B) » ci-dessous.
 - **`js/son.js`** — objet `Son` (phase 4B) : tous les effets sonores, entièrement
   synthétisés via l'API Web Audio (`OscillatorNode`/`GainNode`), aucun fichier audio.
-  Voir « Particules et son (phase 4B) » ci-dessous.
+  Voir « Particules et son (phase 4B) » ci-dessous. `jouerAlerteBoss()` (phase 7G,
+  voir « Vagues de boss (phase 7G) » ci-dessous) s'ajoute aux fonctions publiques
+  existantes.
 - **`js/decor.js`** — objet `Decor` (phase 7C, contenu additionnel post-lancement) :
   skyline en parallaxe à deux couches sur un second canvas (`#canvas-decor`),
   totalement indépendant du canvas de jeu. Voir « Décor d'arrière-plan en parallaxe
@@ -134,7 +143,10 @@ HTML/CSS/JS vanilla, sans module ES6 ni dépendance. Fichiers chargés dans cet 
   fixe (phase 7C bis) » ci-dessous.
 - **`js/interface.js`** — objet `Interface` (phase 1D) : tout ce qui concerne l'affichage
   et les interactions — écrans superposés, HUD, clics et survol sur le canvas, messages
-  temporaires. Voir « Interface et états de partie » ci-dessous.
+  temporaires. Voir « Interface et états de partie » ci-dessous. `afficherMessageConstruction(texte, duree)`
+  accepte, depuis la phase 7G, une durée optionnelle (1,5 s par défaut) — réutilisée par
+  `Vagues.demarrer` pour son bandeau de vague de boss, voir « Vagues de boss (phase 7G) »
+  ci-dessous.
 - **`js/jeu.js`** — objet `Jeu` : point d'entrée, état de partie et boucle de simulation
   (l'affichage et les interactions vivent dans `interface.js`). État : `etatPartie`,
   `nombreDeVagues`, `idDureeActuelle`, `vitesseJeu`, `ennemisActifs`, `toursActives`,
@@ -1076,9 +1088,12 @@ préciser à quoi correspondraient 7A/7B pour les autres — cette numérotation
 pas reprise ici tant qu'elle n'est pas confirmée pour chacune) :
 
 - Tours spéciales (nouveaux types au-delà des trois existants, voir « Types de tours et
-  sélection » ci-dessus) — non commencé.
-- Ennemi volant (un type qui ignore le tracé au sol ?) — non commencé.
-- Vagues de boss — non commencé.
+  sélection » ci-dessus) — fait, voir « Le triangle Flak/Caserne/Drone (phase 7F) »
+  ci-dessous (tours Flak et Caserne).
+- **Ennemi volant (« phase 7F »)** — fait, voir « Le triangle Flak/Caserne/Drone (phase
+  7F) » ci-dessous.
+- **Vagues de boss (« phase 7G »)** — fait, voir « Vagues de boss (phase 7G) »
+  ci-dessous.
 - Mode difficile — non commencé.
 - **Décor d'arrière-plan animé (« phase 7C » selon le prompt qui l'a introduite)** —
   fait, voir « Décor d'arrière-plan en parallaxe (phase 7C) » ci-dessous. Complété par
@@ -2433,6 +2448,150 @@ tirantes (Mitrailleuse, Canon, Sniper) : seule la valeur `degats` du Flak a chan
 aucun autre calcul (ciblage, portée, cadence, dégâts de zone) n'en dépend ailleurs dans
 le code.
 
+## Vagues de boss (phase 7G)
+
+Tous les `Config.VAGUE_INTERVALLE_BOSS` paliers (5 par défaut, donc les vagues 5, 10,
+15…), un ennemi massif apparaît en tête d'une escorte réduite. Le boss est un ennemi au
+sol ordinaire à tous égards sauf son gabarit et ses points de vie : aucune mécanique
+nouvelle n'a été nécessaire, seulement une nouvelle entrée dans `Config.TYPES_ENNEMIS`
+et une composition de vague spéciale — même philosophie que le Flak (phase 7D) et le
+drone (phase 7F) : généraliser plutôt que dupliquer, et vérifier plutôt que supposer que
+les systèmes existants encaissent le nouveau cas.
+
+### Ajouts à `config.js`
+
+`Config.COULEURS.neonRouge` (`'#ff2b2b'`) suit le même écart déjà documenté pour
+`neonBlanc` (phase 7F) : le prompt de cette phase suggérait un objet `PALETTE` séparé,
+inexistant dans ce dépôt — `Config.COULEURS` en tient lieu depuis la phase 4A.
+
+`Config.TYPES_ENNEMIS.boss` : `pointsDeVie: 2000`, `vitesse: 40`, `recompense: 150`,
+`couleur: 'neonRouge'`, `vole: false` (explicite, comme le `true` du drone, sans effet
+fonctionnel différent d'une simple absence de champ), `degatsCorpsACorps: 35`.
+
+`Config.VAGUE_INTERVALLE_BOSS` (5) et `Config.PROPORTION_ESCORTE_VAGUE_BOSS` (0.5),
+consommées par `Vagues.demarrer` ci-dessous.
+
+**Écart signalé, non corrigé** : le prompt décrit le boss comme « volontairement lent,
+plus lent que le Blindé », mais fournit une vitesse de 40 alors que le Blindé
+(`Config.TYPES_ENNEMIS.blinde.vitesse`) vaut 35 — le boss est donc en réalité
+légèrement *plus rapide* que le Blindé, à l'opposé de la description qui l'accompagne.
+La valeur numérique explicite (40) a été conservée telle quelle plutôt que corrigée
+pour coller à la prose, cette dernière étant vraisemblablement une approximation
+erronée du prompt plutôt qu'une intention numérique précise — mais l'écart mérite
+d'être tranché si la vitesse relative du boss doit vraiment rester sous celle du
+Blindé.
+
+### Composition d'une vague de boss (`vagues.js`)
+
+`Vagues.demarrer(numero)` calcule `estVagueBoss = numero % Config.VAGUE_INTERVALLE_BOSS
+=== 0` — un simple modulo, valable aussi bien en mode Sans fin qu'au-delà du nombre de
+vagues d'une partie Standard/Longue, puisqu'il ne dépend jamais de `Jeu.nombreDeVagues`.
+Si vrai : `ennemisRestantsAGenerer` vaut `1 + tailleEscorte`, où `tailleEscorte =
+Math.max(1, Math.round(nombreNormalEnnemis * Config.PROPORTION_ESCORTE_VAGUE_BOSS))` —
+`nombreNormalEnnemis` étant le total qu'aurait généré une vague ordinaire de ce même
+numéro (`5 + numero * 2`, formule de la phase 1B, inchangée). Le multiplicateur de
+points de vie déjà appliqué à tous les ennemis selon le numéro de vague (`1 + (numero -
+1) * 0.15`) s'applique tel quel au boss, à partir de ses 2000 PV de base — aucune
+formule séparée.
+
+`bossEnAttente` (vrai uniquement pour la durée d'une vague de boss, jusqu'à ce que le
+boss ait effectivement été généré) garantit qu'il apparaît en tête de file : dans
+`Vagues.mettreAJour`, le tout premier ennemi généré d'une vague de boss l'est via une
+branche dédiée (`cheminIndex` tiré normalement, comme n'importe quel ennemi au sol —
+jamais `null`, contrairement au drone, puisque le boss suit bel et bien un chemin) qui
+saute entièrement le tirage habituel (`tirerTypeEnnemi`/tirage du drone) plutôt que d'en
+biaiser le résultat. Une fois consommé, l'escorte suit exactement le chemin de
+génération déjà en place (mêmes proportions de Rapide/Blindé/Drone selon le numéro de
+vague) sans aucune distinction avec une vague normale.
+
+### Annonce de la vague de boss (`vagues.js`, `interface.js`, `son.js`)
+
+`Interface.afficherMessageConstruction(texte, duree = 1.5)` — généralisée avec un
+second paramètre optionnel — affiche `« ⚠ VAGUE DE BOSS »` pendant 3 secondes, appelée
+une seule fois depuis `Vagues.demarrer` (elle-même protégée par le garde-fou `if
+(this.enCours) return;` en tête de la méthode, qui empêche tout second appel tant que
+la vague est en cours). Réutilise le mécanisme déjà en place pour les messages
+d'erreur de construction plutôt que d'en créer un second en parallèle — voir l'écart
+ci-dessous sur le nom de la méthode, resté inchangé malgré ce second usage.
+`Son.jouerAlerteBoss()`, appelée au même endroit, joue une tonalité grave et dramatique
+(deux tons superposés en dents de scie/carré, bien plus bas que tout autre son du jeu
+hors victoire/défaite) — vérifié par un test dédié (une fonction espionne à la place de
+`Son.jouerAlerteBoss`) qu'elle n'est appelée qu'une seule fois par vague de boss, jamais
+en boucle pendant son déroulement.
+
+`Son.jouerMort('boss')` ajoute une variante grave et longue (0,55 s, contre 0,32 s au
+maximum pour les trois variantes existantes), deux tonalités superposées comme
+l'alerte, pour un moment de mort qui se distingue nettement des trois autres.
+
+### Silhouette visuelle (`ennemi.js`)
+
+Le châssis Boss ne dérive pas sa taille de la formule proportionnelle aux points de vie
+utilisée par les trois types au sol existants (`tailleCase * (0.12 + pointsDeVieBase /
+1000)`) : avec 2000 PV contre une centaine pour les autres, cette formule donnerait un
+châssis totalement disproportionné. Sa taille est calculée séparément dans
+`Ennemi.dessiner`, directement à partir du rayon du Blindé (le plus gros châssis
+existant jusqu'ici) multiplié par 2,5 — plutôt qu'un nombre en dur indépendant, pour
+rester cohérente si `Config.TYPES_ENNEMIS.blinde.pointsDeVie` changeait un jour. Vérifié
+par calcul direct : rayon Boss = 2,50 × rayon Blindé, exactement.
+
+`dessinerChassisBoss` utilise un nouvel octogone (`dessinerOctogone`, même principe que
+`dessinerHexagone` mais à huit côtés) plutôt que l'hexagone commun aux trois types au
+sol existants, avec quatre protubérances d'armure (contre deux plaques pour le Blindé)
+aux quatre coins diagonaux du corps, et un capteur central nettement plus large (0,5 ×
+rayon, contre 0,38 pour le Blindé) — distinct du Blindé par la forme et le niveau de
+détail, pas seulement par la taille.
+
+La barre de vie suit exactement la même logique que pour les trois autres types
+(`largeurBarre = rayon * 2`, fixe pour un ennemi donné puisque `rayon` ne dépend que du
+type, jamais des points de vie courants ; seul le remplissage — `pointsDeVie /
+pointsDeVieMax` — varie) : aucune règle particulière n'a été nécessaire pour le boss,
+sa barre est simplement proportionnellement plus large, à l'image de son châssis.
+
+### Vérification que les systèmes existants généralisent
+
+Comme pour le Flak (7D) et le drone (7F), vérifié concrètement plutôt que supposé, via
+des tests isolés pilotant directement `Jeu.simuler`/`Jeu.resoudreCombatsCasernes` :
+
+- **ciblage par les quatre tours au sol** : le boss n'a pas `vole` à `true`, donc
+  `Tour.chercherCible` le traite comme n'importe quel ennemi au sol, sans aucune
+  condition supplémentaire ;
+- **blocage et combat au corps à corps avec une unité de Caserne** : une unité fictive
+  bloquant un Blindé perd 20 PV/s, la même unité bloquant un boss en perd 35/s — exactement
+  `degatsCorpsACorps` de chacun, sans code spécifique au boss dans
+  `Jeu.resoudreCombatsCasernes` ;
+- **récompense en crédits et son de mort à sa destruction** : un boss réduit à 0 PV par
+  plusieurs Canons de niveau maximum déclenche `Jeu.credits += 150` et
+  `Son.jouerMort('boss')`, via le même nettoyage générique que tout autre ennemi
+  (`jeu.js`, `simuler()`) ;
+- **réduction d'intégrité à l'arrivée** : un boss livré à lui-même sans tour à portée
+  atteint l'arrivée et déclenche la perte d'intégrité générique, sans code ajouté.
+
+Scénario de non-régression : une partie réelle (carte générée normalement, graine
+aléatoire), 8 tours des cinq types dont une Caserne, vague 5 (vague de boss) jouée
+jusqu'à son terme complet (2888 frames simulées) sans aucune erreur console ni
+exception.
+
+### Vérification du calibrage demandé (2000 PV dès la vague 5)
+
+Testé avec 6 Canons de niveau maximum concentrés sur le chemin du boss : celui-ci est
+détruit en quelques dixièmes de seconde à peine, largement avant d'avoir traversé une
+fraction significative du plateau — un calibrage de tours extrême et non représentatif
+d'une vague 5 réelle (un joueur atteint rarement le niveau maximum de plusieurs tours
+dès la cinquième vague), mais qui confirme au moins que la mécanique de mort/récompense
+fonctionne correctement à haute pression de feu.
+
+Avec un déploiement plus réaliste de tours de niveau 1 (scénario de non-régression
+ci-dessus, 8 tours réparties sur toute la carte sans concentration délibérée sur le
+chemin du boss), le boss n'a pas systématiquement été détruit avant l'arrivée dans tous
+les essais — cohérent avec 2000 PV représentant 20 fois les PV d'un Standard, alors
+qu'un joueur en vague 5 n'a typiquement que quelques tours de bas niveau — un boss très
+difficile à abattre à ce stade, avec seulement 4 à 8 tours proches du niveau 1-2 face à
+lui. **Confirmé comme le comportement recherché plutôt qu'un déséquilibre à corriger** :
+la difficulté de la toute première vague de boss est intentionnelle, contrairement au
+déséquilibre du Flak face au drone (phase 7F, corrigé), qui allait à l'encontre de
+l'équilibre demandé. Les 2000 PV de base sont donc conservés tels quels, sans
+multiplicateur réduit pour les premières vagues de boss.
+
 ## Avancement (feuille de route)
 
 - **1A — Socle et carte** : fait. Génération, affichage, redimensionnement, reproductibilité
@@ -2641,3 +2800,24 @@ post-lancement » ci-dessus pour la liste complète des sous-phases à venir) :
   dégâts > 50 PV) : le même test passe à 15 drones sur 20 abattus, sans toucher à la
   portée, à la cadence ni au coût du Flak, ni aux PV/vitesse/récompense du drone. Voir
   « Vérification de l'équilibrage demandé » ci-dessus pour le détail.
+- **Vagues de boss (« phase 7G »)** : fait. Voir « Vagues de boss (phase 7G) »
+  ci-dessus : un ennemi au sol ordinaire (suit un chemin, bloqué par une Caserne,
+  ciblé par les quatre tours au sol) mais avec un gabarit et des PV très supérieurs
+  (2000), apparaissant en tête d'une escorte réduite tous les `VAGUE_INTERVALLE_BOSS`
+  paliers (5), y compris en mode Sans fin au-delà de la vague 20. Silhouette octogonale
+  à quatre protubérances, nettement distincte du Blindé, taille fixée à 2,5× la sienne
+  plutôt que dérivée de la formule proportionnelle aux PV. Bandeau d'annonce et son
+  d'alerte dédiés, déclenchés une seule fois par vague de boss (vérifié). Ciblage,
+  blocage/combat de Caserne (35 dégâts/s contre 20 pour le Blindé), récompense et perte
+  d'intégrité fonctionnent tous nativement, vérifié plutôt que supposé : aucune ligne
+  ajoutée à `Jeu.simuler` ni à `Tour.chercherCible`. Aucune régression constatée
+  (partie réelle jusqu'à la fin d'une vague de boss, 2888 frames, aucune erreur
+  console). **Calibrage vérifié et confirmé intentionnel** : 2000 PV de base rendent la
+  toute première vague de boss (vague 5 sur 20 en partie Standard) très difficile à
+  abattre pour un joueur qui ne dispose typiquement que de quelques tours de bas
+  niveau à ce stade — confirmé être le comportement recherché plutôt qu'un
+  déséquilibre à corriger, contrairement au Flak face au drone (phase 7F). Écart
+  signalé séparément : la vitesse fournie par le prompt (40) contredit sa propre
+  description (« plus lent que le Blindé », qui vaut 35) — conservée telle quelle, en
+  signalant la
+  contradiction plutôt qu'en la tranchant unilatéralement.

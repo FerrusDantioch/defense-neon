@@ -423,10 +423,17 @@ const Interface = {
         Son.jouerConstruction();
     },
 
-    // Affiche un message de construction temporaire (1,5 seconde) superposé au HUD.
-    afficherMessageConstruction(texte) {
+    // Affiche un message temporaire superposé au HUD, 1,5 seconde par défaut — les
+    // messages d'erreur de construction ci-dessus l'utilisent tel quel. `duree`
+    // permet de le réutiliser pour un cas différent sans dupliquer ce mécanisme
+    // (phase 7G) : Vagues.demarrer l'appelle avec une durée de 3 secondes pour son
+    // bandeau « ⚠ VAGUE DE BOSS », plus long pour rester bien visible malgré son
+    // caractère plus exceptionnel qu'une simple erreur de construction — d'où le nom
+    // de cette méthode, conservé tel quel plutôt que renommé, qui ne reflète donc plus
+    // exactement tous ses appelants.
+    afficherMessageConstruction(texte, duree = 1.5) {
         this.elementMessageConstruction.textContent = texte;
-        this.dureeRestanteMessageConstruction = 1.5;
+        this.dureeRestanteMessageConstruction = duree;
     },
 
     // Dessine, par-dessus tout le reste (carte, tours, ennemis, projectiles), l'aperçu

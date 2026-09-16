@@ -140,9 +140,31 @@ const Son = {
             this.jouerTonalite({ frequenceDebut: 350, frequenceFin: 70, duree: 0.32, typeOnde: 'sawtooth' });
         } else if (type === 'drone') {
             this.jouerTonalite({ frequenceDebut: 1800, frequenceFin: 900, duree: 0.1, typeOnde: 'square' });
+        } else if (type === 'boss') {
+            // Boss (phase 7G) : nettement plus grave et plus long que les trois
+            // variantes existantes (jusqu'ici 0,32 s au maximum, pour le Blindé), pour
+            // marquer sa mort comme un moment fort plutôt qu'une simple explosion de
+            // plus. Deux tonalités superposées (dents de scie et carrée, décalées de
+            // 0,05 s) plutôt qu'une seule, pour un timbre plus dense/dramatique,
+            // cohérent avec le son d'alerte de la vague qui l'a annoncé
+            // (jouerAlerteBoss ci-dessous).
+            this.jouerTonalite({ frequenceDebut: 260, frequenceFin: 40, duree: 0.55, typeOnde: 'sawtooth' });
+            this.jouerTonalite({ frequenceDebut: 130, frequenceFin: 30, duree: 0.55, typeOnde: 'square', delai: 0.05 });
         } else {
             this.jouerTonalite({ frequenceDebut: 500, frequenceFin: 200, duree: 0.22, typeOnde: 'triangle' });
         }
+    },
+
+    // Annonce dramatique jouée une seule fois au tout début d'une vague de boss
+    // (phase 7G, voir Vagues.demarrer) — nettement différente de jouerAlerte
+    // (l'alarme, plus aiguë et plus courte, jouée à chaque ennemi ordinaire qui
+    // atteint l'arrivée) : deux tonalités très graves superposées, en dents de scie
+    // puis en carré pour un timbre plus dur, sur une durée bien supérieure à tout
+    // autre son du jeu hors victoire/défaite.
+    jouerAlerteBoss() {
+        if (!this.actif) return;
+        this.jouerTonalite({ frequenceDebut: 90, frequenceFin: 55, duree: 0.5, typeOnde: 'sawtooth' });
+        this.jouerTonalite({ frequenceDebut: 180, frequenceFin: 55, duree: 0.5, typeOnde: 'square', delai: 0.1 });
     },
 
     // Signal d'alerte joué quand un ennemi atteint l'arrivée : deux pulsations graves
