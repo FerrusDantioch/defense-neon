@@ -68,28 +68,62 @@ class Tour {
         // Caserne (phase 7E) : ne cherche jamais de cible ni ne tire (voir
         // mettreAJour ci-dessous, qui bifurque entièrement avant de lire tempsDepuisDernierTir/cible
         // ci-dessus pour ce type) ; fait apparaître son unité de blocage à la place,
-        // sur la case de chemin adjacente déterminée une fois pour toutes ici (voir
-        // Carte.trouverPointBlocagePourCaserne) — jamais recalculée ensuite, la tour
+        // sur une case de chemin adjacente déterminée une fois pour toutes ici (voir
+        // Carte.candidatsBlocagePourCaserne) — jamais recalculée ensuite, la tour
         // reste associée au même point de blocage pour toute sa durée de vie.
+        //
+        // Choix du point de blocage (contenu additionnel post-lancement) : quand
+        // plusieurs cases de chemin sont adjacentes (typiquement près d'un
+        // croisement), le cas à une seule candidate ci-dessous ne s'applique pas —
+        // aucun point de blocage n'est retenu ici, l'unité n'apparaît pas encore, et
+        // `candidatsBlocageEnAttente` reste sur l'instance le temps qu'Interface
+        // détecte cette attente (voir Interface.tenterConstruireTour) et résolve le
+        // choix du joueur via resoudreChoixBlocage() ci-dessous.
         if (this.typeDegats === 'caserne') {
-            const pointBlocage = Carte.trouverPointBlocagePourCaserne(colonne, ligne);
-            // pointBlocage ne devrait jamais être null ici : Interface.tenterConstruireTour
-            // vérifie déjà Carte.estAdjacentAUnChemin avant de construire une Caserne.
-            // Gardé par robustesse pour un appel direct qui sauterait cette
-            // vérification (ex. un outil de test) — la tour existe alors sans jamais
-            // faire apparaître d'unité, plutôt que de lever une exception.
-            this.cheminIndex = pointBlocage ? pointBlocage.cheminIndex : null;
-            this.indexPointDePassage = pointBlocage ? pointBlocage.indexPointDePassage : null;
+            const candidats = Carte.candidatsBlocagePourCaserne(colonne, ligne);
             this.unite = null;
             this.tempsDepuisDestruction = 0;
-            if (pointBlocage) {
-                // Pas de délai la première fois (voir la section correspondante du
-                // prompt) : seule une unité détruite en cours de partie attend
-                // CASERNE_DELAI_RESPAWN_BASE avant de réapparaître, voir
-                // mettreAJourCaserne.
-                this.faireApparaitreUnite();
+
+            if (candidats.length <= 1) {
+                // Cas simple (le plus fréquent, et le seul qui existait avant cette
+                // phase) : au plus une candidate, retenue automatiquement, exactement
+                // comme le faisait l'ancienne trouverPointBlocagePourCaserne.
+                // candidats[0] est `undefined` (pas `null`) si le tableau est vide —
+                // normalisé ci-dessous, jamais lu directement.
+                const pointBlocage = candidats[0] || null;
+                // pointBlocage ne devrait jamais être null ici : Interface.tenterConstruireTour
+                // vérifie déjà Carte.estAdjacentAUnChemin avant de construire une Caserne.
+                // Gardé par robustesse pour un appel direct qui sauterait cette
+                // vérification (ex. un outil de test) — la tour existe alors sans jamais
+                // faire apparaître d'unité, plutôt que de lever une exception.
+                this.cheminIndex = pointBlocage ? pointBlocage.cheminIndex : null;
+                this.indexPointDePassage = pointBlocage ? pointBlocage.indexPointDePassage : null;
+                if (pointBlocage) {
+                    // Pas de délai la première fois (voir la section correspondante du
+                    // prompt) : seule une unité détruite en cours de partie attend
+                    // CASERNE_DELAI_RESPAWN_BASE avant de réapparaître, voir
+                    // mettreAJourCaserne.
+                    this.faireApparaitreUnite();
+                }
+            } else {
+                this.cheminIndex = null;
+                this.indexPointDePassage = null;
+                this.candidatsBlocageEnAttente = candidats;
             }
         }
+    }
+
+    // Résout le choix du joueur pour le point de blocage d'une Caserne qui en
+    // attendait un (contenu additionnel post-lancement, voir le constructeur
+    // ci-dessus et Interface.resoudreChoixBlocageCaserne, seule appelante). `candidat`
+    // est l'un des éléments de `this.candidatsBlocageEnAttente` — jamais vérifié à
+    // nouveau ici, cette vérification (le clic tombe bien sur une case candidate)
+    // ayant déjà eu lieu côté Interface avant cet appel.
+    resoudreChoixBlocage(candidat) {
+        this.cheminIndex = candidat.cheminIndex;
+        this.indexPointDePassage = candidat.indexPointDePassage;
+        this.candidatsBlocageEnAttente = null;
+        this.faireApparaitreUnite();
     }
 
     // Points de vie maximum et dégâts de l'unité de Caserne au niveau actuel de la

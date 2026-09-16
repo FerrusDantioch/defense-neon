@@ -144,7 +144,14 @@ const Config = {
         // glacé) — associe naturellement la teinte à la menace la plus dangereuse du
         // jeu. Répétée en dur dans COULEURS_CSS_ENNEMIS d'ennemi.js, même écart déjà
         // documenté pour neonBlanc juste au-dessus.
-        neonRouge: '#ff2b2b'
+        neonRouge: '#ff2b2b',
+
+        // Cases bloquées près des chemins (contenu additionnel post-lancement,
+        // carte.js) : gris sombre neutre, délibérément terne — contrairement à toutes
+        // les autres couleurs de cette palette, cet obstacle ne doit surtout pas
+        // attirer l'œil comme le ferait un élément néon du thème cyberpunk, au risque
+        // de le faire ressembler à quelque chose d'interactif.
+        gravats: '#4a4d55'
     },
 
     // Rayon de flou (ctx.shadowBlur) des halos néon (phase 4A). Toujours posé puis
@@ -193,6 +200,16 @@ const Config = {
     // toute autre distance du jeu (voir la note sur ce facteur dans jeu.js).
     NOMBRE_TACHES_PAR_CASE_CHEMIN: 3,
     LARGEUR_BORDURE_ROUTE: 2,
+
+    // Cases inconstructibles près des chemins (contenu additionnel post-lancement) :
+    // une case autrement 'LIBRE' orthogonalement adjacente à un chemin a cette
+    // probabilité de devenir 'BLOQUEE' à la génération (Carte.genererCasesBloquees,
+    // via Aleatoire — même principe que NOMBRE_TACHES_PAR_CASE_CHEMIN ci-dessus,
+    // reproductible à graine égale), inconstructible en permanence pour toute la
+    // partie, y compris pour la Caserne. `gravats` (ci-dessous, Config.COULEURS) est
+    // ajoutée directement à la palette existante plutôt que dans un objet `PALETTE`
+    // séparé — même écart déjà documenté pour `neonBlanc`/`neonRouge` plus haut.
+    PROPORTION_CASES_BLOQUEES_PRES_CHEMIN: 0.3,
 
     // Caractéristiques de chaque type d'ennemi. La vitesse est en pixels par seconde,
     // à l'échelle de référence de la carte (20 colonnes) : sur une carte plus large ou

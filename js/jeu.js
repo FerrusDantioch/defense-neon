@@ -541,6 +541,11 @@ const Jeu = {
         // partie précédente n'aurait plus de sens sur la nouvelle carte générée
         // ci-dessus (même colonne/ligne, mais un état de grille différent).
         Interface.effacerAttenteConfirmationTactile();
+        // Choix du point de blocage d'une Caserne (contenu additionnel
+        // post-lancement) : même raison — une Caserne en attente d'un choix
+        // n'existe plus une fois la carte régénérée, sa référence deviendrait
+        // fantôme (ni dans Jeu.toursActives, ni sur une case encore valide).
+        Interface.caserneEnAttenteChoix = null;
 
         // La taille de case dépend du canvas déjà dimensionné ; redimensionner()
         // recalcule aussi les pixels du chemin et redessine tout.
