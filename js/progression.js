@@ -25,6 +25,16 @@ const Progression = {
     partiesJouees: 0,
     meilleureVagueSansFin: 0,
 
+    // Défi du jour (contenu additionnel post-lancement) : record distinct de
+    // meilleureVagueSansFin ci-dessus, propre à la seule graine du jour (voir
+    // Jeu.demarrerDefiDuJour, jeu.js, et calculerGraineDuJour, config.js) plutôt
+    // qu'au mode Sans fin toutes graines confondues. `date` (format AAAA-MM-JJ,
+    // voir dateDuJourChaine dans config.js) permet de détecter un nouveau jour et
+    // de remettre `meilleureVague` à zéro (voir enregistrerResultatDefi
+    // ci-dessous) sans dépendre d'une horloge serveur, puisque ce jeu n'en a
+    // aucune.
+    defiDuJour: { date: '', meilleureVague: 0 },
+
     // Vrai après un premier échec de lecture/écriture dans localStorage, pour
     // n'avertir qu'une seule fois par session plutôt qu'à chaque fin de partie (une
     // navigation privée stricte échouerait sinon en boucle).
@@ -55,6 +65,11 @@ const Progression = {
             this.xpTotale = donnees.xpTotale ?? 0;
             this.partiesJouees = donnees.partiesJouees ?? 0;
             this.meilleureVagueSansFin = donnees.meilleureVagueSansFin ?? 0;
+            // Absent des sauvegardes antérieures à cette fonctionnalité : repli sur
+            // la valeur par défaut déjà posée sur l'objet (voir plus haut) plutôt
+            // qu'un ?? sur le seul champ imbriqué, puisqu'une sauvegarde ancienne n'a
+            // pas donnees.defiDuJour du tout.
+            this.defiDuJour = donnees.defiDuJour ?? { date: '', meilleureVague: 0 };
         } catch (erreur) {
             this.avertirEchecStockage(erreur);
         }
@@ -70,7 +85,8 @@ const Progression = {
                 xpActuelle: this.xpActuelle,
                 xpTotale: this.xpTotale,
                 partiesJouees: this.partiesJouees,
-                meilleureVagueSansFin: this.meilleureVagueSansFin
+                meilleureVagueSansFin: this.meilleureVagueSansFin,
+                defiDuJour: this.defiDuJour
             };
             localStorage.setItem(Config.CLE_SAUVEGARDE, JSON.stringify(donnees));
         } catch (erreur) {
@@ -106,6 +122,26 @@ const Progression = {
         }
 
         return niveauxGagnes;
+    },
+
+    // Enregistre le résultat d'une partie de défi du jour (contenu additionnel
+    // post-lancement) : un nouveau jour (date ne correspondant plus à
+    // dateDuJourChaine(), voir config.js) réinitialise meilleureVague à zéro avant
+    // toute comparaison, puis la vague atteinte ne remplace le record que si elle
+    // le dépasse. N'écrit rien elle-même dans localStorage : Jeu.finaliserPartie
+    // (jeu.js) l'appelle juste avant son unique Progression.sauvegarder() de fin
+    // de partie, qui persiste donc ce champ en même temps que le reste — pas de
+    // sauvegarde disque supplémentaire ici, même principe que le reste de ce
+    // fichier (voir la note en tête).
+    enregistrerResultatDefi(vagueAtteinte) {
+        const dateActuelle = dateDuJourChaine();
+        if (this.defiDuJour.date !== dateActuelle) {
+            this.defiDuJour.date = dateActuelle;
+            this.defiDuJour.meilleureVague = 0;
+        }
+        if (vagueAtteinte > this.defiDuJour.meilleureVague) {
+            this.defiDuJour.meilleureVague = vagueAtteinte;
+        }
     },
 
     // Renvoie l'objet palier de Config.PALIERS_BONUS correspondant à cet id.

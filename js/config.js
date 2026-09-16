@@ -25,16 +25,38 @@ const Config = {
     // secours codé en dur. Garantit que le jeu ne reste jamais bloqué à générer une carte.
     MAX_TENTATIVES_GENERATION: 100,
 
-    // Chemins multiples (phase 6A) : nombre de chemins distincts générés sur chaque
-    // carte, chacun avec sa propre entrée et sortie (voir Carte.chemins dans carte.js).
-    // Un chemin peut croiser un autre, mais jamais se toucher lui-même — voir la note
-    // sur caseValidePourChemin dans carte.js.
-    NOMBRE_CHEMINS: 2,
+    // Chemins multiples (phase 6A) ; nombre variable par carte depuis le troisième
+    // chemin occasionnel (contenu additionnel post-lancement) : chaque chemin a sa
+    // propre entrée et sortie (voir Carte.chemins dans carte.js), peut croiser un
+    // autre chemin mais jamais se toucher lui-même — voir la note sur
+    // caseValidePourChemin dans carte.js. Le nombre réel de chemins d'une carte
+    // donnée (2 la plupart du temps, 3 occasionnellement) n'est plus une constante
+    // fixe mais une valeur calculée à chaque génération et stockée sur
+    // `Carte.nombreChemins` (voir Carte.generer) : `NOMBRE_CHEMINS_PAR_DEFAUT`
+    // ci-dessous, plus un chemin supplémentaire tiré via `Aleatoire` avec une
+    // probabilité de `PROBABILITE_TROISIEME_CHEMIN` — reproductible à graine égale,
+    // comme le reste de la génération.
+    NOMBRE_CHEMINS_PAR_DEFAUT: 2,
+    PROBABILITE_TROISIEME_CHEMIN: 0.25,
     // Écart minimal, en lignes, entre deux entrées (et indépendamment, entre deux
     // sorties) : purement visuel, pour qu'elles restent des points d'entrée/sortie
     // distincts à l'œil plutôt que de se chevaucher. N'influence jamais le tracé
     // lui-même (voir caseValidePourChemin), seulement le choix de la ligne de départ.
     ECART_MIN_ENTREES_SORTIES: 3,
+    // Nombre d'essais avant d'abandonner la recherche d'une ligne d'entrée (voir
+    // Carte.choisirLigneEspacee) ou d'une ligne de sortie (voir la boucle
+    // `essaiSortie` dans Carte.generer) suffisamment espacée des lignes déjà
+    // choisies, avant d'accepter le dernier tirage tel quel plutôt que de bloquer
+    // la génération. Relevé de 10 à 40 lors du troisième chemin occasionnel
+    // (contenu additionnel post-lancement) : à 10 essais, trouver une troisième
+    // ligne respectant ECART_MIN_ENTREES_SORTIES vis-à-vis de DEUX lignes déjà
+    // choisies (plutôt qu'une seule pour un deuxième chemin) échouait mesurablement
+    // souvent (jusqu'à des sorties de deux chemins sur la même ligne dans certains
+    // cas, une mesure sur 500 graines l'a révélé — voir « Troisième chemin
+    // occasionnel » dans ARCHITECTURE.md) ; 40 ramène ces échecs à un niveau
+    // négligeable sur le même échantillon, sans mesure perceptible sur le temps de
+    // génération (chaque essai reste une opération bon marché).
+    MAX_ESSAIS_ESPACEMENT_CHEMIN: 40,
 
     // Limite de tours constructibles (phase 6B) : une proportion plutôt qu'un nombre
     // fixe, puisque la surface réellement constructible d'une carte à deux chemins
@@ -89,14 +111,26 @@ const Config = {
         asphalte: '#23262e',
         bordureRoute: 'rgba(210, 214, 225, 0.5)',
         tacheAsphalte: 'rgba(0, 0, 0, 0.15)',
-        // Teinte distincte par chemin (phase 6A), indexée par cheminIndex : utilisée
-        // pour le flux animé le long du tracé et pour les marqueurs de départ/arrivée
-        // de ce chemin (qui remplacent, pour cet usage, `depart`/`arrivee` ci-dessus —
+        // Teinte distincte par chemin (phase 6A), indexée par
+        // `cheminIndex % cheminsNeon.length` (voir Carte.dessiner) : utilisée pour le
+        // flux animé le long du tracé et pour les marqueurs de départ/arrivée de ce
+        // chemin (qui remplacent, pour cet usage, `depart`/`arrivee` ci-dessus —
         // conservées telles quelles pour ne rien casser d'autre qui les lirait). C'est
         // ce qui rend un croisement lisible à l'œil : deux chemins qui se touchent
-        // restent chacun reconnaissables à leur couleur. Étendre ce tableau si
-        // Config.NOMBRE_CHEMINS dépasse un jour sa longueur.
-        cheminsNeon: ['#22e8ff', '#ff2df5'],
+        // restent chacun reconnaissables à leur couleur.
+        // Troisième chemin occasionnel (contenu additionnel post-lancement) : ce
+        // tableau passe à trois teintes pour couvrir `Carte.nombreChemins` quand il
+        // vaut 3 (voir Config.PROBABILITE_TROISIEME_CHEMIN ci-dessus). Rien à changer
+        // côté indexation : Carte.dessiner l'indexait déjà par un modulo sur la
+        // longueur de ce tableau depuis la phase 6A, jamais par un accès direct à
+        // l'index 0/1 codé en dur comme le supposait le prompt de cette phase — la
+        // généralisation à un troisième chemin n'a donc demandé aucun changement de
+        // logique ici, seulement une troisième couleur. Le prompt suggérait un objet
+        // `Config.PALETTE.teintesChemins` séparé — même écart, pour la même raison,
+        // que les précédentes références à un `Config.PALETTE` documentées ailleurs
+        // dans ce fichier et dans ARCHITECTURE.md : ce tableau existant continue de
+        // vivre dans `Config.COULEURS`, la seule palette de ce dépôt.
+        cheminsNeon: ['#22e8ff', '#ff2df5', '#ffe600'],
 
         // Décor d'arrière-plan en parallaxe (phase 7C, contenu additionnel
         // post-lancement) : deux couches de silhouettes de bâtiments visibles dans les
@@ -490,9 +524,82 @@ const Config = {
     // Son entièrement synthétisé (phase 4B, voir son.js) : aucun fichier audio.
     // Volume modéré par défaut, jamais à pleine échelle.
     SON_VOLUME_MAITRE: 0.3,
-    CLE_SAUVEGARDE_SON: 'defense-neon-son-actif'
+    CLE_SAUVEGARDE_SON: 'defense-neon-son-actif',
+
+    // Difficulté supérieure (contenu additionnel post-lancement, « phase 7I ») :
+    // réglage orthogonal au choix de durée (Rapide/Standard/Longue/Sans fin,
+    // Config.DUREES_PARTIE) — les deux se combinent librement, ce n'est jamais une
+    // cinquième durée. Ne s'applique qu'aux quatre durées standard ; le Défi du
+    // jour (Jeu.demarrerDefiDuJour, jeu.js) reste toujours en difficulté normale,
+    // sans exception, pour ne suivre qu'un seul record par date (voir
+    // Progression.defiDuJour). Les quatre multiplicateurs ci-dessous s'appliquent
+    // tous à `1` (sans effet) en difficulté normale, jamais recalculés eux-mêmes :
+    // `_PV` se combine MULTIPLICATIVEMENT, au même point de calcul, avec le
+    // multiplicateur de PV déjà appliqué selon le numéro de vague depuis la phase
+    // 1B (voir Vagues.demarrer) — donc valable pour tous les types d'ennemis
+    // indifféremment, boss (phase 7G) compris, sans formule séparée à écrire pour
+    // lui ; `_CREDITS`/`_INTEGRITE` réduisent la valeur de BASE des crédits/de
+    // l'intégrité de départ, avant d'ajouter les bonus permanents de niveau de
+    // joueur (phase 3B, voir Jeu.reinitialiser) — ces bonus gardent donc leur
+    // pleine valeur ajoutée malgré la difficulté ; `_XP` multiplie l'XP totale
+    // gagnée en fin de partie (voir Jeu.finaliserPartie), avant l'appel à
+    // Progression.ajouterXp.
+    DIFFICULTE_SUPERIEURE_MULTIPLICATEUR_PV: 1.4,
+    DIFFICULTE_SUPERIEURE_MULTIPLICATEUR_CREDITS: 0.7,
+    DIFFICULTE_SUPERIEURE_MULTIPLICATEUR_INTEGRITE: 0.7,
+    DIFFICULTE_SUPERIEURE_MULTIPLICATEUR_XP: 1.5
 };
 
 // Dernière ligne autorisée pour le chemin, calculée ici plutôt qu'écrite en dur pour
 // rester correcte si Config.LIGNES change (soit 10 pour une grille de 12 lignes).
 Config.LIGNE_MAX = Config.LIGNES - 2;
+
+// Défi du jour (contenu additionnel post-lancement) : une carte à graine fixe,
+// dérivée de la date locale de l'appareil, identique pour quiconque y jouerait ce
+// jour-là (voir Jeu.demarrerDefiDuJour, jeu.js). Le jeu n'ayant aucun serveur, il
+// n'existe aucune notion de « jour universel » à faire respecter — seulement
+// l'heure locale de qui joue, sans logique de fuseau horaire particulière. Trois
+// petites fonctions autonomes plutôt que des méthodes de Config (un simple objet
+// de constantes) : posées ici, dans le tout premier fichier chargé par
+// index.html, pour rester disponibles à tous les fichiers suivants sans lien de
+// dépendance inversé — en particulier Progression (progression.js, chargé avant
+// jeu.js) en a besoin pour comparer la date du dernier essai à la date actuelle
+// (voir Progression.enregistrerResultatDefi).
+
+// Encode la date du jour en un entier stable pour toute la journée (ex. 16
+// septembre 2026 → 20260916), directement utilisable comme graine par
+// Aleatoire.initialiser (aleatoire.js) : largement dans la plage d'un entier 32
+// bits non signé (>>> 0), sans risque de collision problématique avec une graine
+// aléatoire ordinaire (tirée depuis Date.now(), voir Aleatoire.initialiser) —
+// deux graines identiques produisent simplement la même carte, ce qui est
+// justement l'effet recherché pour un défi partagé par la date.
+function calculerGraineDuJour() {
+    const maintenant = new Date();
+    const annee = maintenant.getFullYear();
+    const mois = maintenant.getMonth() + 1;
+    const jour = maintenant.getDate();
+    return annee * 10000 + mois * 100 + jour;
+}
+
+// Date du jour au format AAAA-MM-JJ, pour la sauvegarde et la comparaison
+// (Progression.defiDuJour.date, voir progression.js) : triable et comparable par
+// simple égalité de chaîne, jamais utilisée pour l'affichage (voir
+// dateDuJourLisible juste en dessous).
+function dateDuJourChaine() {
+    const maintenant = new Date();
+    const annee = maintenant.getFullYear();
+    const mois = String(maintenant.getMonth() + 1).padStart(2, '0');
+    const jour = String(maintenant.getDate()).padStart(2, '0');
+    return `${annee}-${mois}-${jour}`;
+}
+
+// Date du jour au format JJ/MM/AAAA, pour l'affichage seul (écran d'accueil, voir
+// Interface.mettreAJourDefiDuJour) — jamais utilisée pour une comparaison, voir
+// dateDuJourChaine ci-dessus.
+function dateDuJourLisible() {
+    const maintenant = new Date();
+    const jour = String(maintenant.getDate()).padStart(2, '0');
+    const mois = String(maintenant.getMonth() + 1).padStart(2, '0');
+    const annee = maintenant.getFullYear();
+    return `${jour}/${mois}/${annee}`;
+}

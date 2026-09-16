@@ -34,6 +34,33 @@ const Jeu = {
     // Config.DUREES_PARTIE), réutilisée telle quelle par rejouer().
     idDureeActuelle: Config.DUREE_PAR_DEFAUT,
 
+    // Défi du jour (contenu additionnel post-lancement) : vrai seulement pendant
+    // une partie démarrée via demarrerDefiDuJour() ci-dessous, jamais via
+    // demarrerPartie()/rejouer() (reinitialiser() le remet systématiquement à
+    // false, comme le reste de l'état d'une partie, voir plus bas) — distingue une
+    // partie de défi d'une partie Sans fin ordinaire, qui réutilise pourtant la
+    // même entrée 'sansfin' de Config.DUREES_PARTIE pour nombreDeVagues. Lu une
+    // seule fois, dans finaliserPartie(), pour savoir si le résultat doit aussi
+    // alimenter Progression.defiDuJour en plus de meilleureVagueSansFin.
+    modeDefiDuJour: false,
+
+    // Difficulté supérieure (« phase 7I », contenu additionnel post-lancement) :
+    // réglage orthogonal au choix de durée (Rapide/Standard/Longue/Sans fin), les
+    // deux se combinant librement — ce n'est jamais une cinquième durée. Vrai
+    // seulement pour une partie démarrée via demarrerPartie(idDuree,
+    // difficulteSuperieure) avec ce second paramètre à `true` ; reinitialiser() le
+    // fixe explicitement à chaque partie (jamais laissé à sa valeur précédente),
+    // à `false` par défaut — en particulier pour demarrerDefiDuJour(), qui
+    // n'appelle jamais reinitialiser() avec un troisième argument : le Défi du
+    // jour reste ainsi toujours en difficulté normale, sans exception possible,
+    // conformément à la demande (un seul record à suivre par date, voir
+    // Progression.defiDuJour). Lu par Vagues.demarrer (multiplicateur de PV des
+    // ennemis) et par finaliserPartie() ci-dessous (multiplicateur d'XP) ; sa
+    // valeur au moment de finaliserPartie() est aussi copiée dans
+    // derniereProgression pour la mention affichée sur les écrans de fin (voir
+    // interface.js).
+    difficulteSuperieure: false,
+
     // Multiplicateur de vitesse de simulation, 1 ou 2 (voir la section vitesse dans
     // boucle()).
     vitesseJeu: 1,
@@ -442,6 +469,16 @@ const Jeu = {
             xpGagnee += Config.XP_BONUS_VICTOIRE;
         }
 
+        // Difficulté supérieure (contenu additionnel post-lancement) : multiplie
+        // l'XP totale de la partie, calculée ci-dessus, avant tout ajout à
+        // Progression — jamais un bonus séparé par vague, un seul arrondi final
+        // pour éviter qu'une accumulation d'arrondis par vague ne dérive du calcul
+        // en difficulté normale. Toujours false pour un défi du jour (voir la note
+        // sur Jeu.difficulteSuperieure), donc sans effet sur son propre calcul.
+        if (this.difficulteSuperieure) {
+            xpGagnee = Math.round(xpGagnee * Config.DIFFICULTE_SUPERIEURE_MULTIPLICATEUR_XP);
+        }
+
         const niveauAvant = Progression.niveau;
         const niveauxGagnes = Progression.ajouterXp(xpGagnee);
 
@@ -453,6 +490,16 @@ const Jeu = {
             Progression.meilleureVagueSansFin = Vagues.numeroVagueActuelle;
         }
 
+        // Défi du jour (contenu additionnel post-lancement) : record distinct de
+        // meilleureVagueSansFin ci-dessus, mis à jour EN PLUS de lui (jamais à sa
+        // place) quand la partie qui se termine était bien un défi du jour — la
+        // seule issue possible en mode Sans fin (et donc en défi, qui en réutilise
+        // les règles) est une défaite, donc ce bloc n'a en pratique d'effet que
+        // pour estVictoire === false, mais reste correct quelle que soit sa valeur.
+        if (this.modeDefiDuJour) {
+            Progression.enregistrerResultatDefi(Vagues.numeroVagueActuelle);
+        }
+
         // Seul moment où Progression écrit dans localStorage pendant que le jeu
         // tourne : jamais à chaque frame ni à chaque vague, voir la note en tête de
         // progression.js.
@@ -462,21 +509,33 @@ const Jeu = {
             xpGagnee,
             niveauAvant,
             niveauApres: Progression.niveau,
-            niveauxGagnes
+            niveauxGagnes,
+            // Copiée ici plutôt que relue directement depuis Jeu.difficulteSuperieure
+            // par Interface : la partie qui vient de se terminer garde ainsi sa
+            // propre mention correcte même si une nouvelle partie (donc une nouvelle
+            // valeur de Jeu.difficulteSuperieure) démarrait avant que l'écran de fin
+            // ne soit refermé — n'arrive pas en pratique (voir Jeu.etatPartie), mais
+            // même principe que xpGagnee/niveauAvant ci-dessus, un instantané plutôt
+            // qu'une référence live.
+            difficulteSuperieure: this.difficulteSuperieure
         };
     },
 
-    // Démarre une nouvelle partie dans la durée choisie à l'accueil.
-    demarrerPartie(idDuree) {
+    // Démarre une nouvelle partie dans la durée choisie à l'accueil, avec la
+    // difficulté choisie (contenu additionnel post-lancement, « phase 7I ») — vrai
+    // pour la difficulté supérieure, faux ou omis pour la difficulté normale.
+    demarrerPartie(idDuree, difficulteSuperieure) {
         this.idDureeActuelle = idDuree;
-        this.reinitialiser(idDuree);
+        this.reinitialiser(idDuree, undefined, difficulteSuperieure);
         this.etatPartie = 'enCours';
     },
 
-    // Relance une partie dans la même durée que la précédente, avec une nouvelle
-    // carte (aucune graine fournie à reinitialiser).
+    // Relance une partie dans la même durée ET la même difficulté que la
+    // précédente (contenu additionnel post-lancement : this.difficulteSuperieure
+    // est lue ici, juste avant que reinitialiser() ne la fixe à nouveau à la même
+    // valeur), avec une nouvelle carte (aucune graine fournie à reinitialiser).
     rejouer() {
-        this.reinitialiser(this.idDureeActuelle);
+        this.reinitialiser(this.idDureeActuelle, undefined, this.difficulteSuperieure);
         this.etatPartie = 'enCours';
     },
 
@@ -485,12 +544,36 @@ const Jeu = {
         this.etatPartie = 'accueil';
     },
 
+    // Démarre le défi du jour (contenu additionnel post-lancement) : mêmes règles
+    // que le mode Sans fin (phase 1D, nombreDeVagues = Infinity, seule la défaite
+    // peut y mettre fin), mais toujours sur la même carte pour quiconque y
+    // jouerait aujourd'hui — la graine du jour (calculerGraineDuJour, config.js)
+    // plutôt qu'une graine aléatoire. Réutilise directement l'entrée 'sansfin' de
+    // Config.DUREES_PARTIE pour nombreDeVagues plutôt que d'en ajouter une
+    // sixième : le défi n'est pas une durée de plus proposée à l'accueil (voir
+    // Interface, qui lui garde un encart séparé), seulement un second point
+    // d'entrée vers les mêmes règles, sur une carte fixée par la date.
+    demarrerDefiDuJour() {
+        this.idDureeActuelle = 'sansfin';
+        this.reinitialiser('sansfin', calculerGraineDuJour());
+        // Posé après reinitialiser() : celui-ci remet modeDefiDuJour à false comme
+        // le reste de l'état d'une partie (voir plus bas), donc il faut le
+        // repasser à vrai une fois la partie réinitialisée, pas avant.
+        this.modeDefiDuJour = true;
+        this.etatPartie = 'enCours';
+    },
+
     // Remet à zéro tout l'état d'une partie et fixe Jeu.nombreDeVagues d'après
     // idDuree. Si `graine` est omise, une graine aléatoire est tirée à partir de
-    // l'horloge (voir Aleatoire.initialiser).
-    reinitialiser(idDuree, graine) {
+    // l'horloge (voir Aleatoire.initialiser). `difficulteSuperieure` (contenu
+    // additionnel post-lancement, faux par défaut) est fixée explicitement à
+    // chaque appel, comme modeDefiDuJour plus bas — jamais laissée à sa valeur
+    // d'une partie précédente : demarrerDefiDuJour() n'en fournit jamais, ce qui
+    // la laisse toujours à false pour un défi du jour.
+    reinitialiser(idDuree, graine, difficulteSuperieure = false) {
         const duree = Config.DUREES_PARTIE.find(d => d.id === idDuree);
         this.nombreDeVagues = duree.nombreDeVagues;
+        this.difficulteSuperieure = difficulteSuperieure;
 
         Carte.generer(graine);
 
@@ -509,16 +592,32 @@ const Jeu = {
 
         this.ennemisActifs = [];
         this.toursActives = [];
+        // Difficulté supérieure (contenu additionnel post-lancement) : réduit la
+        // valeur de BASE des crédits/de l'intégrité de départ, avant d'ajouter les
+        // bonus permanents de niveau de joueur ci-dessous (phase 3B) — jamais après,
+        // pour que ces bonus gardent leur pleine valeur ajoutée malgré la difficulté,
+        // cohérent avec le principe déjà posé de les laisser actifs dans tous les
+        // modes. Multiplicateur à 1 (donc sans effet) en difficulté normale.
+        const multiplicateurCredits = this.difficulteSuperieure
+            ? Config.DIFFICULTE_SUPERIEURE_MULTIPLICATEUR_CREDITS : 1;
+        const multiplicateurIntegrite = this.difficulteSuperieure
+            ? Config.DIFFICULTE_SUPERIEURE_MULTIPLICATEUR_INTEGRITE : 1;
+
         // Les bonus permanents éventuellement débloqués par le joueur (phase 3B,
         // Progression.bonusCreditsDepart/bonusIntegriteDepart) s'ajoutent aux valeurs
         // de base dès le début de chaque partie, quelle que soit la durée choisie —
         // renvoient 0 tant que le palier correspondant n'est pas débloqué, donc ces
         // lignes n'ont aucun effet pour un joueur qui n'a pas encore atteint le niveau
         // requis.
-        this.credits = Config.CREDITS_DEPART + Progression.bonusCreditsDepart();
-        this.integrite = Config.INTEGRITE_DEPART + Progression.bonusIntegriteDepart();
+        this.credits = Math.round(Config.CREDITS_DEPART * multiplicateurCredits) + Progression.bonusCreditsDepart();
+        this.integrite = Math.round(Config.INTEGRITE_DEPART * multiplicateurIntegrite) + Progression.bonusIntegriteDepart();
         this.enPause = false;
         this.vitesseJeu = 1;
+        // Défi du jour (contenu additionnel post-lancement) : remis à false ici,
+        // comme le reste de l'état d'une partie — demarrerPartie()/rejouer() n'ont
+        // jamais besoin de le poser à true, seul demarrerDefiDuJour() le fait,
+        // juste après avoir appelé reinitialiser() (voir plus haut).
+        this.modeDefiDuJour = false;
 
         for (const projectile of this.poolProjectiles) {
             projectile.actif = false;

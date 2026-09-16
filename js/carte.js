@@ -1,7 +1,9 @@
-// carte.js — Génère Config.NOMBRE_CHEMINS chemins aléatoires valides du bord gauche
-// au bord droit de la grille (phase 6A ; un seul chemin avant), stocke l'état de
-// chaque case et sait dessiner le résultat sur le canvas (palette cyberpunk et halos
-// néon depuis la phase 4A, une teinte distincte par chemin depuis la phase 6A).
+// carte.js — Génère Carte.nombreChemins chemins aléatoires valides du bord gauche
+// au bord droit de la grille (phase 6A ; un seul chemin avant ; nombre de chemins
+// lui-même variable par carte depuis le troisième chemin occasionnel, contenu
+// additionnel post-lancement — voir Carte.generer), stocke l'état de chaque case et
+// sait dessiner le résultat sur le canvas (palette cyberpunk et halos néon depuis la
+// phase 4A, une teinte distincte par chemin depuis la phase 6A).
 
 const Carte = {
     // Grille d'état : grille[ligne][colonne] vaut 'LIBRE', 'CHEMIN', 'OCCUPEE' (une
@@ -23,7 +25,8 @@ const Carte = {
     // `tachesAsphalte` ci-dessous (converti en pixels réels seulement au dessin).
     gravats: [],
 
-    // Un élément par chemin (Config.NOMBRE_CHEMINS au total), chacun avec :
+    // Un élément par chemin (Carte.nombreChemins au total, voir plus bas), chacun
+    // avec :
     // - chemin : suite ordonnée des cases du chemin, du départ à l'arrivée,
     //   [{colonne, ligne}, ...] ;
     // - pointsDePassage : même information convertie en centres de pixels, recalculée
@@ -33,6 +36,19 @@ const Carte = {
     // Remplace, depuis la phase 6A, les anciennes propriétés `chemin`/`pointsDePassage`
     // /`caseDepart`/`caseArrivee` au niveau de Carte elle-même (un seul chemin).
     chemins: [],
+
+    // Nombre de chemins de la carte actuellement générée (contenu additionnel
+    // post-lancement, troisième chemin occasionnel) : calculé une seule fois par
+    // generer(), tout au début, avant de tracer le moindre chemin — remplace
+    // l'ancienne constante fixe Config.NOMBRE_CHEMINS (retirée), puisque ce nombre
+    // varie désormais d'une carte à l'autre (2 la plupart du temps, 3
+    // occasionnellement, voir Config.PROBABILITE_TROISIEME_CHEMIN). Toujours égal à
+    // `this.chemins.length` une fois la génération terminée ; conservé comme
+    // propriété à part entière (plutôt que de relire systématiquement
+    // `this.chemins.length` ailleurs) parce qu'il est déjà connu avant que
+    // `this.chemins` ne soit rempli, au moment précis où generer() en a besoin pour
+    // sa boucle de tracé.
+    nombreChemins: Config.NOMBRE_CHEMINS_PAR_DEFAUT,
 
     // Taille d'une case en pixels, fixée par jeu.js selon la taille du canvas. Toutes
     // les conversions pixels <-> case en dépendent.
@@ -196,24 +212,46 @@ const Carte = {
         return directionsPossibles[directionsPossibles.length - 1];
     },
 
+    // Plus petite distance entre `valeur` et chacune des lignes déjà choisies —
+    // Infinity si `lignesDejaChoisies` est vide (aucune contrainte, n'importe quelle
+    // valeur est alors « infiniment » bien espacée). Factorisée ici, utilisée à la
+    // fois par choisirLigneEspacee (entrées) et par la boucle d'espacement des
+    // sorties dans generer() ci-dessous (contenu additionnel post-lancement,
+    // troisième chemin occasionnel — voir la note sur ces deux appelants pour le
+    // contexte).
+    distanceMinimaleAuxLignes(valeur, lignesDejaChoisies) {
+        if (lignesDejaChoisies.length === 0) return Infinity;
+        return Math.min(...lignesDejaChoisies.map(l => Math.abs(l - valeur)));
+    },
+
     // Tire une ligne (entre LIGNE_MIN et LIGNE_MAX) espacée d'au moins
     // Config.ECART_MIN_ENTREES_SORTIES de toutes les lignes déjà choisies (entrées
     // entre elles, ou sorties entre elles — jamais les deux mélangées, voir les deux
-    // appels séparés dans generer() ci-dessous). Jusqu'à dix essais ; au-delà, on
-    // accepte la dernière ligne tirée telle quelle plutôt que de bloquer la
-    // génération pour un simple critère esthétique. Un tableau vide (premier chemin)
-    // valide toujours le premier tirage, puisque `every` sur un tableau vide vaut
-    // `true`.
+    // appels séparés dans generer() ci-dessous). Jusqu'à Config.MAX_ESSAIS_
+    // ESPACEMENT_CHEMIN essais ; au-delà, on retient le meilleur candidat rencontré
+    // parmi TOUS les essais (celui dont la distance minimale aux lignes déjà
+    // choisies est la plus grande — jamais seulement le dernier tiré, voir la note
+    // sur ce choix dans config.js) plutôt que de bloquer la génération pour un
+    // simple critère esthétique. Un tableau vide (premier chemin) valide toujours
+    // le premier tirage, puisque `lignesDejaChoisies.length === 0` renvoie toujours
+    // Infinity ci-dessus.
     choisirLigneEspacee(lignesDejaChoisies) {
-        let candidate;
-        for (let essai = 0; essai < 10; essai++) {
-            candidate = Aleatoire.entier(Config.LIGNE_MIN, Config.LIGNE_MAX);
-            const espacementRespecte = lignesDejaChoisies.every(
-                l => Math.abs(l - candidate) >= Config.ECART_MIN_ENTREES_SORTIES
-            );
-            if (espacementRespecte) return candidate;
+        let meilleureCandidate = null;
+        let meilleureDistance = -1;
+
+        for (let essai = 0; essai < Config.MAX_ESSAIS_ESPACEMENT_CHEMIN; essai++) {
+            const candidate = Aleatoire.entier(Config.LIGNE_MIN, Config.LIGNE_MAX);
+            const distance = this.distanceMinimaleAuxLignes(candidate, lignesDejaChoisies);
+
+            if (distance >= Config.ECART_MIN_ENTREES_SORTIES) return candidate;
+
+            if (distance > meilleureDistance) {
+                meilleureDistance = distance;
+                meilleureCandidate = candidate;
+            }
         }
-        return candidate;
+
+        return meilleureCandidate;
     },
 
     // Tente de tracer un chemin complet en une seule fois, depuis la ligne d'entrée
@@ -442,38 +480,63 @@ const Carte = {
     },
 
     // Point d'entrée de la génération : initialise l'aléatoire avec la graine donnée,
-    // puis génère Config.NOMBRE_CHEMINS chemins l'un après l'autre (chemin 0, puis
+    // détermine le nombre de chemins de cette carte précise (voir this.nombreChemins
+    // ci-dessus), puis génère ce nombre de chemins l'un après l'autre (chemin 0, puis
     // chemin 1, etc.), chacun avec sa propre entrée et sortie espacées des entrées et
     // sorties déjà choisies (Config.ECART_MIN_ENTREES_SORTIES), avant de reconstruire
     // la grille.
     generer(graine) {
         Aleatoire.initialiser(graine);
 
+        // Troisième chemin occasionnel (contenu additionnel post-lancement) : tiré
+        // ici, tout au premier tirage de cette génération (avant le moindre tracé de
+        // chemin ou choix de ligne d'entrée/sortie), via Aleatoire — donc
+        // reproductible à graine égale, comme le reste de la génération. La plupart
+        // des cartes gardent NOMBRE_CHEMINS_PAR_DEFAUT (2) chemins ; une carte sur
+        // quatre (PROBABILITE_TROISIEME_CHEMIN) en gagne un troisième.
+        this.nombreChemins = Config.NOMBRE_CHEMINS_PAR_DEFAUT
+            + (Aleatoire.nombre() < Config.PROBABILITE_TROISIEME_CHEMIN ? 1 : 0);
+
         const lignesEntreesChoisies = [];
         const lignesSortiesChoisies = [];
         this.chemins = [];
 
-        for (let index = 0; index < Config.NOMBRE_CHEMINS; index++) {
+        for (let index = 0; index < this.nombreChemins; index++) {
             const ligneEntree = this.choisirLigneEspacee(lignesEntreesChoisies);
 
             // La ligne de sortie n'est pas tirée indépendamment comme celle d'entrée :
             // elle émerge de la marche aléatoire (tenterTracerChemin), qui n'a aucune
             // notion de « ligne visée ». Pour lui appliquer la même règle d'espacement
             // sans changer l'algorithme de tracé lui-même (voir la note de phase 6A du
-            // prompt), on retrace jusqu'à dix chemins complets depuis la même
-            // ligneEntree et on retient le premier dont la sortie respecte
-            // l'espacement — ou, faute de mieux au bout de dix essais, le dernier
-            // tracé plutôt que de bloquer la génération.
+            // prompt), on retrace jusqu'à Config.MAX_ESSAIS_ESPACEMENT_CHEMIN chemins
+            // complets depuis la même ligneEntree et on retient le premier dont la
+            // sortie respecte l'espacement — ou, faute de mieux, le meilleur tracé
+            // rencontré parmi TOUS les essais (celui dont la sortie a la plus grande
+            // distance minimale aux sorties déjà choisies), plutôt que seulement le
+            // dernier tracé au hasard : ce dernier point s'est révélé nécessaire en
+            // testant le troisième chemin occasionnel (contenu additionnel
+            // post-lancement) — avec deux sorties déjà choisies à espacer plutôt
+            // qu'une seule, ne retenir que le dernier essai laissait passer des
+            // cartes à 3 chemins avec deux sorties sur la même ligne, même en
+            // augmentant fortement le nombre d'essais (voir la note sur
+            // MAX_ESSAIS_ESPACEMENT_CHEMIN dans config.js) — le problème n'était pas
+            // un manque d'essais mais le fait de jeter l'information des tentatives
+            // précédentes à chaque nouvel essai infructueux.
             let cheminRetenu = null;
-            for (let essaiSortie = 0; essaiSortie < 10; essaiSortie++) {
+            let meilleureDistanceSortie = -1;
+            for (let essaiSortie = 0; essaiSortie < Config.MAX_ESSAIS_ESPACEMENT_CHEMIN; essaiSortie++) {
                 const candidat = this.genererUnChemin(ligneEntree);
                 const ligneSortie = candidat[candidat.length - 1].ligne;
-                const espacementRespecte = lignesSortiesChoisies.every(
-                    l => Math.abs(l - ligneSortie) >= Config.ECART_MIN_ENTREES_SORTIES
-                );
-                if (espacementRespecte || essaiSortie === 9) {
+                const distance = this.distanceMinimaleAuxLignes(ligneSortie, lignesSortiesChoisies);
+
+                if (distance >= Config.ECART_MIN_ENTREES_SORTIES) {
                     cheminRetenu = candidat;
                     break;
+                }
+
+                if (distance > meilleureDistanceSortie) {
+                    meilleureDistanceSortie = distance;
+                    cheminRetenu = candidat;
                 }
             }
 

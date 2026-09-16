@@ -20,22 +20,34 @@ HTML/CSS/JS vanilla, sans module ES6 ni dépendance. Fichiers chargés dans cet 
   grille, contraintes de génération, poids de direction, couleurs, caractéristiques des
   ennemis, cadence des vagues, durées de partie proposées à l'accueil via
   `DUREES_PARTIE`). `Config.LIGNE_MAX` est calculé après l'objet, à partir de
-  `Config.LIGNES`.
+  `Config.LIGNES`. Trois fonctions autonomes (pas des méthodes de `Config`) posées à la
+  suite, `calculerGraineDuJour()`, `dateDuJourChaine()` et `dateDuJourLisible()`
+  (contenu additionnel post-lancement), servent au défi du jour — voir « Défi du jour
+  (contenu additionnel post-lancement) » ci-dessous. Les quatre
+  `DIFFICULTE_SUPERIEURE_MULTIPLICATEUR_*` (contenu additionnel post-lancement, « phase
+  7I ») s'ajoutent en toute fin d'objet — voir « Difficulté supérieure (phase 7I) »
+  ci-dessous.
 - **`js/aleatoire.js`** — objet `Aleatoire` : générateur pseudo-aléatoire à graine
   (mulberry32). `initialiser(graine)`, `nombre()`, `entier(min, max)`, `choix(tableau)`.
-- **`js/carte.js`** — objet `Carte` : génération et dessin de la carte, à
-  `Config.NOMBRE_CHEMINS` chemins distincts depuis la phase 6A (voir « Chemins
-  multiples (phase 6A) » ci-dessous pour le détail).
+- **`js/carte.js`** — objet `Carte` : génération et dessin de la carte, à plusieurs
+  chemins distincts depuis la phase 6A, en nombre variable par carte depuis le
+  troisième chemin occasionnel (contenu additionnel post-lancement — voir « Chemins
+  multiples (phase 6A) » et « Troisième chemin occasionnel (contenu additionnel
+  post-lancement) » ci-dessous pour le détail).
   État : `grille` (un quatrième état, `'BLOQUEE'`, depuis le contenu additionnel
   post-lancement traitant des cases inconstructibles — voir « Cases inconstructibles
   près des chemins » ci-dessous), `gravats` (idem, morceaux de débris par case
-  bloquée), `chemins` (un chemin unique avant la phase 6A), `tailleCase`,
+  bloquée), `chemins` (un chemin unique avant la phase 6A), `nombreChemins` (contenu
+  additionnel post-lancement, remplace l'ancienne constante fixe
+  `Config.NOMBRE_CHEMINS`, retirée), `tailleCase`,
   `segmentsBordure`/`tachesAsphalte` (phase 7B). Fonctions publiques :
   `generer(graine)`, `estConstructible(colonne, ligne)`, `estAdjacentAUnChemin(colonne,
   ligne)`/`candidatsBlocagePourCaserne(colonne, ligne)` (phase 7E, étendue depuis le
   contenu additionnel post-lancement pour renvoyer toutes les candidates plutôt que la
   seule première — voir « Tour Caserne (phase 7E) » ci-dessous), `pixelsVersCase(x, y)`,
-  `caseVersPixels(colonne, ligne)`, `recalculerPixels()`, `dessiner(ctx)`.
+  `caseVersPixels(colonne, ligne)`, `recalculerPixels()`, `dessiner(ctx)`,
+  `distanceMinimaleAuxLignes(valeur, lignesDejaChoisies)`/`choisirLigneEspacee(lignesDejaChoisies)`
+  (contenu additionnel post-lancement, voir « Troisième chemin occasionnel » ci-dessous).
 - **`js/ennemi.js`** — classe `Ennemi` : une unité qui suit son propre chemin
   (`Carte.chemins[this.cheminIndex].pointsDePassage`, `cheminIndex` fixé à la
   création — un seul chemin global avant la phase 6A) — ou, depuis la phase 7F,
@@ -69,12 +81,18 @@ HTML/CSS/JS vanilla, sans module ES6 ni dépendance. Fichiers chargés dans cet 
   boss plutôt que la vague normale tous les `Config.VAGUE_INTERVALLE_BOSS` paliers,
   phase 7G), `mettreAJour(dt, listeEnnemis)`
   (tire aussi, depuis la phase 6A, le `cheminIndex` de chaque ennemi généré via
-  `Aleatoire.entier(0, Config.NOMBRE_CHEMINS - 1)` — toujours le générateur à graine,
-  jamais `Math.random()`, pour que la répartition reste reproductible ; depuis la
+  `Aleatoire.entier(0, Carte.nombreChemins - 1)` (contenu additionnel post-lancement,
+  remplace `Config.NOMBRE_CHEMINS - 1`, retirée, puisque ce nombre varie désormais par
+  carte) — toujours le générateur à graine, jamais `Math.random()`, pour que la
+  répartition reste reproductible ; depuis la
   phase 7F, un tirage séparé décide d'abord si l'apparition est un drone, auquel cas
   ni type ni `cheminIndex` ne sont tirés — voir « Le triangle Flak/Caserne/Drone
   (phase 7F) » plus bas ; depuis la phase 7G, génère d'abord le boss en tête de file
-  d'une vague de ce type, avant même ce tirage), `reinitialiser()`.
+  d'une vague de ce type, avant même ce tirage), `reinitialiser()`. `demarrer(numero)`
+  combine aussi, depuis la difficulté supérieure (contenu additionnel post-lancement,
+  « phase 7I »), `Config.DIFFICULTE_SUPERIEURE_MULTIPLICATEUR_PV` au multiplicateur de
+  PV déjà calculé selon le numéro de vague, si `Jeu.difficulteSuperieure` est vrai —
+  voir « Difficulté supérieure (phase 7I) » ci-dessous.
 - **`js/tour.js`** — classes `Tour` et `Projectile` (phase 1C ; plusieurs types de
   tours depuis la phase 2A ; niveaux, amélioration et vente depuis la phase 2B ; dégâts
   de zone depuis la phase 7D ; type Caserne, sans tir, depuis la phase 7E).
@@ -134,7 +152,10 @@ HTML/CSS/JS vanilla, sans module ES6 ni dépendance. Fichiers chargés dans cet 
   depuis la phase 3B) : le seul état qui survit d'une partie à l'autre (niveau de
   joueur, XP, statistiques cumulées), persistant via `localStorage`, et le seul point
   du code qui consulte `Config.PALIERS_BONUS`. Voir « Progression du joueur
-  (phase 3A) » et « Bonus permanents (phase 3B) » ci-dessous.
+  (phase 3A) » et « Bonus permanents (phase 3B) » ci-dessous. `defiDuJour`
+  (contenu additionnel post-lancement, `{ date, meilleureVague }`) et
+  `enregistrerResultatDefi(vagueAtteinte)` s'ajoutent depuis le défi du jour — voir
+  « Défi du jour (contenu additionnel post-lancement) » ci-dessous.
 - **`js/particules.js`** — objet `Particules` (phase 4B) : petits effets visuels
   (flash de tir, impact, explosion), recyclés via un pool exactement comme les
   projectiles. Voir « Particules et son (phase 4B) » ci-dessous.
@@ -157,18 +178,32 @@ HTML/CSS/JS vanilla, sans module ES6 ni dépendance. Fichiers chargés dans cet 
   ci-dessous. `caserneEnAttenteChoix` (contenu additionnel post-lancement, voir « Choix
   du point de blocage » ci-dessous) intercepte `gererClicCanvas` en priorité sur toute
   autre interaction du plateau tant qu'un choix de blocage de Caserne reste en attente.
+  `mettreAJourDefiDuJour()` (contenu additionnel post-lancement) rafraîchit l'encart
+  dédié de l'écran d'accueil — voir « Défi du jour (contenu additionnel
+  post-lancement) » ci-dessous. `difficulteSuperieureSelectionnee`,
+  `selectionnerDifficulte(superieure)` (contenu additionnel post-lancement, « phase
+  7I ») : même principe que `idDureeSelectionnee`/`selectionnerDuree` pour le réglage
+  de durée, mais neutralisé (grisé) pendant toute interaction avec l'encart Défi du
+  jour — voir « Difficulté supérieure (phase 7I) » ci-dessous.
 - **`js/jeu.js`** — objet `Jeu` : point d'entrée, état de partie et boucle de simulation
   (l'affichage et les interactions vivent dans `interface.js`). État : `etatPartie`,
   `nombreDeVagues`, `idDureeActuelle`, `vitesseJeu`, `ennemisActifs`, `toursActives`,
   `poolProjectiles`, `integrite`, `credits`, `enPause`, `facteurEchelle` (voir « Mise à
   l'échelle des distances » ci-dessous), `limiteTours` (phase 6B, voir « Limite de
   tours (phase 6B) » ci-dessous), `derniereProgression` (résumé de la dernière
-  partie terminée pour l'affichage, voir phase 3A). Fonctions publiques :
+  partie terminée pour l'affichage, voir phase 3A), `modeDefiDuJour` (contenu
+  additionnel post-lancement, voir « Défi du jour (contenu additionnel
+  post-lancement) » ci-dessous), `difficulteSuperieure` (contenu additionnel
+  post-lancement, « phase 7I » — voir « Difficulté supérieure (phase 7I) »
+  ci-dessous). Fonctions publiques :
   `initialiser()`, `redimensionner()`, `initialiserPoolProjectiles()`, `dessinerTout()`,
   `boucle(horodatage)`, `simuler(dt)`, `resoudreCombatsCasernes(dt)` (phase 7E, voir
   « Tour Caserne (phase 7E) » ci-dessous), `verifierFinDePartie()`,
-  `finaliserPartie(estVictoire)`, `demarrerPartie(idDuree)`, `rejouer()`,
-  `retourAccueil()`, `reinitialiser(idDuree, graine)`.
+  `finaliserPartie(estVictoire)`, `demarrerPartie(idDuree, difficulteSuperieure)`,
+  `rejouer()`, `retourAccueil()`, `reinitialiser(idDuree, graine, difficulteSuperieure)`,
+  `demarrerDefiDuJour()` (contenu additionnel post-lancement, voir ci-dessous — force
+  toujours `difficulteSuperieure` à `false`, sans exception, voir « Difficulté
+  supérieure (phase 7I) »).
 - **`outils/serveur-statique.js`** — petit serveur HTTP Node sans dépendance, utilisé
   uniquement pour prévisualiser le jeu pendant le développement (référencé par
   `.claude/launch.json`, aussi bien à la racine du dossier `claude` qu'à la racine de
@@ -759,6 +794,15 @@ profondeur qu'une fonctionnalité additive ; ne touche en revanche à rien du re
 au-delà des points listés ci-dessous (construction, amélioration, vente, crédits,
 niveau de joueur, bonus, son, PWA restent inchangés — voir « Vérification » plus bas).
 
+**Mise à jour (contenu additionnel post-lancement) :** `Config.NOMBRE_CHEMINS` décrite
+dans cette section a depuis été retirée — le nombre de chemins d'une carte n'est plus
+une constante fixe mais une valeur calculée à chaque génération
+(`Carte.nombreChemins`, 2 la plupart du temps, 3 occasionnellement). Le reste de cette
+section documente fidèlement l'état de la phase 6A telle qu'elle a été livrée à
+l'époque (toujours 2 chemins) ; voir « Troisième chemin occasionnel (contenu
+additionnel post-lancement) » plus bas pour ce qui a changé depuis, y compris un défaut
+d'espacement révélé en généralisant à 3 lignes à espacer plutôt que 2.
+
 ### Nouvelle structure de données (`carte.js`)
 
 `Carte.chemins` remplace les anciennes `Carte.chemin`/`pointsDePassage`/`caseDepart`/
@@ -1104,7 +1148,9 @@ pas reprise ici tant qu'elle n'est pas confirmée pour chacune) :
   7F) » ci-dessous.
 - **Vagues de boss (« phase 7G »)** — fait, voir « Vagues de boss (phase 7G) »
   ci-dessous.
-- Mode difficile — non commencé.
+- **Difficulté supérieure (« phase 7I »)** — fait, voir « Difficulté supérieure
+  (phase 7I) » ci-dessous. C'est l'item « Mode difficile » qui figurait ici
+  jusque-là, sous son nom définitif une fois implémenté.
 - **Décor d'arrière-plan animé (« phase 7C » selon le prompt qui l'a introduite)** —
   fait, voir « Décor d'arrière-plan en parallaxe (phase 7C) » ci-dessous. Complété par
   une **image de fond fixe (« phase 7C bis »)** — fait, code et fichier réel tous deux en
@@ -1118,6 +1164,19 @@ pas reprise ici tant qu'elle n'est pas confirmée pour chacune) :
   blocage (contenu additionnel post-lancement) » ci-dessous.
 - **Cases inconstructibles près des chemins** — fait, voir « Cases inconstructibles
   près des chemins (contenu additionnel post-lancement) » ci-dessous.
+- **Défi du jour (« phase 7H »)** — fait, voir « Défi du jour (contenu additionnel
+  post-lancement) » ci-dessous. Numérotée « 7H » depuis le prompt de la phase 7I
+  suivante (voir juste au-dessus), qui s'y réfère explicitement — non reprise dans le
+  titre de sa propre section pour ne pas casser les nombreux renvois internes déjà en
+  place vers ce titre exact.
+- **Troisième chemin occasionnel** — fait, voir « Troisième chemin occasionnel
+  (contenu additionnel post-lancement) » ci-dessous. Sans lettre confirmée dans la
+  séquence 7A-7I (jamais mentionnée comme telle par aucun prompt reçu).
+
+Cette vague de contenu (sous-phases 7A à 7I) est désormais **entièrement close** : les
+neuf lettres ont chacune leur section dédiée ci-dessous, plus trois ajouts non lettrés
+(Choix du point de blocage de la Caserne, Cases inconstructibles près des chemins,
+Troisième chemin occasionnel) glissés au fil de l'eau entre elles.
 
 ## Décor d'arrière-plan en parallaxe (phase 7C)
 
@@ -2737,6 +2796,572 @@ n'a rapporté une file de cases éligibles entièrement bloquée d'un bout à l'
 constat à confirmer par du jeu réel plutôt que seulement par cette mesure statistique,
 mais rien dans les chiffres ne suggère un ajustement nécessaire dans l'immédiat.
 
+## Défi du jour (contenu additionnel post-lancement)
+
+Une carte à graine fixe, dérivée de la date du jour, identique pour quiconque y
+jouerait ce jour-là. Le jeu n'ayant aucun serveur, aucun classement partagé n'est
+possible : seul le meilleur résultat personnel du joueur pour la date du jour est
+suivi, sauvegardé localement comme le reste de `Progression`. Mêmes règles que le mode
+Sans fin (phase 1D) : pas de victoire possible, seule la vague atteinte compte comme
+score.
+
+### Graine et dates du jour (`config.js`)
+
+Trois fonctions autonomes plutôt que des méthodes de `Config` (un simple objet de
+constantes), posées à la suite de `Config.LIGNE_MAX` — dans le tout premier fichier
+chargé par `index.html`, pour rester disponibles à tous les fichiers suivants sans lien
+de dépendance inversé, en particulier `progression.js` (chargé avant `jeu.js`) qui en a
+besoin :
+
+- `calculerGraineDuJour()` encode la date locale de l'appareil en un entier stable pour
+  la journée (`annee * 10000 + mois * 100 + jour`, ex. 16 septembre 2026 → 20260916),
+  directement utilisable comme graine par `Aleatoire.initialiser` ;
+- `dateDuJourChaine()` renvoie la date du jour au format `AAAA-MM-JJ`, pour la
+  sauvegarde et la comparaison (`Progression.defiDuJour.date`) ;
+- `dateDuJourLisible()` renvoie la date du jour au format `JJ/MM/AAAA`, pour l'affichage
+  seul (encart de l'écran d'accueil).
+
+Aucune logique de fuseau horaire : l'heure locale de l'appareil suffit, puisqu'il n'y a
+pas de serveur à synchroniser et donc aucune notion de « jour universel » à faire
+respecter — deux joueurs dans des fuseaux différents peuvent voir un défi changer à des
+instants différents, ce qui est accepté tel quel (même principe déjà appliqué à
+`Aleatoire.initialiser`, qui tire sa graine aléatoire par défaut de l'horloge locale
+depuis la phase 1A).
+
+### Record distinct (`progression.js`)
+
+`Progression.defiDuJour` (`{ date, meilleureVague }`) est un second record, séparé de
+`Progression.meilleureVagueSansFin` (phase 3A) : celui-ci reste le meilleur score Sans
+fin toutes graines confondues, celui-là le meilleur score sur la graine du jour
+précisément — les deux sont mis à jour indépendamment, jamais l'un à la place de
+l'autre (voir plus bas). `charger()`/`sauvegarder()` le lisent/l'écrivent comme le reste
+de l'état persistant, avec un repli sur `{ date: '', meilleureVague: 0 }` si absent
+d'une sauvegarde antérieure à cette fonctionnalité.
+
+`Progression.enregistrerResultatDefi(vagueAtteinte)` : si `defiDuJour.date` ne
+correspond plus à `dateDuJourChaine()` (un nouveau jour a commencé depuis le dernier
+essai), remet `meilleureVague` à zéro et met à jour `date` avant toute comparaison ;
+sinon, ne remplace `meilleureVague` que si `vagueAtteinte` la dépasse — un essai moins
+bon qu'un essai précédent le même jour ne fait jamais reculer le record affiché.
+N'écrit rien elle-même dans `localStorage` : `Jeu.finaliserPartie` l'appelle juste avant
+son unique `Progression.sauvegarder()` de fin de partie (déjà en place depuis la phase
+3A), qui persiste donc ce champ en même temps que le reste — pas de sauvegarde disque
+supplémentaire ailleurs, même principe de sobriété d'écriture que le reste de ce
+fichier.
+
+### Lancement et fin de partie (`jeu.js`)
+
+`Jeu.modeDefiDuJour` (booléen) distingue une partie de défi d'une partie Sans fin
+ordinaire, alors que les deux réutilisent la même entrée `'sansfin'` de
+`Config.DUREES_PARTIE` pour `nombreDeVagues = Infinity` — pas de sixième entrée créée
+pour le défi, qui n'est pas une durée de plus proposée à l'accueil, seulement un second
+point d'entrée vers les mêmes règles sur une carte fixée par la date.
+`Jeu.reinitialiser` le remet systématiquement à `false`, comme le reste de l'état d'une
+partie (crédits, intégrité, etc.) : ni `demarrerPartie`, ni `rejouer` n'ont jamais
+besoin de le poser à `true`.
+
+`Jeu.demarrerDefiDuJour()` : fixe `idDureeActuelle` à `'sansfin'`, appelle
+`reinitialiser('sansfin', calculerGraineDuJour())`, repose `modeDefiDuJour` à `true`
+**après** cet appel (puisque `reinitialiser` vient de le remettre à `false`), puis passe
+`etatPartie` à `'enCours'` — même schéma que `demarrerPartie`/`rejouer`. Une fois la
+partie lancée, elle se comporte à tous égards comme une partie Sans fin ordinaire (HUD,
+vagues, tours, bonus permanents de niveau — phase 3B — tous actifs sans condition
+particulière) : rien dans la boucle de simulation elle-même n'a besoin de connaître
+`modeDefiDuJour`.
+
+`Jeu.finaliserPartie(estVictoire)` : juste après la mise à jour habituelle de
+`Progression.meilleureVagueSansFin` (phase 3A, inchangée), un bloc distinct appelle
+`Progression.enregistrerResultatDefi(Vagues.numeroVagueActuelle)` si et seulement si
+`Jeu.modeDefiDuJour` est vrai — en plus de cette mise à jour, jamais à sa place. En
+pratique, seule une défaite peut déclencher ce bloc (la seule issue possible en mode
+Sans fin, donc en défi qui en réutilise les règles), mais le code reste correct quelle
+que soit `estVictoire`. Le même unique appel à `Progression.sauvegarder()`, déjà en
+place depuis la phase 3A, persiste alors les deux records en une seule écriture disque.
+
+Si le joueur clique « Rejouer » depuis l'écran de défaite d'un défi du jour, la partie
+suivante redémarre en Sans fin ordinaire (graine aléatoire, `modeDefiDuJour` remis à
+`false` par `reinitialiser`) plutôt qu'en répétant le défi — comportement hérité
+directement de `rejouer()`, non modifié pour cette fonctionnalité : rejouer précisément
+le défi du jour repasse par le bouton dédié de l'accueil.
+
+### Interface (`interface.js`, `index.html`, `css/style.css`)
+
+Un encart séparé (`.defi-du-jour`), sous le bouton Jouer et sous les quatre boutons de
+durée existants (`#choix-duree`, phase 1D) plutôt que parmi eux — cadre et couleur
+d'accent propres (`#ff2d6b`, la teinte déjà associée au marqueur d'arrivée depuis la
+phase 4A, `Config.COULEURS.arrivee`) pour qu'il ne se lise jamais comme une cinquième
+durée parmi les autres au premier coup d'œil, conformément à la demande. Affiche la
+date du jour (`dateDuJourLisible()`), la meilleure vague déjà atteinte aujourd'hui
+(« Meilleure vague : 14 ») ou « Pas encore tenté aujourd'hui » si
+`Progression.defiDuJour.date` ne correspond pas à la date actuelle, et un bouton
+« Jouer le défi du jour ». Rafraîchi chaque frame par
+`Interface.mettreAJourDefiDuJour()`, appelée depuis `mettreAJourEcrans` dans le même
+bloc `etatPartie === 'accueil'` que `mettreAJourProgressionAccueil()` (même raison : à
+jour dès le retour à l'accueil après un essai, sans dépendre d'un rafraîchissement
+explicite au moment précis où la partie se termine). Le clic sur le bouton crée
+l'`AudioContext` via `Son.initialiser()` avant d'appeler `Jeu.demarrerDefiDuJour()`,
+exactement comme le bouton Jouer principal — il peut tout aussi bien être le tout
+premier clic de la session.
+
+**Correctif de hauteur minimale mobile découvert en testant** : l'ajout de cet encart a
+fait remonter la hauteur réelle du contenu de l'écran d'accueil à 557px à 375px de
+large (mesuré via `ecran-accueil.scrollHeight`), au-delà des 500px fixés en phase 3B
+(déjà un correctif similaire, voir « Confort en mode paysage sur mobile » et le
+commentaire dans `style.css`) — sans ajustement, « Niveau 1 » et le bouton Son se
+chevauchaient à nouveau en dessous de 480px de large, même cause que le bug déjà
+documenté et corrigé pour cette même règle. `@media (max-width: 480px) { .conteneur-canvas { min-height: ... } }`
+relevé de 500px à 600px en conséquence, mesuré puis vérifié sans chevauchement à 375px
+de large.
+
+### Vérification
+
+Testé dans le navigateur intégré (`outils/serveur-statique.js`, pas `file://` — un
+défi du jour n'a pas de contrainte particulière avec ce protocole au-delà de celle déjà
+documentée pour le service worker) :
+
+- deux lancements du défi le jour du test (16 septembre 2026) produisent tous deux la
+  graine `20260916` et donc la même carte (vérifié par instrumentation, `Aleatoire.graineActuelle === calculerGraineDuJour()`) ;
+- une première partie terminée à la vague 3 fait passer `Progression.defiDuJour` de
+  `{ date: '', meilleureVague: 0 }` à `{ date: '2026-09-16', meilleureVague: 3 }`, et
+  `localStorage` contient bien `meilleureVagueSansFin` et `defiDuJour` comme deux champs
+  séparés ;
+- une deuxième partie terminée à la vague 1 (moins bonne) laisse le record à 3 ; une
+  troisième terminée à la vague 5 (meilleure) le fait passer à 5 — confirme que le
+  record ne recule jamais et ne progresse que lorsqu'il est dépassé ;
+- retour à l'accueil après chaque essai : l'encart affiche bien « Meilleure vague : X »
+  à jour, le bouton de durée « Standard » sélectionné à l'accueil reste inchangé (le
+  défi ne modifie jamais `Interface.idDureeSelectionnee`) ;
+- **changement de date effectivement testé, pas seulement supposé fonctionner** : plutôt
+  que de modifier l'horloge réelle du système d'exploitation (action risquant d'affecter
+  d'autres processus de la machine hôte pour un test qui n'en a pas besoin), `Date` a
+  été redéfinie *dans la page* pour avancer d'un jour exact, exactement comme le
+  suggère le prompt (« en changeant la date de l'appareil pour tester ») mais sans
+  toucher à l'horloge réelle — un test équivalent pour du code qui ne lit jamais l'heure
+  autrement que via `new Date()`. Résultat, le 17 septembre simulé : `calculerGraineDuJour()`
+  vaut `20260917` (nouvelle carte), l'encart affiche « 17/09/2026 » et « Pas encore
+  tenté aujourd'hui » malgré le record de 5 de la veille encore en mémoire, une partie
+  lancée ce jour-là utilise bien la graine `20260917`, et une défaite à la vague 2 fixe
+  `defiDuJour` à `{ date: '2026-09-17', meilleureVague: 2 }` — reparti bien de zéro,
+  sans hériter du 5 de la veille — tandis que `Progression.niveau`, `xpTotale` et
+  `partiesJouees` continuent de progresser normalement à travers ce changement de jour,
+  confirmant qu'aucune autre donnée de progression n'est perdue ;
+- aucune régression sur le mode Sans fin classique (graine aléatoire, `modeDefiDuJour`
+  bien à `false`, `idDureeActuelle` à `'sansfin'` comme avant cette fonctionnalité) ni
+  sur les trois autres durées, jamais touchées par ce changement ;
+- aucune erreur console à aucune étape.
+
+**Piège découvert en testant, sans rapport avec la logique du défi elle-même** : le
+service worker (phase 5) sert le CSS/JS en cache-first — une fois installé, il continue
+de servir l'ancienne version de `style.css` après une modification sur disque tant que
+`CACHE_NOM` (`sw.js`) n'est pas incrémenté, masquant complètement le correctif de
+hauteur minimale ci-dessus pendant la vérification jusqu'à ce que `CACHE_NOM` soit
+relevé à `'defense-neon-v21'` — comportement strictement conforme à la stratégie
+documentée en phase 5, pas un bug, mais qui a nécessité un rechargement de plus une
+fois la version incrémentée pour que le nouveau service worker prenne effectivement le
+contrôle de la page (`self.clients.claim()`) avant de pouvoir vérifier le correctif.
+
+## Troisième chemin occasionnel (contenu additionnel post-lancement)
+
+Depuis la phase 6A, chaque carte générait toujours exactement `Config.NOMBRE_CHEMINS`
+(2) chemins. Ce nombre est désormais variable par carte : la plupart en gardent 2, une
+sur quatre en gagne un troisième — avec ses propres entrée et sortie, comme les deux
+premiers.
+
+### Configuration (`config.js`)
+
+`Config.NOMBRE_CHEMINS` est retiré, remplacé par `NOMBRE_CHEMINS_PAR_DEFAUT` (2) et
+`PROBABILITE_TROISIEME_CHEMIN` (0,25). `Config.COULEURS.cheminsNeon` passe de deux à
+trois teintes (`['#22e8ff', '#ff2df5', '#ffe600']`) pour couvrir un éventuel troisième
+chemin. Le prompt de cette phase suggérait un `PALETTE.teintesChemins` séparé — même
+écart, pour la même raison, que toutes les précédentes références à un `Config.PALETTE`
+documentées ailleurs dans ce fichier : ce tableau continue de vivre dans
+`Config.COULEURS`, la seule palette de ce dépôt, sous son nom déjà existant depuis la
+phase 6A plutôt que renommé sans raison fonctionnelle.
+
+### Génération (`carte.js`)
+
+`Carte.nombreChemins`, calculée tout au début de `generer()`, avant le moindre tracé :
+
+```js
+this.nombreChemins = Config.NOMBRE_CHEMINS_PAR_DEFAUT
+    + (Aleatoire.nombre() < Config.PROBABILITE_TROISIEME_CHEMIN ? 1 : 0);
+```
+
+Via `Aleatoire` (jamais `Math.random()`), donc reproductible à graine égale comme le
+reste de la génération — vérifié explicitement (voir « Vérification » plus bas), pas
+seulement supposé du fait d'utiliser le bon générateur. La boucle de tracé
+(`for (let index = 0; index < this.nombreChemins; index++)`) et `choisirLigneEspacee`
+(espacement des entrées/sorties, voir plus bas) généralisaient déjà correctement à un
+nombre variable de chemins sans aucune modification : `choisirLigneEspacee` vérifie
+l'espacement contre *toutes* les lignes déjà choisies (`lignesDejaChoisies.every(...)`),
+jamais contre une deuxième codée en dur — vérifié en lisant le code plutôt que supposé,
+conformément à la demande du prompt.
+
+### Défaut d'espacement découvert en testant, et son correctif
+
+Une première mesure sur 500 graines (`outils/verification-chemins.js`, étendu pour
+l'occasion — voir plus bas) a révélé que l'algorithme d'espacement des entrées/sorties,
+conçu et éprouvé pour deux lignes à espacer l'une de l'autre (phase 6A, jamais un échec
+en 500 graines à l'époque), échouait mesurablement plus souvent avec trois lignes : sur
+un échantillon de 500 graines, 43 cartes présentaient un écart inférieur à
+`Config.ECART_MIN_ENTREES_SORTIES` (3) entre au moins deux entrées ou deux sorties —
+dans les pires cas, deux sorties de chemins différents tombaient très exactement sur la
+même ligne (écart de 0), ce qui les aurait rendues visuellement indiscernables l'une de
+l'autre, en contradiction directe avec le critère d'acceptation de cette phase.
+
+**Cause identifiée** : `choisirLigneEspacee` (entrées) et la boucle `essaiSortie` dans
+`generer()` (sorties) essaient jusqu'à 10 fois de trouver une ligne suffisamment
+espacée, puis abandonnent en acceptant le dernier tirage tel quel, espacé ou non — un
+compromis délibéré et documenté depuis la phase 6A (« accepte la dernière ligne tirée
+telle quelle plutôt que de bloquer la génération pour un simple critère esthétique »).
+Avec une seule ligne déjà choisie (cas à 2 chemins), la probabilité qu'un tirage
+aléatoire échoue 10 fois de suite est infime. Avec deux lignes déjà choisies (la
+troisième ligne d'une carte à 3 chemins), la zone de la bande `LIGNE_MIN`-`LIGNE_MAX`
+(10 lignes de large) qui reste à la fois espacée des deux peut se réduire à une poignée
+de valeurs, voire — dans certaines configurations des deux premières lignes déjà
+choisies, par exemple deux sorties à exactement 5 lignes d'écart l'une de l'autre dans
+cette bande de 10 — à *aucune valeur du tout* : dans ces cas-là, aucun nombre de
+réessais ne peut réussir, la contrainte est mathématiquement insatisfaisable telle
+quelle. Confirmé en relevant `Config.MAX_ESSAIS_ESPACEMENT_CHEMIN` (nouvelle constante,
+remplace le 10 codé en dur aux deux endroits) de 10 à 200 à titre de test : le taux
+d'échec sur les sorties se stabilisait autour de 7/126 cartes à 3 chemins sans
+progresser davantage au-delà de 60 essais — la preuve que le problème n'était pas
+(seulement) un manque d'essais.
+
+**Correctif retenu** : `Config.MAX_ESSAIS_ESPACEMENT_CHEMIN` fixée à 40 (compromis
+raisonnable, chaque essai restant bon marché) **et**, plus déterminant, les deux
+boucles conservent désormais le meilleur candidat rencontré parmi *tous* les essais
+(celui dont la distance minimale aux lignes déjà choisies est la plus grande, via la
+nouvelle fonction `Carte.distanceMinimaleAuxLignes`) plutôt que seulement le tout
+dernier essayé au hasard — l'ancien code jetait l'information de chaque tentative
+infructueuse précédente à chaque nouvel essai. Résultat sur le même échantillon de 500
+graines : le pire écart observé, toutes paires de chemins confondues, passe de 0 (deux
+sorties identiques) à 2 — jamais moins, quelle que soit la configuration. Les 10 cartes
+sur 500 (2 %, soit environ 8 % des cartes à 3 chemins) qui restent en-dessous du seuil
+de 3 le sont toutes à distance 2, jamais 0 ni 1 : la meilleure configuration
+mathématiquement atteignable étant elle-même inférieure à 3 dans ces cas précis (bande
+de 10 lignes trop étroite pour garantir un espacement de 3 entre trois valeurs dans
+toutes les configurations possibles des deux premières), pas une limite de
+l'algorithme de recherche. Vérifié visuellement (voir plus bas) : même dans ce pire cas
+(écart de 2 lignes), les marqueurs d'entrée/sortie restent des cases bien distinctes,
+de couleurs différentes, jamais superposées — un espacement de 2 reste largement
+« suffisamment espacé » au sens du critère d'acceptation, qui vise la lisibilité
+visuelle plutôt qu'un nombre exact.
+
+Non retenu : élargir la bande `LIGNE_MIN`-`LIGNE_MAX` (changerait `Config.LIGNES`,
+hors périmètre de cette phase) ou réserver dès le placement des deux premières lignes
+un espace pour une éventuelle troisième (nécessiterait de faire dépendre le placement
+des premiers chemins du nombre total de chemins prévus, une dépendance nouvelle que le
+prompt de cette phase ne demandait pas et qui aurait rapproché l'algorithme de tracé
+d'une modification plus profonde que ce correctif ciblé).
+
+### Répercussions vérifiées ailleurs (aucune modification nécessaire)
+
+Conformément à la demande du prompt de vérifier plutôt que de supposer :
+
+- **Flux animé par chemin** (`Carte.dessiner`) : indexait déjà `Config.COULEURS.cheminsNeon`
+  par `index % Config.COULEURS.cheminsNeon.length` et bouclait déjà sur
+  `this.chemins.length` depuis la phase 6A — jamais un accès direct aux index 0/1 codés
+  en dur, contrairement à ce que supposait le prompt de cette phase (« remplace la
+  logique actuelle qui associait la teinte du chemin 0 ou 1 »). Une carte à 3 chemins se
+  colore donc nativement dans les trois teintes de `cheminsNeon`, sans aucun changement
+  de code au-delà de la troisième couleur elle-même — vérifié en jouant une partie sur
+  une carte à 3 chemins (voir capture dans la session de développement) : cyan, magenta
+  et jaune néon bien distincts, y compris aux croisements.
+- **Ciblage des tours** (`Tour.chercherCible`, `Ennemi.progression()`) : aucune
+  référence au nombre de chemins, `Carte.chemins[ennemi.cheminIndex]` fonctionne pour
+  n'importe quel index valide. Vérifié par un test synthétique (tour construite près de
+  l'entrée du troisième chemin d'une carte à 3 chemins, ennemi placé sur ce chemin,
+  `chercherCible` le verrouille correctement).
+- **Blocage par Caserne** (`Carte.candidatsBlocagePourCaserne`,
+  `Jeu.resoudreCombatsCasernes`) : la boucle `for (let cheminIndex = 0; cheminIndex <
+  this.chemins.length; ...)` bouclait déjà sur `this.chemins.length`, jamais une
+  constante. Vérifié en construisant une Caserne adjacente au troisième chemin d'une
+  carte à 3 chemins : unité posée, combat corps à corps contre un ennemi de ce chemin
+  fonctionnel (dégâts échangés dans les deux sens comme sur une carte à 2 chemins).
+- **Trottoirs** (`Carte.calculerSegmentsBordure`) : détection par simple voisinage de
+  grille (une case de chemin sans voisine de chemin de ce côté devient un trottoir),
+  entièrement indifférente au nombre de chemins ou à quel chemin passe où. Vérifié
+  visuellement sur une carte à 3 chemins, y compris aux croisements entre les trois.
+
+### Assignation d'un chemin à chaque ennemi (`vagues.js`)
+
+`Aleatoire.entier(0, Config.NOMBRE_CHEMINS - 1)` devient
+`Aleatoire.entier(0, Carte.nombreChemins - 1)`, aux deux endroits (ennemi ordinaire et
+boss). Vérifié par instrumentation sur une carte à 3 chemins réellement jouée (5 vagues
+simulées) : les ennemis générés se répartissent bien sur les trois chemins (19, 13 et
+17 apparitions respectivement sur l'échantillon testé), pas seulement sur les deux
+premiers.
+
+### `outils/verification-chemins.js` et `outils/simulation-equilibrage.js`
+
+Le premier, déjà écrit en phase 6A, référençait `Config.NOMBRE_CHEMINS` à plusieurs
+endroits (aurait produit `NaN`/`undefined` une fois la constante retirée) : adapté pour
+accumuler `totalChemins` au fil de la boucle plutôt que par un simple produit, et
+étendu avec une mesure d'espacement toutes paires confondues (entrées et sorties, sur
+les 2 ou 3 chemins de chaque carte) — c'est cette extension qui a permis de découvrir le
+défaut d'espacement documenté plus haut, la mesure historique du script (bornée au
+chemin 0 et au chemin 1 uniquement, conservée telle quelle pour ne pas casser sa
+continuité) ne l'aurait jamais révélé. Le second, déjà marqué obsolète depuis la phase
+6A (consommation d'`Aleatoire` différente d'un round de mesure à l'autre) référençait la
+même constante dans deux commentaires/textes d'affichage seulement, sans impact sur ses
+calculs : corrigés pour rester exacts, sans relancer de nouvelles mesures d'équilibrage
+(toujours hors périmètre, voir la note dans « Bonus permanents (phase 3B) »).
+
+### Vérification
+
+- **Proportion de cartes à 3 chemins** (`node outils/verification-chemins.js 2000`) :
+  511/2000 (25,6 %), et sur un second échantillon de 500 graines, 126/500 (25,2 %) —
+  proche des 25 % attendus (`Config.PROBABILITE_TROISIEME_CHEMIN`) dans les deux cas.
+  Sur les dix premières graines (1 à 10, l'échantillon demandé par le livrable) : **3
+  cartes à 3 chemins (graines 7, 8, 9), 7 cartes à 2 chemins** — cohérent avec 25 %
+  malgré la petite taille de l'échantillon.
+- **Structure et reproductibilité** : 0 carte en erreur, 0 échec de reproductibilité à
+  graine égale, chemin de secours jamais déclenché, sur 500 comme sur 2000 graines.
+- **Espacement** : voir la section dédiée plus haut — pire cas 2 lignes (jamais 0 ni 1)
+  après correctif, sur 10/500 cartes (2 %, ≈ 8 % des cartes à 3 chemins).
+- **Répartition des ennemis, ciblage, Caserne, trottoirs** : vérifiés en conditions
+  quasi réelles (partie simulée, constructions réelles) sur une carte à 3 chemins, voir
+  le détail dans les sections ci-dessus.
+- **Régression carte à 2 chemins** : partie jouée sur une graine à 2 chemins après ce
+  correctif (aléatoire et graine fixe), rendu et HUD identiques à avant cette phase.
+- **Aucune erreur console** à aucune étape de cette vérification.
+
+## Difficulté supérieure (phase 7I)
+
+Un réglage de difficulté, orthogonal au choix de durée déjà existant
+(Rapide/Standard/Longue/Sans fin, phase 1D) : les deux se combinent librement, ce
+n'est jamais une cinquième durée. Ne s'applique qu'aux quatre durées standard — le
+Défi du jour (phase 7H) reste toujours en difficulté normale, sans exception, pour ne
+suivre qu'un seul record par date plutôt que d'avoir à en distinguer deux pour la même
+carte.
+
+### Constantes (`config.js`)
+
+Quatre multiplicateurs, tous sans effet (`1`, implicitement) en difficulté normale :
+
+```js
+DIFFICULTE_SUPERIEURE_MULTIPLICATEUR_PV: 1.4,
+DIFFICULTE_SUPERIEURE_MULTIPLICATEUR_CREDITS: 0.7,
+DIFFICULTE_SUPERIEURE_MULTIPLICATEUR_INTEGRITE: 0.7,
+DIFFICULTE_SUPERIEURE_MULTIPLICATEUR_XP: 1.5
+```
+
+### État (`jeu.js`)
+
+`Jeu.difficulteSuperieure` (booléen), fixé explicitement à chaque appel de
+`Jeu.reinitialiser(idDuree, graine, difficulteSuperieure = false)` — jamais laissé à
+sa valeur d'une partie précédente, comme `modeDefiDuJour` juste au-dessus dans ce
+fichier. `demarrerPartie(idDuree, difficulteSuperieure)` transmet directement le
+réglage choisi à l'accueil ; `rejouer()` relit `this.difficulteSuperieure` (la valeur
+de la partie qui vient de se terminer) juste avant que `reinitialiser()` ne la
+réécrive à l'identique, pour relancer la même durée ET la même difficulté — même
+principe que `idDureeActuelle`. `demarrerDefiDuJour()` n'a **jamais** fourni ce
+troisième argument, à aucun moment de son implémentation (phase 7H) ni de celle-ci :
+il reste donc toujours à sa valeur par défaut `false`, quelle que soit l'option
+sélectionnée à l'accueil au moment du clic — vérifié explicitement (voir
+« Vérification » plus bas), pas seulement déduit de la lecture du code.
+
+### Points de vie des ennemis (`vagues.js`)
+
+`Vagues.demarrer(numero)` combine le multiplicateur de difficulté
+MULTIPLICATIVEMENT avec celui déjà appliqué selon le numéro de vague (`1 + (numero -
+1) * 0.15`, en place depuis la phase 1B), au même point de calcul :
+
+```js
+const multiplicateurDifficulte = Jeu.difficulteSuperieure
+    ? Config.DIFFICULTE_SUPERIEURE_MULTIPLICATEUR_PV : 1;
+this.multiplicateurPointsDeVie = (1 + (numero - 1) * 0.15) * multiplicateurDifficulte;
+```
+
+Ce multiplicateur unique est ensuite transmis tel quel à `new Ennemi(...)` pour
+absolument tout ennemi généré pendant la vague — les trois types classiques, le drone
+(phase 7F) et le boss (phase 7G) compris. Le boss profite donc nativement de la
+difficulté supérieure sans la moindre ligne de code dédiée à lui : vérifié en
+comparant ses PV avec/sans difficulté supérieure à vague égale (voir plus bas), pas
+seulement supposé du fait qu'il partage ce point de calcul.
+
+### Crédits et intégrité de départ (`jeu.js`)
+
+Dans `Jeu.reinitialiser()`, la réduction s'applique à la valeur de BASE, avant
+d'ajouter les bonus permanents de niveau de joueur (phase 3B) — jamais après, pour que
+ces bonus gardent leur pleine valeur ajoutée malgré la difficulté, cohérent avec le
+principe déjà posé de les laisser actifs dans tous les modes :
+
+```js
+const multiplicateurCredits = this.difficulteSuperieure
+    ? Config.DIFFICULTE_SUPERIEURE_MULTIPLICATEUR_CREDITS : 1;
+const multiplicateurIntegrite = this.difficulteSuperieure
+    ? Config.DIFFICULTE_SUPERIEURE_MULTIPLICATEUR_INTEGRITE : 1;
+this.credits = Math.round(Config.CREDITS_DEPART * multiplicateurCredits) + Progression.bonusCreditsDepart();
+this.integrite = Math.round(Config.INTEGRITE_DEPART * multiplicateurIntegrite) + Progression.bonusIntegriteDepart();
+```
+
+Vérifié avec un joueur de niveau 9 simulé (paliers `credits_depart` +20 et
+`integrite_bonus` +2 débloqués, phase 3B) : l'écart entre difficulté normale et
+supérieure reste exactement égal à l'écart sur la valeur de base (45 crédits, 6
+points d'intégrité — soit 150−105 et 20−14) dans les deux cas, confirmant que le
+bonus lui-même n'est jamais amputé.
+
+### Bonus d'XP (`jeu.js`, fin de partie)
+
+Dans `Jeu.finaliserPartie(estVictoire)`, juste avant l'appel à
+`Progression.ajouterXp(...)` :
+
+```js
+if (this.difficulteSuperieure) {
+    xpGagnee = Math.round(xpGagnee * Config.DIFFICULTE_SUPERIEURE_MULTIPLICATEUR_XP);
+}
+```
+
+Un seul arrondi final sur l'XP totale de la partie, jamais un bonus recalculé vague
+par vague : évite qu'une accumulation d'arrondis par vague ne dérive du calcul en
+difficulté normale. `derniereProgression.difficulteSuperieure` (nouveau champ) copie
+`Jeu.difficulteSuperieure` au moment de `finaliserPartie` — un instantané plutôt
+qu'une référence live, même principe que `xpGagnee`/`niveauAvant` déjà présents dans
+cet objet — pour que la mention affichée sur l'écran de fin (voir plus bas) reste
+correcte même si une partie suivante démarrait entre-temps.
+
+### Interface (`interface.js`, `index.html`, `css/style.css`)
+
+**Sélecteur sur l'écran d'accueil** : `#choix-difficulte`, deux boutons fixes
+(« Normal » / « Supérieure ») codés en dur dans `index.html` — contrairement aux
+boutons de durée ou de type de tour, générés depuis `Config` ailleurs dans ce
+fichier, un ensemble figé à exactement deux valeurs ne justifie pas une source de
+données séparée rien que pour ces deux boutons. Positionné sous la description de
+durée et au-dessus du bouton Jouer, dans un ensemble visuellement distinct (teinte
+d'accent rouge `#e74c3c` plutôt que le cyan de `.choix-duree`) de `#choix-duree` —
+jamais une cinquième case dans la même rangée, pour bien marquer que ce sont deux
+réglages indépendants qui se combinent librement. `Interface.difficulteSuperieureSelectionnee`
+(booléen, `false` par défaut) suit le même principe de persistance que
+`idDureeSelectionnee` : retenu pour la session, jamais réinitialisé entre deux
+parties par `Jeu.reinitialiser()` (qui ne le lit d'ailleurs jamais — seul le clic sur
+`boutonJouer` le transmet à `Jeu.demarrerPartie`), jamais persisté après un
+rechargement de page.
+
+**Neutralisation pendant l'interaction avec le Défi du jour** : `.defi-du-jour` n'a
+aucune notion de « sélection » dans ce dépôt (contrairement à un bouton de durée, elle
+n'est jamais un choix parmi d'autres — elle reste affichée en permanence à côté des
+quatre durées). Interprété ici comme « toute interaction directe avec cet encart »
+plutôt qu'un nouvel état de sélection persistant à inventer : `pointerenter`/
+`pointerleave` (survol souris) et `focusin`/`focusout` (navigation clavier) sur
+`.defi-du-jour` basculent une classe `difficulte-neutralisee` sur `#choix-difficulte`
+(opacité réduite) et désactivent ses deux boutons (`disabled`) tant que dure
+l'interaction. Purement une courtoisie visuelle : le sélecteur de difficulté n'a de
+toute façon aucun effet réel sur le Défi du jour, que ses boutons soient désactivés ou
+non — `Jeu.demarrerDefiDuJour()` ne lit jamais `Interface.difficulteSuperieureSelectionnee`
+(voir plus haut). Un tap tactile direct sur le bouton du défi ne laisse de toute façon
+aucun état de survol à neutraliser, donc rien de spécifique à prévoir pour ce cas.
+
+**Mention sur les écrans de fin** : `afficherResumeProgression(elementXp,
+elementNiveauSuperieur, elementDifficulte)` reçoit un troisième paramètre (élément
+`#difficulte-superieure-victoire`/`-defaite`), affiché uniquement si
+`Jeu.derniereProgression.difficulteSuperieure` est vrai. Pas d'indicateur permanent
+dans le HUD, qui reste inchangé depuis les phases précédentes — uniquement ce rappel
+ponctuel en fin de partie, comme demandé.
+
+**Correctif de mise en page découvert en testant** : l'ajout du sélecteur a fait
+remonter le contenu réel de l'écran d'accueil à 594px à 900px de large (mesuré via
+`ecran-accueil.scrollHeight`) — au-delà des 540px de hauteur du canvas à cette
+largeur, donc au-delà de la boîte `.conteneur-canvas` **même sur desktop**, pas
+seulement sous 480px de large comme les correctifs similaires des phases précédentes
+(défi du jour, notamment). La règle `@media (max-width: 480px) { .conteneur-canvas {
+min-height: ... } }`, régulièrement recalibrée phase après phase (420px → 500px →
+600px) à mesure que l'écran d'accueil grossit, ne pouvait plus suffire : le problème
+n'est plus propre au mobile. Corrigé plus durablement en généralisant
+`overflow-y: auto` sur `.ecran-superpose` (déjà utilisé, mais seulement à l'intérieur
+de la media query du mode paysage mobile, phase paysage) à la règle de base : un
+défilement interne à l'écran superposé absorbe désormais l'excédent de contenu quelle
+que soit la largeur, sans dépendre d'une valeur de `min-height` sans cesse
+recalibrée. La règle mobile à 600px est conservée (donne au canvas une hauteur
+généreuse sur téléphone), mais n'a plus besoin d'être parfaitement exacte : ce filet
+de sécurité général couvre le reste.
+
+### Vérification
+
+- **PV des ennemis** (critère 1) : à graine et numéro de vague identiques (vague 3),
+  un ennemi Standard passe de 130 à 182 PV et le boss de 2600 à 3640 PV en difficulté
+  supérieure — un ratio de 1,4 exactement dans les deux cas, confirmant que le boss
+  suit la même règle que les autres types sans code séparé.
+- **Crédits et intégrité de départ** (critère 2) : 150 → 105 crédits, 20 → 14
+  d'intégrité (facteur 0,7 exact) ; avec un joueur de niveau 9 simulé (bonus +20
+  crédits/+2 intégrité débloqués), l'écart entre les deux difficultés reste
+  rigoureusement égal à l'écart sur la seule base (45 crédits, 6 d'intégrité) — les
+  bonus permanents ne sont jamais amputés.
+- **XP gagnée** (critère 3) : une défaite identique (même graine, même vague
+  atteinte) simulée dans les deux difficultés rapporte 40 XP en normal contre 60 en
+  supérieure — un ratio de 1,5 exact.
+- **Neutralisation du sélecteur** (critère 4) : un `pointerenter` simulé sur
+  `.defi-du-jour` active bien `difficulte-neutralisee` et désactive les deux boutons
+  de difficulté ; un `pointerleave` les réactive. Vérifié aussi visuellement (capture
+  d'écran) et via l'écran d'accueil réel, boutons rouges bien distincts des boutons de
+  durée cyan.
+- **Combinaison libre durée × difficulté** (critère 5) : les huit combinaisons
+  possibles (4 durées × 2 difficultés) produisent chacune le bon `nombreDeVagues` et
+  les bons crédits/intégrité de départ, sans interférence croisée — vérifié
+  systématiquement plutôt que sur un seul cas. Le Défi du jour, lancé avec
+  `Interface.difficulteSuperieureSelectionnee` délibérément mis à `true` avant l'appel
+  pour ce test, démarre malgré tout avec `difficulteSuperieure: false` et les crédits/
+  intégrité de base — confirme l'absence d'exception, comme demandé.
+- **Régression difficulté normale** (critère 6) : à graine identique, une partie en
+  difficulté normale après cette phase produit exactement les mêmes crédits (150),
+  intégrité (20) et multiplicateur de PV par vague qu'avant — vérifié par comparaison
+  directe, pas seulement supposé du fait que les multiplicateurs valent 1 par défaut.
+- **Bout en bout via l'interface réelle** : clic sur « Supérieure » puis « Jouer »
+  (partie Standard) → HUD reflète bien 105 crédits/14 intégrité ; défaite déclenchée →
+  écran de défaite affiche « Difficulté supérieure » en rouge sous l'XP gagnée ;
+  « Rejouer » relance bien en difficulté supérieure (this.difficulteSuperieure relue
+  avant reinitialiser) ; retour à l'accueil, sélection « Normal », nouvelle partie,
+  nouvelle défaite → la mention est bien absente cette fois (vérifié après un frame
+  réel de la boucle de jeu, pas juste après l'appel direct à `verifierFinDePartie`,
+  qui ne suffit pas à rafraîchir l'affichage tant que `Interface.mettreAJourEcrans`
+  n'a pas encore tourné).
+- **Aucune erreur console** à aucune étape, y compris pendant le correctif de mise en
+  page (deux incréments de `CACHE_NOM`, `sw.js`, pour que le service worker cesse de
+  servir l'ancienne version du CSS pendant la vérification — même piège déjà rencontré
+  et documenté en phase 7H).
+
+### Le resserrement du budget de départ est-il jouable ?
+
+Testé sur une partie Standard complète (20 vagues), simulée par un petit script de
+jeu automatique plutôt que jouée manuellement clic par clic — voir la mise en garde
+sur cette méthode ci-dessous. Trois stratégies de construction/amélioration
+successivement testées (glouton multi-tours sans amélioration ; objectif de 5-8
+Canons puis amélioration du surplus ; concentration sur seulement 2 Mitrailleuses
+améliorées à fond) ont toutes échoué à boucler les 20 vagues, **y compris en
+difficulté normale** — confirmant que ce script ne représente pas un joueur compétent
+maîtrisant le placement, le mélange de types de tours (Flak en zone, Caserne en
+blocage) et le rythme d'amélioration, plutôt qu'un signal que le jeu de base serait
+déjà trop dur. La comparaison **relative** entre les deux difficultés, à stratégie
+strictement identique, est en revanche un signal fiable :
+
+| Stratégie | Défaite en normal | Défaite en supérieure |
+|---|---|---|
+| Concentration (2 tours) | vague 5 (4 vagues survécues) | vague 3 (2 vagues survécues) |
+| Objectif 5 Canons + amélioration | vague 4 (3 vagues survécues) | vague 3 (2 vagues survécues) |
+
+Dans les deux cas, la difficulté supérieure écourte la partie d'une à deux vagues par
+rapport à la même stratégie en difficulté normale, avec une intégrité et des crédits
+visiblement plus tendus dès la première vague (ex. intégrité 12 contre 18 après la
+vague 1 pour la stratégie « concentration ») — un écart net et perceptible, jamais un
+effondrement immédiat ou une mort instantanée. Compte tenu des trois multiplicateurs
+qui se cumulent (PV ennemis +40 %, budget de départ −30 %, sans compter que les
+crédits gagnés en jeu — récompenses de kill, bonus de fin de vague — restent, eux,
+inchangés par la difficulté et finissent par compenser en partie sur la durée), **ce
+resserrement me semble jouable plutôt que trop punitif** : sensiblement plus exigeant
+dès les premières vagues (il laisse moins de marge pour une erreur de placement
+initiale), mais proportionné aux autres multiplicateurs plutôt qu'un cran isolé qui
+casserait l'équilibre. Le bonus d'XP (+50 %) compense au moins la frustration d'une
+défaite plus rapide par une progression de joueur plus rapide.
+
+**Réserve honnête** : cette conclusion s'appuie sur une comparaison relative entre
+scripts de jeu simplifiés, pas sur une partie jouée manuellement avec une stratégie
+experte (placement réactif au tracé exact de la carte, mélange déjà tenu pour
+compétitif dans `outils/simulation-equilibrage.js`). Elle suffit à montrer que le
+resserrement est proportionné et n'introduit pas de rupture brutale, mais un test
+manuel par un joueur humain reste la meilleure confirmation avant de considérer les
+quatre multiplicateurs définitivement calibrés.
+
 ## Avancement (feuille de route)
 
 - **1A — Socle et carte** : fait. Génération, affichage, redimensionnement, reproductibilité
@@ -2991,3 +3616,87 @@ post-lancement » ci-dessus pour la liste complète des sous-phases à venir) :
   sur l'une d'elles (vérifié via `gererClicCanvas` de bout en bout — construction
   d'une autre tour et sélection d'une tour existante toutes deux sans effet pendant
   l'attente) — pas d'annulation possible, conformément à la demande.
+- **Défi du jour** : fait. Voir « Défi du jour (contenu additionnel post-lancement) »
+  ci-dessus : carte à graine dérivée de la date locale de l'appareil
+  (`calculerGraineDuJour`, `config.js`), identique pour toute partie lancée le même
+  jour, mêmes règles que le mode Sans fin (`nombreDeVagues = Infinity`, seule la
+  défaite y met fin). Record distinct (`Progression.defiDuJour`) du record Sans fin
+  toutes graines confondues (`meilleureVagueSansFin`, phase 3A), les deux mis à jour
+  indépendamment par `Jeu.finaliserPartie` en une seule écriture disque. Encart dédié
+  sur l'écran d'accueil, nettement séparé des quatre boutons de durée existants
+  (cadre et couleur d'accent propres) pour ne jamais se lire comme une cinquième
+  durée. Vérifié de bout en bout, changement de date de l'appareil compris (`Date`
+  redéfinie dans la page pour simuler le lendemain plutôt que l'horloge réelle du
+  système, pour ne pas risquer d'affecter d'autres processus de la machine hôte pour
+  un test qui n'en a pas besoin) : nouvelle carte et record repartant de zéro le jour
+  suivant, sans perte du niveau/XP/paliers du joueur. A révélé et corrigé au passage
+  un correctif de hauteur minimale mobile déjà posé en phase 3B (`.conteneur-canvas`
+  sous 480px de large, 500px devenus insuffisants avec ce nouvel encart, relevé à
+  600px) et nécessité d'incrémenter `CACHE_NOM` (`sw.js`, phase 5) pour que le
+  service worker cesse de servir l'ancienne version du CSS pendant la vérification —
+  comportement cache-first strictement conforme à sa spécification, pas un bug.
+  Aucune régression sur le mode Sans fin classique ni sur les trois autres durées ;
+  aucune erreur console à aucune étape.
+- **Troisième chemin occasionnel** : fait. Voir « Troisième chemin occasionnel
+  (contenu additionnel post-lancement) » ci-dessus : le nombre de chemins d'une carte
+  (`Carte.nombreChemins`, remplace l'ancienne constante fixe `Config.NOMBRE_CHEMINS`,
+  retirée) vaut 2 la plupart du temps, 3 sur une carte sur quatre
+  (`Config.PROBABILITE_TROISIEME_CHEMIN`, tiré via `Aleatoire` donc reproductible à
+  graine égale) — mesuré à 25,6 % sur 2000 graines et 25,2 % sur 500, proche des 25 %
+  attendus. Flux animé, ciblage des tours, blocage par Caserne et trottoirs
+  généralisaient déjà nativement à un nombre de chemins variable (vérifié plutôt que
+  supposé) ; seul `vagues.js` avait besoin de lire `Carte.nombreChemins` au lieu de
+  l'ancienne constante. **Défaut découvert en testant, corrigé** : l'algorithme
+  d'espacement des entrées/sorties (conçu pour deux lignes) échouait mesurablement
+  plus souvent avec trois lignes à espacer simultanément, jusqu'à produire deux
+  sorties de chemins différents sur la même ligne dans les pires cas (43/500 graines
+  affectées). Corrigé en conservant le meilleur candidat rencontré parmi tous les
+  essais plutôt que seulement le dernier tiré au hasard (`Carte.distanceMinimaleAuxLignes`,
+  nouvelle fonction partagée), plus un nombre d'essais relevé de 10 à 40
+  (`Config.MAX_ESSAIS_ESPACEMENT_CHEMIN`, nouvelle constante) : ramène le pire écart
+  observé de 0 (chevauchement complet) à 2 lignes, sur seulement 10/500 graines (2 %)
+  — la borne mathématique atteignable dans ces cas précis (bande `LIGNE_MIN`-`LIGNE_MAX`
+  trop étroite pour garantir un espacement de 3 entre trois valeurs dans toute
+  configuration), pas une limite de l'algorithme de recherche lui-même ; vérifié
+  visuellement que même ce pire cas reste largement lisible (marqueurs distincts,
+  jamais superposés). `outils/verification-chemins.js`, dont la mesure d'espacement
+  historique était bornée aux deux premiers chemins, étendu pour couvrir toutes les
+  paires — c'est cette extension qui a révélé le défaut, jamais visible autrement.
+  Reproductibilité à graine égale et structure des chemins vérifiées sans régression
+  sur 500 et 2000 graines (0 erreur, 0 échec de reproductibilité). Aucune régression
+  sur une carte à 2 chemins ; aucune erreur console.
+- **Difficulté supérieure (« phase 7I »)** : fait. Voir « Difficulté supérieure
+  (phase 7I) » ci-dessus : réglage à deux options (Normal/Supérieure) orthogonal au
+  choix de durée, jamais une cinquième durée — les deux se combinent librement
+  (vérifié sur les huit combinaisons possibles). Quatre multiplicateurs
+  (`Config.DIFFICULTE_SUPERIEURE_MULTIPLICATEUR_*`) : PV des ennemis ×1,4 (combiné
+  multiplicativement avec le multiplicateur déjà appliqué par vague depuis la phase
+  1B, au même point de calcul — le boss, phase 7G, en profite nativement sans code
+  séparé, vérifié PV exacts à l'appui) ; crédits/intégrité de départ ×0,7 sur la
+  seule valeur de base, les bonus permanents de niveau de joueur (phase 3B) gardant
+  leur pleine valeur ajoutée (vérifié avec un joueur de niveau 9 simulé) ; XP de fin
+  de partie ×1,5. Le Défi du jour (phase 7H) reste toujours en difficulté normale,
+  sans exception (`Jeu.demarrerDefiDuJour()` ne transmet jamais ce réglage) — vérifié
+  explicitement en le lançant avec « Supérieure » présélectionnée à l'accueil.
+  Sélecteur dédié sur l'écran d'accueil, neutralisé (grisé) pendant toute interaction
+  avec l'encart Défi du jour pour ne jamais laisser croire à un effet qu'il n'a pas.
+  Mention « Difficulté supérieure » sur les écrans de fin uniquement, aucun indicateur
+  HUD permanent ajouté. **A révélé, en testant, un débordement de l'écran d'accueil
+  désormais présent même sur desktop** (pas seulement sous 480px de large comme les
+  correctifs similaires des phases précédentes) : corrigé en généralisant
+  `overflow-y: auto` sur `.ecran-superpose` à toutes les largeurs plutôt que de
+  continuer à recalibrer une hauteur minimale mobile au coup par coup. **Resserrement
+  du budget jugé jouable plutôt que trop punitif** après une partie Standard complète
+  simulée sous plusieurs stratégies (voir le détail et la réserve méthodologique
+  ci-dessus) : écourte la partie d'une à deux vagues à stratégie identique, sans
+  rupture brutale. Aucune régression en difficulté normale ; aucune erreur console.
+
+**La vague de contenu additionnel post-lancement « phases 7A à 7I » est désormais
+entièrement close** : silhouettes robotiques (7A), chemins façon route (7B), décor en
+parallaxe (7C, plus son complément 7C bis), tour Flak (7D), tour Caserne (7E), triangle
+Flak/Caserne/Drone (7F), vagues de boss (7G), défi du jour (7H) et difficulté
+supérieure (7I) — plus les trois ajouts non lettrés glissés en cours de route (choix du
+point de blocage de la Caserne, cases inconstructibles près des chemins, troisième
+chemin occasionnel) et les correctifs ponctuels associés (transparence du plateau,
+confort paysage mobile, son du Canon, flux animé masqué en vague). Aucune sous-phase
+connue ne reste ouverte à ce stade.
