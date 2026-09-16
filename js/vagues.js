@@ -74,15 +74,35 @@ const Vagues = {
             this.tempsDepuisDerniereGeneration -= dt;
 
             if (this.tempsDepuisDerniereGeneration <= 0) {
-                const type = this.tirerTypeEnnemi(this.numeroVagueActuelle);
-                // Chemins multiples (phase 6A) : chaque ennemi se voit assigner l'un
-                // des Config.NOMBRE_CHEMINS chemins dès sa création, toujours via le
-                // générateur à graine (jamais Math.random()) pour que la répartition
-                // reste reproductible à graine égale — voir la note sur Aleatoire dans
-                // particules.js pour la raison inverse (pourquoi les particules, elles,
-                // n'y passent pas).
-                const cheminIndex = Aleatoire.entier(0, Config.NOMBRE_CHEMINS - 1);
-                listeEnnemis.push(new Ennemi(type, this.multiplicateurPointsDeVie, cheminIndex));
+                // Drone (phase 7F) : décidé par un tirage dédié, séparé de
+                // tirerTypeEnnemi (qui ne concerne que les trois types au sol
+                // assignés à un chemin) — à partir de VAGUE_APPARITION_DRONE,
+                // PROPORTION_DRONE des apparitions sont des drones plutôt que
+                // d'emprunter un chemin. Un seul Aleatoire.nombre() consommé dans un
+                // cas comme dans l'autre (jamais les deux à la fois), pour que la
+                // suite de tirages reste déterministe à graine égale quelle que soit
+                // l'issue de ce tirage.
+                const estDrone = this.numeroVagueActuelle >= Config.VAGUE_APPARITION_DRONE
+                    && Aleatoire.nombre() < Config.PROPORTION_DRONE;
+
+                if (estDrone) {
+                    // Ni cheminIndex ni position de départ liée à un chemin : le
+                    // drone tire lui-même son propre trajet en ligne droite dans son
+                    // constructeur (voir ennemi.js) à partir des seules dimensions de
+                    // la grille.
+                    listeEnnemis.push(new Ennemi('drone', this.multiplicateurPointsDeVie, null));
+                } else {
+                    const type = this.tirerTypeEnnemi(this.numeroVagueActuelle);
+                    // Chemins multiples (phase 6A) : chaque ennemi se voit assigner
+                    // l'un des Config.NOMBRE_CHEMINS chemins dès sa création, toujours
+                    // via le générateur à graine (jamais Math.random()) pour que la
+                    // répartition reste reproductible à graine égale — voir la note
+                    // sur Aleatoire dans particules.js pour la raison inverse
+                    // (pourquoi les particules, elles, n'y passent pas).
+                    const cheminIndex = Aleatoire.entier(0, Config.NOMBRE_CHEMINS - 1);
+                    listeEnnemis.push(new Ennemi(type, this.multiplicateurPointsDeVie, cheminIndex));
+                }
+
                 this.ennemisRestantsAGenerer--;
                 this.tempsDepuisDerniereGeneration = this.intervalleCourant;
             }

@@ -352,9 +352,11 @@ const Jeu = {
             // n'y en aura qu'un (voir la limite assumée dans Ennemi.deplacer :
             // plusieurs ennemis bloqués au même point s'y superposent visuellement
             // plutôt que de former une file, ce n'est délibérément pas résolu ici).
-            // PHASE 7F : un futur ennemi volant ne devra jamais pouvoir être choisi
-            // ici, exactement comme il ne devra jamais être retenu par le blocage
-            // dans Ennemi.deplacer.
+            // Un drone (phase 7F) ne peut jamais être choisi ici sans condition
+            // supplémentaire à écrire : son `cheminIndex` vaut toujours `null` (voir
+            // ennemi.js), qui ne peut jamais correspondre au `cheminIndex` bien réel
+            // de `unite` (0 ou plus) — exactement le même principe que le blocage
+            // dans Ennemi.deplacer, qu'un drone ne lit d'ailleurs jamais non plus.
             let ennemiProche = null;
             let distanceMinimale = Infinity;
             for (const ennemi of this.ennemisActifs) {

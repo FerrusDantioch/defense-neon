@@ -196,32 +196,23 @@ class Tour {
         return Math.round(this.investissementTotal * Config.VENTE_POURCENTAGE_REMBOURSEMENT);
     }
 
-    // Progression d'un ennemi le long de SON chemin, normalisée entre 0 (tout juste
-    // apparu) et 1 (sur le point d'arriver) — phase 6A. Avec plusieurs chemins,
-    // potentiellement de longueurs différentes, comparer les `indexPointDePassage`
-    // bruts entre deux ennemis n'a plus de sens : un ennemi à l'index 5 d'un chemin de
-    // 15 cases est en réalité bien plus avancé qu'un ennemi à l'index 5 d'un chemin de
-    // 40 cases. Protégée contre un chemin d'une seule case (longueur - 1 = 0) : cas
-    // extrême improbable vu Config.LONGUEUR_CHEMIN_MIN, mais qui produirait sinon une
-    // division par zéro (Infinity) plutôt qu'une progression exploitable.
-    progressionEnnemi(ennemi) {
-        const longueurChemin = Carte.chemins[ennemi.cheminIndex].pointsDePassage.length;
-        if (longueurChemin <= 1) return 0;
-        return ennemi.indexPointDePassage / (longueurChemin - 1);
-    }
-
     // Choisit l'ennemi à attaquer parmi ceux à portée. Ne réévalue pas la cible tant
     // que celle en cours reste valide (vivante, pas arrivée, toujours à portée) :
     // sans cette vérification, deux ennemis à progression égale feraient tourner le
     // canon de l'un à l'autre à chaque frame, ce qui donne un rendu tremblant. Compare
-    // la progression normalisée (voir progressionEnnemi ci-dessus) plutôt que l'index
-    // brut, pour rester correcte même entre deux ennemis venant de chemins différents.
+    // `ennemi.progression()` (phase 6A, généralisée en phase 7F pour couvrir aussi
+    // bien un ennemi au sol qu'un drone — voir ennemi.js, qui a remplacé l'ancienne
+    // Tour.progressionEnnemi ne sachant lire qu'un indexPointDePassage) plutôt que
+    // l'index brut, pour rester correcte même entre deux ennemis de nature différente.
     chercherCible(ennemis) {
         const portee = this.portee * Jeu.facteurEchelle;
 
-        // PHASE 7F : exclure ici les ennemis volants du ciblage des tours qui n'ont
-        // pas la capacité de les viser — le Flak sera la seule exception. Rien à
-        // faire pour l'instant, aucun ennemi volant n'existe encore.
+        // Un ennemi volant qu'une tour ne peut pas viser (Config.TYPES_TOURS[this.
+        // type].peutViserVolant, phase 7F) n'est jamais retenu par la boucle de
+        // recherche ci-dessous — this.cible ne peut donc, pour cette tour, jamais
+        // pointer vers un tel ennemi en premier lieu : ce filtre n'a besoin d'être
+        // posé qu'une seule fois, dans cette boucle, pas ici en plus pour la cible
+        // déjà verrouillée.
         if (this.cible && this.cible.vivant && !this.cible.arrive) {
             const distance = Math.hypot(this.cible.x - this.x, this.cible.y - this.y);
             if (distance <= portee) {
@@ -229,15 +220,23 @@ class Tour {
             }
         }
 
+        const peutViserVolant = Config.TYPES_TOURS[this.type].peutViserVolant;
+
         let meilleureCible = null;
         let meilleureProgression = -Infinity;
         for (const ennemi of ennemis) {
             if (!ennemi.vivant || ennemi.arrive) continue;
+            // Un ennemi volant qu'un type de tour ne sait pas viser est ignoré ici
+            // comme s'il n'existait pas (phase 7F) — le Flak (seul à avoir
+            // peutViserVolant à true) peut au contraire cibler indifféremment un
+            // ennemi au sol ou un drone, départagés par leur progression()
+            // respective comme n'importe quelle paire d'ennemis au sol.
+            if (ennemi.vole && !peutViserVolant) continue;
 
             const distance = Math.hypot(ennemi.x - this.x, ennemi.y - this.y);
             if (distance > portee) continue;
 
-            const progression = this.progressionEnnemi(ennemi);
+            const progression = ennemi.progression();
             if (!meilleureCible || progression > meilleureProgression) {
                 meilleureCible = ennemi;
                 meilleureProgression = progression;

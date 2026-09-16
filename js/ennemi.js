@@ -9,7 +9,8 @@
 const COULEURS_CSS_ENNEMIS = {
     cyan: '#00e5ff',
     jaune: '#f1c40f',
-    orange: '#ff8c1a'
+    orange: '#ff8c1a',
+    neonBlanc: '#e8f4ff'
 };
 
 // Teintes claires/sombres dérivées de la couleur de base de chaque type (phase 7A),
@@ -32,7 +33,9 @@ class Ennemi {
     // la vague en cours : il fait grossir les points de vie de base au fil des vagues
     // sans toucher à la vitesse ni à la récompense. `cheminIndex` (phase 6A) fixe une
     // fois pour toutes quel chemin de Carte.chemins cet ennemi suit — tiré par
-    // l'appelant (Vagues.mettreAJour) via Aleatoire, jamais changé ensuite.
+    // l'appelant (Vagues.mettreAJour) via Aleatoire, jamais changé ensuite ; sans
+    // objet pour un drone (phase 7F, voir plus bas), qui ne suit aucun chemin —
+    // l'appelant y passe alors `null`, jamais lu dans ce cas.
     constructor(type, multiplicateurPointsDeVie, cheminIndex) {
         const caracteristiques = Config.TYPES_ENNEMIS[type];
 
@@ -43,7 +46,9 @@ class Ennemi {
         this.recompense = caracteristiques.recompense;
         // Dégâts par seconde infligés à une unité de Caserne qui bloque cet ennemi
         // (phase 7E) — voir Jeu.resoudreCombatsCasernes, jeu.js. Sans effet en dehors
-        // de ce cas précis (jamais lu par le ciblage des tours à distance).
+        // de ce cas précis (jamais lu par le ciblage des tours à distance). Toujours 0
+        // pour un drone (Config.TYPES_ENNEMIS.drone), qui ne peut de toute façon
+        // jamais être bloqué par une Caserne — voir plus bas.
         this.degatsCorpsACorps = caracteristiques.degatsCorpsACorps;
         this.couleur = COULEURS_CSS_ENNEMIS[caracteristiques.couleur] || caracteristiques.couleur;
         // Conservé à part de this.couleur (déjà résolue en hexadécimal) pour
@@ -51,6 +56,44 @@ class Ennemi {
         // (COULEURS_CSS_ENNEMIS_CLAIR/_SOMBRE ci-dessus, phase 7A) sans avoir à
         // relire Config.TYPES_ENNEMIS à chaque frame dessinée.
         this.nomCouleur = caracteristiques.couleur;
+        // Vrai seulement pour le drone (phase 7F) — forcé en booléen explicite (!!)
+        // plutôt que de laisser `undefined` pour les trois types au sol : lu
+        // directement (`if (this.vole)`) par deplacer() ci-dessous et par
+        // Tour.chercherCible (tour.js), un booléen explicite documente mieux
+        // l'intention à la lecture qu'un undefined qui fonctionnerait tout aussi bien.
+        this.vole = !!caracteristiques.vole;
+
+        this.vivant = true;
+        this.arrive = false;
+
+        if (this.vole) {
+            // Drone (phase 7F) : aucune notion de chemin ni de point de passage —
+            // seulement un trajet en ligne droite tiré une seule fois ici, du bord
+            // supérieur de la grille vers le bord inférieur, sur une colonne
+            // aléatoire à chaque extrémité, indépendantes l'une de l'autre (rien
+            // n'oblige le drone à descendre à la verticale). Positions en pixels
+            // recalculées à partir des dimensions actuelles du plateau
+            // (Carte.caseVersPixels), comme n'importe quelle autre position du jeu.
+            // Via Aleatoire, pas Math.random() : ce tirage affecte le déroulement
+            // du jeu (par où le drone traverse le plateau), contrairement au décor
+            // purement scénographique de la phase 7C, qui lui reste sur
+            // Math.random() à dessein.
+            this.cheminIndex = null;
+            this.indexPointDePassage = null;
+
+            const colonneDepart = Aleatoire.entier(0, Config.COLONNES - 1);
+            const colonneArrivee = Aleatoire.entier(0, Config.COLONNES - 1);
+            this.pointDepart = Carte.caseVersPixels(colonneDepart, 0);
+            this.pointArrivee = Carte.caseVersPixels(colonneArrivee, Config.LIGNES - 1);
+
+            this.x = this.pointDepart.x;
+            this.y = this.pointDepart.y;
+            this.angleDirection = Math.atan2(
+                this.pointArrivee.y - this.y,
+                this.pointArrivee.x - this.x
+            );
+            return;
+        }
 
         this.cheminIndex = cheminIndex;
 
@@ -58,8 +101,6 @@ class Ennemi {
         // Carte.chemins[this.cheminIndex].pointsDePassage (0 = le tout premier
         // segment, entre le départ et la case suivante du chemin).
         this.indexPointDePassage = 0;
-        this.vivant = true;
-        this.arrive = false;
 
         const depart = Carte.chemins[this.cheminIndex].pointsDePassage[0];
         this.x = depart.x;
@@ -88,6 +129,33 @@ class Ennemi {
     deplacer(dt) {
         if (!this.vivant || this.arrive) return;
 
+        if (this.vole) {
+            // Drone (phase 7F) : trajectoire en ligne droite du point de départ vers
+            // la destination (tirés une seule fois à la construction, voir le
+            // constructeur), sans aucune notion de chemin ni de point de passage
+            // intermédiaire. En retournant ici avant même d'atteindre la
+            // vérification de blocage par une Caserne plus bas, un drone la traverse
+            // sans jamais la lire : aucune condition supplémentaire à écrire pour «
+            // l'ignorer », il ne passe simplement jamais par ce code, quelle que
+            // soit l'unité de Caserne présente sur la case qu'il survole.
+            const dx = this.pointArrivee.x - this.x;
+            const dy = this.pointArrivee.y - this.y;
+            const distanceRestante = Math.hypot(dx, dy);
+
+            this.angleDirection = Math.atan2(dy, dx);
+
+            const pas = this.vitesse * Jeu.facteurEchelle * dt;
+            if (pas >= distanceRestante) {
+                this.x = this.pointArrivee.x;
+                this.y = this.pointArrivee.y;
+                this.arrive = true;
+            } else {
+                this.x += (dx / distanceRestante) * pas;
+                this.y += (dy / distanceRestante) * pas;
+            }
+            return;
+        }
+
         const pointsDePassage = Carte.chemins[this.cheminIndex].pointsDePassage;
         const indexProchainPoint = this.indexPointDePassage + 1;
         const cible = pointsDePassage[indexProchainPoint];
@@ -105,9 +173,8 @@ class Ennemi {
         // par frame pour toutes les Casernes à la fois (Jeu.resoudreCombatsCasernes,
         // jeu.js), pas ici. Plusieurs ennemis bloqués au même point s'y superposeront
         // visuellement plutôt que de former une file organisée — limite assumée,
-        // voir ARCHITECTURE.md.
-        // PHASE 7F : un futur ennemi volant devra ignorer complètement cette
-        // vérification et ne jamais être retenu par un blocage au sol.
+        // voir ARCHITECTURE.md. Un ennemi volant (phase 7F) ne peut jamais atteindre
+        // ce point du code : il retourne plus haut avant même cette vérification.
         const bloquePar = Jeu.toursActives.find(tour =>
             tour.typeDegats === 'caserne'
             && tour.unite
@@ -159,6 +226,43 @@ class Ennemi {
         }
     }
 
+    // Progression normalisée entre 0 (tout juste apparu) et 1 (sur le point
+    // d'arriver), comparable entre un ennemi au sol et un drone malgré leurs modes
+    // de déplacement radicalement différents (phase 7F). Centralisée ici plutôt que
+    // calculée sur place dans Tour.chercherCible (comme avant cette phase, via
+    // l'ancienne méthode Tour.progressionEnnemi, supprimée) : un éventuel troisième
+    // mode de déplacement futur n'obligera ainsi qu'à étendre cette seule méthode,
+    // pas à retoucher le ciblage des tours une deuxième fois.
+    progression() {
+        if (this.vole) {
+            // Protégée contre un trajet de longueur nulle (départ et destination
+            // tirés sur la même colonne, donnant malgré tout une distance non nulle
+            // puisque les deux bords sont toujours à des lignes différentes — cas en
+            // pratique impossible ici, mais gardé par cohérence avec la même
+            // protection ci-dessous pour un chemin au sol) : renvoie 1 (déjà arrivé)
+            // plutôt qu'une division par zéro.
+            const distanceTotale = Math.hypot(
+                this.pointArrivee.x - this.pointDepart.x,
+                this.pointArrivee.y - this.pointDepart.y
+            );
+            if (distanceTotale === 0) return 1;
+
+            const distanceParcourue = Math.hypot(this.x - this.pointDepart.x, this.y - this.pointDepart.y);
+            return distanceParcourue / distanceTotale;
+        }
+
+        // Avec plusieurs chemins (phase 6A), potentiellement de longueurs
+        // différentes, comparer les `indexPointDePassage` bruts entre deux ennemis
+        // n'aurait pas de sens : un ennemi à l'index 5 d'un chemin de 15 cases est en
+        // réalité bien plus avancé qu'un ennemi à l'index 5 d'un chemin de 40 cases.
+        // Protégée contre un chemin d'une seule case (longueur - 1 = 0) : cas extrême
+        // improbable vu Config.LONGUEUR_CHEMIN_MIN, mais qui produirait sinon une
+        // division par zéro (Infinity) plutôt qu'une progression exploitable.
+        const longueurChemin = Carte.chemins[this.cheminIndex].pointsDePassage.length;
+        if (longueurChemin <= 1) return 0;
+        return this.indexPointDePassage / (longueurChemin - 1);
+    }
+
     // Dessine l'ennemi : une silhouette de châssis robotique vue de haut (phase 7A,
     // remplace le simple cercle de la phase 4A), orientée dans le sens du déplacement,
     // surmontée d'une barre de vie à deux couleurs. Le rayon caractéristique dépend
@@ -198,13 +302,11 @@ class Ennemi {
             this.dessinerChassisRapide(ctx, rayon);
         } else if (this.type === 'blinde') {
             this.dessinerChassisBlinde(ctx, rayon);
+        } else if (this.type === 'drone') {
+            this.dessinerChassisDrone(ctx, rayon);
         } else {
             this.dessinerChassisStandard(ctx, rayon);
         }
-        // PHASE 7F : quatrième châssis ici pour le drone volant — silhouette plus
-        // anguleuse et aérienne, pensée pour se distinguer d'un coup d'œil des trois
-        // véhicules au sol ci-dessus, toujours vue de haut et toujours sans
-        // shadowBlur (même raisonnement que ci-dessus).
 
         ctx.restore();
 
@@ -302,5 +404,43 @@ class Ennemi {
         ctx.beginPath();
         ctx.arc(rayon * 0.2, 0, rayon * 0.38, 0, Math.PI * 2);
         ctx.fill();
+    }
+
+    // Châssis Drone (phase 7F) : seul ennemi dont la forme n'a pas besoin
+    // d'adaptation à la vue de dessus (contrairement aux trois véhicules au sol
+    // ci-dessus, tous conçus pour cet angle en phase 7A) — un vrai quadricoptère vu
+    // du dessus est déjà naturellement cohérent avec cette caméra. Corps central
+    // rond, quatre courts bras en croix (en X plutôt qu'en + : plus naturel pour un
+    // quadricoptère vu du dessus), chacun terminé par un petit cercle représentant
+    // un rotor. `this.couleur` sert à la fois au corps et aux bras/rotors : ce
+    // châssis n'a pas de teinte claire/sombre dérivée comme les trois autres
+    // (COULEURS_CSS_ENNEMIS_CLAIR/_SOMBRE ci-dessus, volontairement incomplètes),
+    // un seul blanc glacé suffit à le rendre reconnaissable.
+    dessinerChassisDrone(ctx, rayon) {
+        ctx.fillStyle = this.couleur;
+        ctx.beginPath();
+        ctx.arc(0, 0, rayon * 0.4, 0, Math.PI * 2);
+        ctx.fill();
+
+        const longueurBras = rayon * 0.9;
+        const epaisseurBras = Math.max(1.5, rayon * 0.12);
+        const rayonRotor = rayon * 0.28;
+
+        ctx.strokeStyle = this.couleur;
+        ctx.lineWidth = epaisseurBras;
+        for (let i = 0; i < 4; i++) {
+            const angle = (i / 4) * Math.PI * 2 + Math.PI / 4;
+            const boutX = Math.cos(angle) * longueurBras;
+            const boutY = Math.sin(angle) * longueurBras;
+
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(boutX, boutY);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(boutX, boutY, rayonRotor, 0, Math.PI * 2);
+            ctx.fill();
+        }
     }
 }

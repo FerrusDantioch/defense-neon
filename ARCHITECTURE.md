@@ -34,16 +34,24 @@ HTML/CSS/JS vanilla, sans module ES6 ni dépendance. Fichiers chargés dans cet 
   `caseVersPixels(colonne, ligne)`, `recalculerPixels()`, `dessiner(ctx)`.
 - **`js/ennemi.js`** — classe `Ennemi` : une unité qui suit son propre chemin
   (`Carte.chemins[this.cheminIndex].pointsDePassage`, `cheminIndex` fixé à la
-  création — un seul chemin global avant la phase 6A). Propriétés : `x`, `y`, `type`,
-  `pointsDeVie`, `pointsDeVieMax`, `vitesse`, `cheminIndex`, `indexPointDePassage`,
-  `recompense`, `degatsCorpsACorps` (phase 7E, dégâts infligés à une unité de Caserne
-  qui le bloque), `vivant`, `arrive`, `angleDirection` (phase 7A). Méthodes :
-  `deplacer(dt)` (depuis la phase 7E, reste figé sans avancer si une unité de Caserne
-  vivante bloque le point qu'il s'apprête à atteindre — voir « Tour Caserne
-  (phase 7E) » ci-dessous), `subirDegats(montant)` (sans appelant avant la
-  phase 1C), `dessiner(ctx)`. Une petite table interne (`COULEURS_CSS_ENNEMIS`)
-  convertit les noms de couleur de `Config.TYPES_ENNEMIS` (ex. `'jaune'`) en couleurs
-  CSS valides pour le canvas.
+  création — un seul chemin global avant la phase 6A) — ou, depuis la phase 7F,
+  suit un trajet en ligne droite si `this.vole` est vrai (voir plus bas). Propriétés :
+  `x`, `y`, `type`, `pointsDeVie`, `pointsDeVieMax`, `vitesse`, `cheminIndex`,
+  `indexPointDePassage`, `recompense`, `degatsCorpsACorps` (phase 7E, dégâts infligés à
+  une unité de Caserne qui le bloque ; toujours 0 pour un drone), `vivant`, `arrive`,
+  `angleDirection` (phase 7A), `vole` (phase 7F, vrai seulement pour le drone) — plus,
+  pour un ennemi volant uniquement : `pointDepart`/`pointArrivee` (positions en pixels
+  du trajet en ligne droite, tirées une seule fois à la création), `cheminIndex`/
+  `indexPointDePassage` valant alors `null`. Méthodes : `deplacer(dt)` (depuis la
+  phase 7E, un ennemi au sol reste figé sans avancer si une unité de Caserne vivante
+  bloque le point qu'il s'apprête à atteindre — voir « Tour Caserne (phase 7E) »
+  ci-dessous ; depuis la phase 7F, un ennemi volant suit sa ligne droite et ignore ce
+  blocage entièrement, voir « Le triangle Flak/Caserne/Drone (phase 7F) » plus bas),
+  `subirDegats(montant)` (sans appelant avant la phase 1C), `progression()` (phase 7F,
+  généralise le calcul historique de `Tour.progressionEnnemi` — voir « Ciblage des
+  tours » plus haut — à un ennemi volant en plus d'un ennemi au sol), `dessiner(ctx)`.
+  Une petite table interne (`COULEURS_CSS_ENNEMIS`) convertit les noms de couleur de
+  `Config.TYPES_ENNEMIS` (ex. `'jaune'`) en couleurs CSS valides pour le canvas.
 - **`js/vagues.js`** — objet `Vagues` : décide combien d'ennemis apparaissent, de quel
   type et à quel rythme pour chaque vague, et détecte sa fin. État : `numeroVagueActuelle`,
   `enCours`, `ennemisRestantsAGenerer`, `intervalleCourant`,
@@ -52,7 +60,10 @@ HTML/CSS/JS vanilla, sans module ES6 ni dépendance. Fichiers chargés dans cet 
   Fonctions publiques : `demarrer(numero)`, `mettreAJour(dt, listeEnnemis)`
   (tire aussi, depuis la phase 6A, le `cheminIndex` de chaque ennemi généré via
   `Aleatoire.entier(0, Config.NOMBRE_CHEMINS - 1)` — toujours le générateur à graine,
-  jamais `Math.random()`, pour que la répartition reste reproductible), `reinitialiser()`.
+  jamais `Math.random()`, pour que la répartition reste reproductible ; depuis la
+  phase 7F, un tirage séparé décide d'abord si l'apparition est un drone, auquel cas
+  ni type ni `cheminIndex` ne sont tirés — voir « Le triangle Flak/Caserne/Drone
+  (phase 7F) » plus bas), `reinitialiser()`.
 - **`js/tour.js`** — classes `Tour` et `Projectile` (phase 1C ; plusieurs types de
   tours depuis la phase 2A ; niveaux, amélioration et vente depuis la phase 2B ; dégâts
   de zone depuis la phase 7D ; type Caserne, sans tir, depuis la phase 7E).
@@ -72,12 +83,13 @@ HTML/CSS/JS vanilla, sans module ES6 ni dépendance. Fichiers chargés dans cet 
   `Progression.multiplicateurDegats()`), `coutAmelioration()` (idem avec
   `Progression.multiplicateurCoutAmelioration()`, voir « Bonus permanents (phase 3B) »),
   `ameliorer()` (rafraîchit en plus les stats de l'unité d'une Caserne déjà vivante),
-  `montantVente()`, `progressionEnnemi(ennemi)` (phase 6A ; voir
-  « Chemins multiples (phase 6A) » ci-dessous), `chercherCible(ennemis)`
-  (conserve la cible en cours tant qu'elle reste valide et à portée, pour éviter que le
-  canon tremble entre deux ennemis à progression égale ; sinon retient l'ennemi à
-  portée dont `progressionEnnemi()` est la plus élevée — l'`indexPointDePassage` brut
-  avant la phase 6A, quand un seul chemin existait ; jamais appelée pour une Caserne),
+  `montantVente()`, `chercherCible(ennemis)` (conserve la cible en cours tant qu'elle
+  reste valide et à portée, pour éviter que le canon tremble entre deux ennemis à
+  progression égale ; sinon retient, parmi les ennemis à portée qu'elle a la capacité
+  de viser — `Config.TYPES_TOURS[this.type].peutViserVolant`, phase 7F, ignore
+  totalement un ennemi volant sinon — celui dont `ennemi.progression()` (ennemi.js,
+  remplace depuis la phase 7F l'ancienne `Tour.progressionEnnemi`, qui ne savait lire
+  qu'un `indexPointDePassage`) est la plus élevée),
   `mettreAJour(dt, ennemis, pool)` (bifurque entièrement vers `mettreAJourCaserne(dt)`
   pour ce type, phase 7E), `statsUniteAuNiveauActuel()`/`faireApparaitreUnite()` (phase
   7E, voir « Tour Caserne (phase 7E) » ci-dessous), `dessiner(ctx)` (formes distinctes
@@ -809,11 +821,14 @@ changer.
 
 ### Ciblage des tours (`tour.js`)
 
-`Tour.progressionEnnemi(ennemi)` renvoie
+`Tour.progressionEnnemi(ennemi)` (déplacée depuis vers `Ennemi.progression()` en phase
+7F — voir « Le triangle Flak/Caserne/Drone (phase 7F) » plus bas — pour rester valable
+aussi pour un drone, qui n'a ni `cheminIndex` ni `indexPointDePassage`) renvoyait
 `ennemi.indexPointDePassage / (Carte.chemins[ennemi.cheminIndex].pointsDePassage.length - 1)`,
 protégée contre un chemin d'une seule case (renvoie 0 plutôt qu'une division par zéro,
-cas extrême improbable vu `Config.LONGUEUR_CHEMIN_MIN`). `Tour.chercherCible` compare
-maintenant cette progression normalisée plutôt que `indexPointDePassage` brut : un
+cas extrême improbable vu `Config.LONGUEUR_CHEMIN_MIN`) — `Ennemi.progression()`
+conserve ce même calcul, à l'identique, pour un ennemi au sol. `Tour.chercherCible`
+compare cette progression normalisée plutôt que `indexPointDePassage` brut : un
 ennemi à l'index 5 d'un chemin de 15 cases (progression ≈ 0,36) est correctement préféré
 à un ennemi à l'index 5 d'un chemin de 40 cases (progression ≈ 0,13), alors que l'ancien
 critère (index brut) les aurait traités à égalité. Comportement vérifié à la fois en
@@ -2232,6 +2247,192 @@ construction (90) proche de celui du Flak (80) plutôt que d'un Canon (70) : ell
 suppose une amélioration assez rapide pour tenir sa fonction de blocage contre les
 ennemis les plus résistants, plutôt que d'être un mur fiable dès sa construction.
 
+## Le triangle Flak/Caserne/Drone (phase 7F)
+
+Dernière pièce du trio annoncé dès la phase 7D : un ennemi volant à trajectoire
+indépendante des chemins, que seul le Flak peut viser et que les unités de Caserne ne
+peuvent jamais arrêter. Contrairement aux sous-phases précédentes (chacune un ajout
+isolé), celle-ci généralise plusieurs mécanismes qui supposaient implicitement un
+déplacement sur chemin — un changement d'architecture, pas une simple entrée de plus
+dans `Config.TYPES_ENNEMIS`.
+
+### Ajouts à `config.js`
+
+`Config.COULEURS.neonBlanc` (`'#e8f4ff'`, teinte glacée) — répétée en dur dans la table
+`COULEURS_CSS_ENNEMIS` d'`ennemi.js`, comme les trois couleurs d'ennemi qui l'y ont déjà
+précédée, pour la même raison (cette table existe justement parce que ces noms ne sont
+pas tous des mots-clés CSS valides, indépendamment de `Config.COULEURS`). Nouveau type
+`Config.TYPES_ENNEMIS.drone` (`vole: true`, `degatsCorpsACorps: 0` — jamais lu en
+pratique puisqu'un drone ne peut jamais être bloqué, mais posé plutôt qu'omis pour que
+la propriété existe uniformément sur les quatre types), et
+`VAGUE_APPARITION_DRONE`/`PROPORTION_DRONE` pour son apparition dans les vagues.
+`peutViserVolant` ajouté explicitement à `Config.TYPES_TOURS`, `true` uniquement pour le
+Flak — la bascule qui active tout le reste de cette phase.
+
+### Généralisation de la progression (`ennemi.js`, `tour.js`)
+
+`Ennemi.progression()` remplace l'ancienne `Tour.progressionEnnemi(ennemi)` (supprimée) :
+même calcul qu'avant pour un ennemi au sol
+(`indexPointDePassage / (pointsDePassage.length - 1)`, protégé contre un chemin d'une
+seule case), et pour un drone `distanceParcourue / distanceTotaleDuTrajet` à partir de
+ses points de départ/destination (protégé de façon symétrique contre un trajet de
+longueur nulle). `Tour.chercherCible` appelle désormais `ennemi.progression()`
+directement plutôt que de faire ce calcul elle-même — centralisé une bonne fois, pour
+qu'un éventuel troisième mode de déplacement futur n'oblige plus à retoucher le ciblage
+des tours une deuxième fois.
+
+### Déplacement en ligne droite (`ennemi.js`)
+
+Un drone n'a ni `cheminIndex` ni point de passage : à la construction (branche dédiée
+dans le constructeur d'`Ennemi`, sur `caracteristiques.vole`), tire un point de départ
+sur le bord supérieur de la grille et un point de destination sur le bord inférieur
+(colonnes indépendantes l'une de l'autre), via `Aleatoire` — ce tirage affecte le
+déroulement du jeu (par où le drone traverse le plateau), contrairement au décor
+purement scénographique de la phase 7C qui reste, lui, sur `Math.random()`. `deplacer(dt)`
+retourne tout au début pour un ennemi volant, avant même d'atteindre la vérification de
+blocage par une Caserne plus bas dans la même méthode : une interpolation directe vers
+la destination, `this.arrive = true` une fois atteinte. C'est ce retour anticipé,
+`return` avant le code de blocage, qui garantit qu'un drone ignore une case bloquée sans
+condition supplémentaire à écrire pour « l'ignorer » — il ne passe simplement jamais par
+ce code.
+
+### Arrivée et intégrité : rien à modifier dans `jeu.js`
+
+Vérifié plutôt que supposé : le nettoyage de fin de frame dans `Jeu.simuler()`
+(`if (ennemi.arrive) { intégrité -= ... }` / `else if (!ennemi.vivant) { crédits += ... }`)
+ne lit que des propriétés déjà génériques (`arrive`, `vivant`, `recompense`, `couleur`,
+`type`), jamais `cheminIndex`. Un drone qui atteint sa destination y est donc traité
+exactement comme un ennemi au sol qui termine son chemin, sans une seule ligne ajoutée à
+cette boucle — confirmé par un test dédié (un drone livré à lui-même, sans aucune tour,
+perd de l'intégrité en touchant le bord inférieur de la grille).
+
+De même, `Jeu.resoudreCombatsCasernes` (phase 7E) exclut déjà un drone sans code
+supplémentaire : son filtre `ennemi.cheminIndex !== unite.cheminIndex` élimine
+naturellement tout ennemi volant, dont `cheminIndex` vaut toujours `null`, qui ne peut
+jamais correspondre au `cheminIndex` bien réel d'une unité de Caserne.
+
+### Silhouette (`ennemi.js`)
+
+Seul ennemi dont la forme n'a pas besoin d'adaptation à la vue de dessus (contrairement
+aux trois véhicules au sol de la phase 7A) : un vrai quadricoptère vu du dessus est déjà
+naturellement cohérent avec cet angle de caméra. Corps central rond, quatre bras courts
+en croix (en X, pas en +, plus naturel pour un quadricoptère vu du dessus), chacun
+terminé par un petit cercle représentant un rotor, entièrement dans
+`Config.COULEURS.neonBlanc` — pas de teinte claire/sombre dérivée comme les trois
+autres châssis, un seul blanc glacé suffit à le distinguer d'un coup d'œil de tout le
+reste du plateau.
+
+### Exclusion du ciblage et du blocage (`tour.js`, `ennemi.js`, `jeu.js`)
+
+`Tour.chercherCible` lit `Config.TYPES_TOURS[this.type].peutViserVolant` une seule fois
+par appel, puis ignore (`continue`) tout ennemi dont `vole` est vrai si ce champ n'est
+pas vrai pour cette tour — comme s'il n'existait pas. Le Flak, seule tour à l'avoir à
+`true`, cible indifféremment un ennemi au sol ou un drone via leur `progression()`
+respective, sans code séparé pour les deux cas. Le blocage par une Caserne (`Ennemi.
+deplacer`) et sa résolution (`Jeu.resoudreCombatsCasernes`) ignorent tous deux un drone
+nativement, comme détaillé plus haut — les deux commentaires `// PHASE 7F :` laissés en
+7D et 7E ont été retirés, remplacés par une explication de la résolution réelle à chacun
+des deux endroits.
+
+### Son (`son.js`)
+
+`Son.jouerMort('drone')` : onde carrée, aiguë (1800 Hz) et très brève (0,1 s) avec un
+glissando descendant vers 900 Hz — rompt avec le triangle/dents de scie « organique »
+des trois autres variantes pour un timbre nettement plus électronique, sans reprendre la
+tonalité de tir déjà utilisée par la Mitrailleuse (aussi une onde carrée, mais sans
+glissando et à une fréquence de départ différente).
+
+### Vérification
+
+Testé en navigateur (serveur local) :
+
+- **trajectoire** : un drone construit directement (`new Ennemi('drone', 1, null)`)
+  tire un point de départ sur la ligne 0 et une destination sur la dernière ligne, sur
+  des colonnes indépendantes — suivi sur 400 frames simulées : position et
+  `progression()` évoluent bien linéairement (0,00 → 0,16 → 0,32 → … → 0,96), `arrive`
+  devient vrai en fin de trajet, l'intégrité baisse de exactement
+  `Config.DEGATS_INTEGRITE_PAR_ENNEMI` au moment précis de l'arrivée ;
+- **ciblage exclusif** : les cinq types de tour placés directement sur un drone
+  (distance nulle, largement à portée) — seul le Flak lui trouve une cible
+  (`peutViserVolant: true`), les quatre autres (Mitrailleuse, Canon, Sniper, Caserne)
+  ne lui en trouvent aucune, comme s'il n'existait pas ;
+- **arbitrage par progression()** : un Flak à portée d'un drone à 90 % de son trajet et
+  d'un Standard à 0 % du sien cible le drone ; le scénario inversé (Standard à 97 %,
+  drone à 10 %) fait cibler le Standard — dans les deux sens, la comparaison directe des
+  deux `progression()` fonctionne, malgré la nature radicalement différente des deux
+  trajectoires ;
+- **traversée d'un blocage** : un drone lancé droit à travers le point de blocage d'une
+  Caserne (unité vivante) le traverse sans dévier ni ralentir — position toujours
+  différente d'une frame à l'autre, l'unité ne perd aucun point de vie, jusqu'à
+  l'arrivée du drone en bas de la grille ;
+- **mort et récompense** : un drone achevé (`subirDegats`) disparaît de la liste des
+  ennemis actifs, rapporte exactement `Config.TYPES_ENNEMIS.drone.recompense` (20)
+  crédits, et déclenche `Son.jouerMort('drone')` (confirmé par instrumentation :
+  oscillateur `'square'`) — le tout via le même nettoyage générique que n'importe quel
+  autre ennemi, sans code spécifique ;
+- **apparition naturelle en vague réelle** : `Vagues.demarrer(8)` (le seuil configuré)
+  fait bien apparaître un drone parmi les types générés, aux côtés des trois types au
+  sol, sur une vague qui se termine normalement (`Vagues.enCours` retombe à `false`,
+  tous les ennemis traités) ;
+- **régression des quatre types de tours, des ennemis au sol et de la Caserne** :
+  dégâts exacts (10/45/80/20) sur un ennemi au sol pour Mitrailleuse/Canon/Sniper/Flak,
+  blocage et combat corps à corps d'une Caserne toujours fonctionnels sur un ennemi au
+  sol — aucun changement de comportement malgré la généralisation de `progression()` et
+  le nouveau champ `vole` ;
+- **fluidité et robustesse** : 24 tours (dont 4 Casernes, chacune avec son unité) et 60
+  ennemis (40 au sol + 20 drones) simulés sur 300 frames — 2,0 ms en moyenne par frame,
+  aucune perte de fluidité mesurable, aucune erreur console dans ce scénario ni dans
+  aucun des précédents ;
+- **piège de test rencontré** : un premier test d'équilibrage (voir plus bas) donnait
+  0 drone abattu sur 20 avec un Flak apparemment bien placé — `Carte.tailleCase` valait
+  0 dans cet onglet de test (non réellement au premier plan, quirk déjà documenté
+  ailleurs dans ce fichier), annulant totalement la portée du Flak
+  (`portee * facteurEchelle = 110 * 0 = 0`). Refait sur un onglet neuf
+  (`tailleCase` confirmée non nulle avant de lancer le test) pour obtenir les chiffres
+  réels ci-dessous.
+
+### Vérification de l'équilibrage demandé
+
+Un Flak seul, positionné au centre exact de la grille, face à 20 drones tirés avec des
+points de départ/destination indépendants et aléatoires (comme en vague réelle) :
+**seulement 1 drone sur 20 abattu**, les 19 autres atteignant le bas de la grille intacts.
+Creusé plus loin avec un scénario contrôlé (un seul drone forcé à traverser exactement
+le centre du Flak, la meilleure interception géométriquement possible) : ce drone
+n'encaisse que 2 tirs (40 dégâts, à `degats: 20`) avant de sortir de portée et survit
+avec 10 PV sur 50. Le calcul explique pourquoi : à portée 110 (soit 123,75 px à l'échelle
+mesurée) et vitesse de drone 90 (101,25 px/s), une traversée parfaitement centrée ne
+reste à portée que ~2,44 s ; à la cadence de base du Flak (1,2 tir/s, un tir toutes les
+0,83 s), cela ne permet que 2 tirs, jamais 3 — et il en fallait 3 (60 dégâts à l'ancienne
+valeur) pour abattre les 50 PV d'un drone. Un Flak de niveau 1 ne pouvait donc
+structurellement jamais tuer un drone en un seul passage, même dans le meilleur cas
+géométrique possible — pas un bug (le ciblage, le tir et les dégâts fonctionnaient
+exactement comme demandé, vérifié séparément ci-dessus), mais un déséquilibre numérique
+entre la portée/cadence du Flak et les points de vie du drone.
+
+**Correction appliquée (contenu additionnel post-lancement, sur signalement de ce
+déséquilibre)** : `Config.TYPES_TOURS.flak.degats` relevé de `20` à `26`, seule valeur
+touchée — portée, cadence et coût du Flak inchangés, de même que PV/vitesse/récompense du
+drone, puisque le seul problème identifié était le seuil de dégâts par rapport aux PV du
+drone, pas la fréquence ou la portée de tir. Avec cette valeur, 2 tirs valent
+2 × 26 = 52 dégâts, au-dessus des 50 PV du drone : un passage à deux tirs devient une
+destruction garantie plutôt qu'une survie systématique à 10 PV. Revérifié après
+correction avec exactement les mêmes deux scénarios que ci-dessus :
+- **scénario contrôlé** (drone forcé au centre exact, meilleur cas géométrique) :
+  désormais tué au deuxième tir (52 ≥ 50), confirmé par test isolé (`Jeu.simuler` piloté
+  manuellement, comme pour les tests précédents) ;
+- **scénario réaliste** (20 drones à trajectoires indépendantes aléatoires contre un
+  Flak isolé) : **15 drones sur 20 abattus**, contre 1 sur 20 avant correction — un
+  Flak de niveau 1 devient donc efficace sans être infaillible : un drone qui ne
+  traverse qu'en bordure de portée (moins de 2,44 s dans la zone de tir) peut encore
+  passer avec un seul tir encaissé, ce qui correspond bien à l'équilibre demandé par le
+  prompt (« sans être totalement débordé, mais sans non plus les abattre sans effort »)
+  plutôt qu'à une garantie d'interception à 100 %.
+
+Aucune régression constatée sur les ennemis au sol ni sur les trois autres tours
+tirantes (Mitrailleuse, Canon, Sniper) : seule la valeur `degats` du Flak a changé, et
+aucun autre calcul (ciblage, portée, cadence, dégâts de zone) n'en dépend ailleurs dans
+le code.
+
 ## Avancement (feuille de route)
 
 - **1A — Socle et carte** : fait. Génération, affichage, redimensionnement, reproductibilité
@@ -2423,3 +2624,20 @@ post-lancement » ci-dessus pour la liste complète des sous-phases à venir) :
   ensuite — fidèle à l'algorithme demandé, documenté comme tel. Fluide à 6 Casernes
   actives contre 60 ennemis répartis sur deux chemins (0,67 ms/frame). Aucune
   régression sur les quatre types existants.
+- **Le triangle Flak/Caserne/Drone (« phase 7F »)** : fait. Voir « Le triangle
+  Flak/Caserne/Drone (phase 7F) » ci-dessus : ennemi volant à trajectoire indépendante
+  des chemins (ligne droite tirée via `Aleatoire`, du bord haut au bord bas), ciblable
+  par le seul Flak (`peutViserVolant`), ignorant totalement le blocage des Casernes.
+  `Ennemi.progression()` généralise le calcul de progression (sol et air) à la place de
+  l'ancienne `Tour.progressionEnnemi`. Arrivée/intégrité et exclusion du blocage
+  fonctionnent nativement, vérifié plutôt que supposé : aucune ligne ajoutée à
+  `Jeu.simuler` ni à `Jeu.resoudreCombatsCasernes`. Aucune régression sur les ennemis au
+  sol, les quatre autres tours ou la Caserne. **Déséquilibre mesuré, signalé puis
+  corrigé** (contenu additionnel post-lancement) : un Flak de niveau 1 ne pouvait
+  structurellement jamais abattre un drone en un seul passage, même dans le meilleur cas
+  géométrique (2 tirs possibles au mieux, 3 nécessaires à `degats: 20`) — 1 seul drone
+  sur 20 abattu dans un test avec trajectoires aléatoires réalistes contre un Flak isolé
+  bien placé. Corrigé en relevant `Config.TYPES_TOURS.flak.degats` à `26` (2 tirs = 52
+  dégâts > 50 PV) : le même test passe à 15 drones sur 20 abattus, sans toucher à la
+  portée, à la cadence ni au coût du Flak, ni aux PV/vitesse/récompense du drone. Voir
+  « Vérification de l'équilibrage demandé » ci-dessus pour le détail.
