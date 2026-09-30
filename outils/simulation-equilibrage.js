@@ -83,7 +83,8 @@ const FICHIERS_A_CHARGER = [
 function creerContexteJeu() {
     const sandbox = {
         console,
-        Jeu: { facteurEchelle: 1, nombreDeVagues: Infinity },
+        Jeu: { facteurEchelle: 1, nombreDeVagues: Infinity, toursActives: [] },
+        Interface: { afficherMessageConstruction: () => {} },
         // Stubs no-op (phase 4B) : Tour.tirer() (flash de tir + son) et
         // Projectile.mettreAJour() (impact) appellent Particules/Son, jamais chargés
         // ici puisqu'ils ne contiennent que du rendu canvas/audio sans DOM. La mort
@@ -104,6 +105,7 @@ function creerContexteJeu() {
             jouerAmelioration() {},
             jouerVente() {},
             jouerAlerte() {},
+            jouerAlerteBoss() {},
             jouerDefaite() {},
             jouerVictoire() {}
         }
@@ -362,6 +364,7 @@ function executerSimulation(jeuContext, { graine, nombreVagues, dt, jouerStrateg
         credits: Config.CREDITS_DEPART + Progression.bonusCreditsDepart(),
         integrite: Config.INTEGRITE_DEPART + Progression.bonusIntegriteDepart()
     };
+    Jeu.toursActives = etat.toursActives;
     const memoire = { tours: [], emplacementsUtilises: new Set() };
 
     // Filet de sécurité anti-boucle infinie : chaque vague se termine forcément en

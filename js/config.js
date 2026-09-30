@@ -36,8 +36,8 @@ const Config = {
     // ci-dessous, plus un chemin supplémentaire tiré via `Aleatoire` avec une
     // probabilité de `PROBABILITE_TROISIEME_CHEMIN` — reproductible à graine égale,
     // comme le reste de la génération.
-    NOMBRE_CHEMINS_PAR_DEFAUT: 2,
-    PROBABILITE_TROISIEME_CHEMIN: 0.25,
+    NOMBRE_CHEMINS_PAR_DEFAUT: 3,
+    PROBABILITE_TROISIEME_CHEMIN: 0,
     // Écart minimal, en lignes, entre deux entrées (et indépendamment, entre deux
     // sorties) : purement visuel, pour qu'elles restent des points d'entrée/sortie
     // distincts à l'œil plutôt que de se chevaucher. N'influence jamais le tracé
