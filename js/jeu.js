@@ -583,9 +583,11 @@ const Jeu = {
         // Jeu.limiteTours plus haut). À graine égale, Carte.generer produit toujours
         // la même grille, donc toujours la même limite.
         let casesLibres = 0;
-        for (const rangee of Carte.grille) {
-            for (const etat of rangee) {
-                if (etat === 'LIBRE') casesLibres++;
+        for (let ligne = 0; ligne < Carte.grille.length; ligne++) {
+            for (let colonne = 0; colonne < Carte.grille[ligne].length; colonne++) {
+                if (Carte.grille[ligne][colonne] === 'LIBRE' && Carte.estAdjacentAUnChemin(colonne, ligne)) {
+                    casesLibres++;
+                }
             }
         }
         this.limiteTours = Math.floor(casesLibres * Config.PROPORTION_LIMITE_TOURS);
