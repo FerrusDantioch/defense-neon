@@ -504,11 +504,8 @@ const Interface = {
             return;
         }
 
-        // Contrainte propre à la Caserne (phase 7E) : elle a besoin d'une case de
-        // chemin adjacente où poser son unité de blocage, sans quoi elle n'aurait
-        // aucun endroit où la faire apparaître. Vérifiée ici, uniquement pour ce
-        // type — les quatre autres tours n'ont aucune contrainte de ce genre.
-        if (this.typeSelectionne === 'caserne' && !Carte.estAdjacentAUnChemin(colonne, ligne)) {
+        // Contrainte (modification) : toutes les tours doivent être adjacentes à un chemin.
+        if (!Carte.estAdjacentAUnChemin(colonne, ligne)) {
             this.afficherMessageConstruction('Doit être adjacent à un chemin');
             return;
         }
@@ -602,15 +599,12 @@ const Interface = {
         // limite de tours atteinte — l'aperçu doit donc rester rouge sur cette case
         // même si elle reste visuellement libre, jusqu'à ce qu'une tour soit vendue.
         const limiteAtteinte = Jeu.toursActives.length >= Jeu.limiteTours;
-        // Phase 7E : même contrainte que tenterConstruireTour pour la Caserne — sans
-        // ce reflet dans l'aperçu, une case pourtant refusée au clic paraîtrait
-        // constructible (contour vert) au survol.
-        const adjacenceCaserneRespectee = this.typeSelectionne !== 'caserne'
-            || Carte.estAdjacentAUnChemin(colonne, ligne);
+        // Modification : toutes les tours doivent être adjacentes à un chemin.
+        const adjacenceRespectee = Carte.estAdjacentAUnChemin(colonne, ligne);
         const constructible = Carte.estConstructible(colonne, ligne)
             && Jeu.credits >= this.coutConstruction(this.typeSelectionne)
             && !limiteAtteinte
-            && adjacenceCaserneRespectee;
+            && adjacenceRespectee;
 
         ctx.strokeStyle = constructible ? '#2ecc71' : '#e74c3c';
         ctx.lineWidth = 2;
