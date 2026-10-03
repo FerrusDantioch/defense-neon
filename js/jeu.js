@@ -674,3 +674,13 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js')
         .catch((erreur) => console.warn('Service worker non disponible :', erreur));
 }
+
+// Stockage persistant : par défaut, le navigateur peut effacer de lui-même la copie
+// hors ligne (et la progression) s'il manque de place ou si le jeu est peu utilisé ;
+// le jeu ne s'ouvrirait alors plus sans réseau. persist() lui demande de les garder.
+// Un refus ne change rien au fonctionnement, d'où le .catch silencieux.
+if (navigator.storage && navigator.storage.persist) {
+    navigator.storage.persisted()
+        .then((dejaPersistant) => dejaPersistant || navigator.storage.persist())
+        .catch(() => {});
+}
