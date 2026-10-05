@@ -374,4 +374,142 @@ class Ennemi {
             const angle = (i / 8) * Math.PI * 2;
             const px = Math.cos(angle) * rayonX;
             const py = Math.sin(angle) * rayonY;
-            if (i === 0) ctx.moveTo(px, p
+            if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    // Châssis Standard (phase 7A) : hexagone légèrement allongé dans le sens de la
+    // marche, capteur circulaire clair pointant vers l'avant, deux chenilles
+    // latérales sombres de part et d'autre du corps — le châssis de référence, ni le
+    // plus véloce ni le plus massif des trois.
+    dessinerChassisStandard(ctx, rayon) {
+        ctx.fillStyle = this.couleur;
+        this.dessinerHexagone(ctx, rayon * 1.15, rayon * 0.85);
+
+        ctx.fillStyle = COULEURS_CSS_ENNEMIS_CLAIR[this.nomCouleur];
+        ctx.beginPath();
+        ctx.arc(rayon * 0.45, 0, rayon * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = COULEURS_CSS_ENNEMIS_SOMBRE[this.nomCouleur];
+        const largeurChenille = rayon * 1.5;
+        const hauteurChenille = rayon * 0.32;
+        ctx.fillRect(-largeurChenille / 2, rayon * 0.95 - hauteurChenille / 2, largeurChenille, hauteurChenille);
+        ctx.fillRect(-largeurChenille / 2, -rayon * 0.95 - hauteurChenille / 2, largeurChenille, hauteurChenille);
+    }
+
+    // Châssis Rapide (phase 7A) : profil effilé en flèche mousse (nez pointu, épaules
+    // larges, arrière tronqué), plus étroit et plus long que le Standard, sans
+    // chenilles — il glisse plutôt qu'il ne roule. Petit accent lumineux triangulaire
+    // à l'arrière, purement décoratif (repère de vitesse), jamais un halo au sens de
+    // la règle de performance de la phase 4A : voir la note sur l'absence de
+    // shadowBlur dans dessiner() ci-dessus, qui s'applique aussi à ce triangle.
+    dessinerChassisRapide(ctx, rayon) {
+        ctx.fillStyle = this.couleur;
+        ctx.beginPath();
+        ctx.moveTo(rayon * 1.6, 0);
+        ctx.lineTo(rayon * 0.2, rayon * 0.55);
+        ctx.lineTo(-rayon * 1.0, rayon * 0.3);
+        ctx.lineTo(-rayon * 1.0, -rayon * 0.3);
+        ctx.lineTo(rayon * 0.2, -rayon * 0.55);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = COULEURS_CSS_ENNEMIS_CLAIR[this.nomCouleur];
+        ctx.beginPath();
+        ctx.moveTo(-rayon * 1.0, rayon * 0.15);
+        ctx.lineTo(-rayon * 1.0, -rayon * 0.15);
+        ctx.lineTo(-rayon * 1.4, 0);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    // Châssis Blindé (phase 7A) : hexagone large et trapu (peu allongé, contrairement
+    // au Standard), deux plaques d'armure latérales sombres en léger surplomb du
+    // corps principal, et un capteur central plus gros que celui du Standard — plus
+    // large et plus « carré » à l'œil que les deux autres châssis.
+    dessinerChassisBlinde(ctx, rayon) {
+        ctx.fillStyle = this.couleur;
+        this.dessinerHexagone(ctx, rayon * 1.0, rayon * 1.05);
+
+        ctx.fillStyle = COULEURS_CSS_ENNEMIS_SOMBRE[this.nomCouleur];
+        const largeurPlaque = rayon * 0.5;
+        const hauteurPlaque = rayon * 0.36;
+        ctx.fillRect(rayon * 0.05, rayon * 0.95, largeurPlaque, hauteurPlaque);
+        ctx.fillRect(rayon * 0.05, -rayon * 0.95 - hauteurPlaque, largeurPlaque, hauteurPlaque);
+
+        ctx.fillStyle = COULEURS_CSS_ENNEMIS_CLAIR[this.nomCouleur];
+        ctx.beginPath();
+        ctx.arc(rayon * 0.2, 0, rayon * 0.38, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Châssis Drone (phase 7F) : seul ennemi dont la forme n'a pas besoin
+    // d'adaptation à la vue de dessus (contrairement aux trois véhicules au sol
+    // ci-dessus, tous conçus pour cet angle en phase 7A) — un vrai quadricoptère vu
+    // du dessus est déjà naturellement cohérent avec cette caméra. Corps central
+    // rond, quatre courts bras en croix (en X plutôt qu'en + : plus naturel pour un
+    // quadricoptère vu du dessus), chacun terminé par un petit cercle représentant
+    // un rotor. `this.couleur` sert à la fois au corps et aux bras/rotors : ce
+    // châssis n'a pas de teinte claire/sombre dérivée comme les trois autres
+    // (COULEURS_CSS_ENNEMIS_CLAIR/_SOMBRE ci-dessus, volontairement incomplètes),
+    // un seul blanc glacé suffit à le rendre reconnaissable.
+    dessinerChassisDrone(ctx, rayon) {
+        ctx.fillStyle = this.couleur;
+        ctx.beginPath();
+        ctx.arc(0, 0, rayon * 0.4, 0, Math.PI * 2);
+        ctx.fill();
+
+        const longueurBras = rayon * 0.9;
+        const epaisseurBras = Math.max(1.5, rayon * 0.12);
+        const rayonRotor = rayon * 0.28;
+
+        ctx.strokeStyle = this.couleur;
+        ctx.lineWidth = epaisseurBras;
+        for (let i = 0; i < 4; i++) {
+            const angle = (i / 4) * Math.PI * 2 + Math.PI / 4;
+            const boutX = Math.cos(angle) * longueurBras;
+            const boutY = Math.sin(angle) * longueurBras;
+
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(boutX, boutY);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(boutX, boutY, rayonRotor, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    // Châssis Boss (phase 7G) : un octogone plutôt qu'un hexagone (voir
+    // dessinerOctogone ci-dessus), avec quatre protubérances d'armure aux quatre
+    // coins diagonaux du corps — contre deux plaques latérales pour le Blindé — et un
+    // capteur central nettement plus large. Distinct du Blindé pas seulement par la
+    // taille (fixée séparément dans dessiner(), voir plus haut) mais par la forme et
+    // le niveau de détail : nettement plus « blindé à l'œil » qu'un simple Blindé mis
+    // à l'échelle.
+    dessinerChassisBoss(ctx, rayon) {
+        ctx.fillStyle = this.couleur;
+        this.dessinerOctogone(ctx, rayon, rayon);
+
+        ctx.fillStyle = COULEURS_CSS_ENNEMIS_SOMBRE[this.nomCouleur];
+        const largeurProtuberance = rayon * 0.42;
+        const hauteurProtuberance = rayon * 0.42;
+        const decalage = rayon * 0.62;
+        const positions = [
+            [decalage, decalage], [decalage, -decalage],
+            [-decalage, decalage], [-decalage, -decalage]
+        ];
+        for (const [dx, dy] of positions) {
+            ctx.fillRect(dx - largeurProtuberance / 2, dy - hauteurProtuberance / 2, largeurProtuberance, hauteurProtuberance);
+        }
+
+        ctx.fillStyle = COULEURS_CSS_ENNEMIS_CLAIR[this.nomCouleur];
+        ctx.beginPath();
+        ctx.arc(rayon * 0.1, 0, rayon * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
