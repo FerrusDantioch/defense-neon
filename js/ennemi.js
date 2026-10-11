@@ -11,7 +11,9 @@ const COULEURS_CSS_ENNEMIS = {
     jaune: '#f1c40f',
     orange: '#ff8c1a',
     neonBlanc: '#e8f4ff',
-    neonRouge: '#ff2b2b'
+    neonRouge: '#ff2b2b',
+    vertSoin: '#4dffb8',
+    bleuBouclier: '#7aa2ff'
 };
 
 // Teintes claires/sombres dérivées de la couleur de base de chaque type (phase 7A),
@@ -24,12 +26,16 @@ const COULEURS_CSS_ENNEMIS_CLAIR = {
     cyan: '#a6f7ff',
     jaune: '#fff3b0',
     orange: '#ffd9a6',
-    neonRouge: '#ffb3b3'
+    neonRouge: '#ffb3b3',
+    vertSoin: '#e6fff5',
+    bleuBouclier: '#dbe5ff'
 };
 const COULEURS_CSS_ENNEMIS_SOMBRE = {
     cyan: '#0a4a52',
     orange: '#9c4c00',
-    neonRouge: '#7a0f0f'
+    neonRouge: '#7a0f0f',
+    vertSoin: '#0d6b4a',
+    bleuBouclier: '#22398a'
 };
 
 class Ennemi {
@@ -44,8 +50,20 @@ class Ennemi {
         const caracteristiques = Config.TYPES_ENNEMIS[type];
 
         this.type = type;
+        // Conservé pour le soin d'un Soigneur, qui grandit au fil des vagues comme
+        // ses points de vie (voir Ennemi.appliquerSoins).
+        this.multiplicateurPointsDeVie = multiplicateurPointsDeVie;
         this.pointsDeVieMax = Math.round(caracteristiques.pointsDeVie * multiplicateurPointsDeVie);
         this.pointsDeVie = this.pointsDeVieMax;
+        // Bouclier (octobre 2026) : 0 pour tous les types sauf le Bouclier. Absorbe
+        // les dégâts avant les points de vie et se recharge après
+        // Config.BOUCLIER_DELAI_RECHARGE secondes sans être touché (voir deplacer).
+        this.bouclierMax = Math.round((caracteristiques.bouclier || 0) * multiplicateurPointsDeVie);
+        this.bouclier = this.bouclierMax;
+        this.tempsDepuisDernierDegat = 0;
+        // Part de la vitesse retirée par une tour Gel à portée, recalculée à chaque
+        // image par Tour.appliquerRalentissements (0 = vitesse normale).
+        this.ralentissement = 0;
         this.vitesse = caracteristiques.vitesse;
         this.recompense = caracteristiques.recompense;
         // Dégâts par seconde infligés à une unité de Caserne qui bloque cet ennemi
@@ -133,6 +151,22 @@ class Ennemi {
     deplacer(dt) {
         if (!this.vivant || this.arrive) return;
 
+        // Recharge du bouclier, avant tout retour anticipé ci-dessous : un Bouclier
+        // bloqué par une Caserne doit lui aussi pouvoir recharger s'il n'est plus
+        // touché.
+        if (this.bouclierMax > 0) {
+            this.tempsDepuisDernierDegat += dt;
+            if (this.tempsDepuisDernierDegat >= Config.BOUCLIER_DELAI_RECHARGE) {
+                this.bouclier = Math.min(this.bouclierMax,
+                    this.bouclier + this.bouclierMax * Config.BOUCLIER_RECHARGE_PAR_SECONDE * dt);
+            }
+        }
+
+        // Vitesse réelle de cette image : vitesse du type, ralentie par une éventuelle
+        // tour Gel, puis convertie à l'échelle du canvas (Jeu.facteurEchelle, voir son
+        // calcul dans Jeu.redimensionner()).
+        const pas = this.vitesse * (1 - this.ralentissement) * Jeu.facteurEchelle * dt;
+
         if (this.vole) {
             // Drone (phase 7F) : trajectoire en ligne droite du point de départ vers
             // la destination (tirés une seule fois à la construction, voir le
@@ -148,7 +182,6 @@ class Ennemi {
 
             this.angleDirection = Math.atan2(dy, dx);
 
-            const pas = this.vitesse * Jeu.facteurEchelle * dt;
             if (pas >= distanceRestante) {
                 this.x = this.pointArrivee.x;
                 this.y = this.pointArrivee.y;
@@ -208,11 +241,6 @@ class Ennemi {
         // vitesse), qui restent toutes inchangées par cette phase purement visuelle.
         this.angleDirection = Math.atan2(dy, dx);
 
-        // Jeu.facteurEchelle convertit la vitesse de référence (calibrée pour une
-        // case de 40 px) en pixels réels selon la taille de case courante : voir le
-        // calcul de ce facteur dans Jeu.redimensionner().
-        const pas = this.vitesse * Jeu.facteurEchelle * dt;
-
         if (pas >= distanceRestante) {
             this.x = cible.x;
             this.y = cible.y;
@@ -227,13 +255,51 @@ class Ennemi {
         }
     }
 
-    // Inflige des dégâts et marque l'ennemi comme mort si ses points de vie tombent à
-    // zéro ou moins. Appelée par Projectile.mettreAJour à l'impact.
+    // Inflige des dégâts (d'abord au bouclier s'il en a un, puis aux points de vie) et
+    // marque l'ennemi comme mort si ses points de vie tombent à zéro ou moins.
+    // Appelée par Projectile.mettreAJour à l'impact et par le combat des Casernes.
+    // Renvoie les dégâts réellement encaissés (jamais plus que ce qu'il restait), pour
+    // les statistiques de fin de partie (voir Statistiques.ajouterDegats).
     subirDegats(montant) {
-        this.pointsDeVie -= montant;
+        if (!this.vivant) return 0;
+        this.tempsDepuisDernierDegat = 0;
+
+        const absorbe = Math.min(this.bouclier, montant);
+        this.bouclier -= absorbe;
+        const restant = montant - absorbe;
+        const encaisse = absorbe + Math.min(this.pointsDeVie, restant);
+
+        this.pointsDeVie -= restant;
         if (this.pointsDeVie <= 0) {
             this.pointsDeVie = 0;
             this.vivant = false;
+        }
+        return encaisse;
+    }
+
+    // Soin reçu d'un Soigneur, jamais au-delà des points de vie maximum.
+    soigner(montant) {
+        this.pointsDeVie = Math.min(this.pointsDeVieMax, this.pointsDeVie + montant);
+    }
+
+    // Soins des Soigneurs (octobre 2026), pour tous les ennemis d'un coup, une fois
+    // par image avant leur déplacement (voir Jeu.simuler). Chaque ennemi au sol vivant
+    // à moins de Config.SOIGNEUR_RAYON d'un autre Soigneur que lui-même regagne des
+    // points de vie ; plusieurs Soigneurs proches ne cumulent pas leur soin, seul le
+    // plus fort compte. Méthode de classe plutôt que logique dans jeu.js pour que les
+    // outils de simulation (outils/), qui chargent ce fichier sans jeu.js, l'appliquent
+    // exactement de la même façon.
+    static appliquerSoins(ennemis, dt) {
+        const rayon = Config.SOIGNEUR_RAYON * Jeu.facteurEchelle;
+        for (const ennemi of ennemis) {
+            if (!ennemi.vivant || ennemi.arrive || ennemi.vole) continue;
+            let soin = 0;
+            for (const soigneur of ennemis) {
+                if (soigneur === ennemi || soigneur.type !== 'soigneur' || !soigneur.vivant || soigneur.arrive) continue;
+                if (Math.hypot(soigneur.x - ennemi.x, soigneur.y - ennemi.y) > rayon) continue;
+                soin = Math.max(soin, Config.SOIGNEUR_SOIN_PAR_SECONDE * soigneur.multiplicateurPointsDeVie * dt);
+            }
+            if (soin > 0) ennemi.soigner(soin);
         }
     }
 
@@ -328,11 +394,43 @@ class Ennemi {
             this.dessinerChassisDrone(ctx, rayon);
         } else if (this.type === 'boss') {
             this.dessinerChassisBoss(ctx, rayon);
+        } else if (this.type === 'soigneur') {
+            this.dessinerChassisSoigneur(ctx, rayon);
+        } else if (this.type === 'bouclier') {
+            this.dessinerChassisBouclier(ctx, rayon);
         } else {
             this.dessinerChassisStandard(ctx, rayon);
         }
 
         ctx.restore();
+
+        // Zone de soin d'un Soigneur : un simple cercle discret, pour que le joueur
+        // voie quels ennemis il protège.
+        if (this.type === 'soigneur') {
+            ctx.strokeStyle = 'rgba(77, 255, 184, 0.3)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, Config.SOIGNEUR_RAYON * Jeu.facteurEchelle, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        // Bulle d'un bouclier encore actif, plus ou moins opaque selon ce qu'il en reste.
+        if (this.bouclier > 0) {
+            ctx.strokeStyle = `rgba(122, 162, 255, ${0.3 + 0.6 * this.bouclier / this.bouclierMax})`;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, rayon * 1.45, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        // Ennemi ralenti par une tour Gel : anneau de givre, couleur de la tour Gel.
+        if (this.ralentissement > 0) {
+            ctx.strokeStyle = 'rgba(185, 168, 255, 0.85)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, rayon * 1.2, 0, Math.PI * 2);
+            ctx.stroke();
+        }
 
         const largeurBarre = rayon * 2;
         const hauteurBarre = Math.max(2, tailleCase * 0.06);
@@ -344,6 +442,15 @@ class Ennemi {
         ctx.fillRect(xBarre, yBarre, largeurBarre, hauteurBarre);
         ctx.fillStyle = '#2ecc71';
         ctx.fillRect(xBarre, yBarre, largeurBarre * ratioVie, hauteurBarre);
+
+        // Barre de bouclier, juste au-dessus de la barre de vie.
+        if (this.bouclierMax > 0) {
+            const yBouclier = yBarre - hauteurBarre - 1;
+            ctx.fillStyle = '#555560';
+            ctx.fillRect(xBarre, yBouclier, largeurBarre, hauteurBarre);
+            ctx.fillStyle = COULEURS_CSS_ENNEMIS.bleuBouclier;
+            ctx.fillRect(xBarre, yBouclier, largeurBarre * (this.bouclier / this.bouclierMax), hauteurBarre);
+        }
     }
 
     // Hexagone centré sur l'origine, éventuellement allongé ou aplati selon les deux
@@ -511,5 +618,46 @@ class Ennemi {
         ctx.beginPath();
         ctx.arc(rayon * 0.1, 0, rayon * 0.5, 0, Math.PI * 2);
         ctx.fill();
+    }
+
+    // Châssis Soigneur (octobre 2026) : corps rond, croix claire au centre (le signe
+    // universel du soin, lisible d'un coup d'œil), deux chenilles sombres. Une croix à
+    // branches égales reste une croix quand le châssis tourne d'un quart de tour.
+    dessinerChassisSoigneur(ctx, rayon) {
+        ctx.fillStyle = COULEURS_CSS_ENNEMIS_SOMBRE[this.nomCouleur];
+        const largeurChenille = rayon * 1.4;
+        const hauteurChenille = rayon * 0.3;
+        ctx.fillRect(-largeurChenille / 2, rayon * 0.8 - hauteurChenille / 2, largeurChenille, hauteurChenille);
+        ctx.fillRect(-largeurChenille / 2, -rayon * 0.8 - hauteurChenille / 2, largeurChenille, hauteurChenille);
+
+        ctx.fillStyle = this.couleur;
+        ctx.beginPath();
+        ctx.arc(0, 0, rayon * 0.85, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = COULEURS_CSS_ENNEMIS_CLAIR[this.nomCouleur];
+        const branche = rayon * 0.55;
+        const epaisseur = rayon * 0.24;
+        ctx.fillRect(-branche, -epaisseur / 2, branche * 2, epaisseur);
+        ctx.fillRect(-epaisseur / 2, -branche, epaisseur, branche * 2);
+    }
+
+    // Châssis Bouclier (octobre 2026) : hexagone trapu comme le Blindé, avec un
+    // écran courbe à l'avant (arc épais clair) ; la bulle et la barre bleues dessinées
+    // dans dessiner() montrent ce qu'il reste du bouclier lui-même.
+    dessinerChassisBouclier(ctx, rayon) {
+        ctx.fillStyle = this.couleur;
+        this.dessinerHexagone(ctx, rayon * 0.95, rayon * 0.95);
+
+        ctx.fillStyle = COULEURS_CSS_ENNEMIS_SOMBRE[this.nomCouleur];
+        ctx.beginPath();
+        ctx.arc(-rayon * 0.15, 0, rayon * 0.35, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = COULEURS_CSS_ENNEMIS_CLAIR[this.nomCouleur];
+        ctx.lineWidth = Math.max(2, rayon * 0.28);
+        ctx.beginPath();
+        ctx.arc(0, 0, rayon * 1.05, -Math.PI / 3, Math.PI / 3);
+        ctx.stroke();
     }
 }

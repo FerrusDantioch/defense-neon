@@ -1,0 +1,44 @@
+# Vérifications automatiques : GitHub lance ces étapes à chaque envoi de modifications
+# (push) et sur chaque pull request. Une coche verte dans l'onglet « Actions » du dépôt
+# (ou en bas d'une pull request) signifie que tout est bon ; une croix rouge indique
+# l'étape qui a échoué, avec son détail. Voir aussi « Vérifications automatiques »
+# dans README.md.
+name: Vérifications
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verifier:
+    name: Vérifier le jeu
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Récupérer les fichiers du dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Syntaxe de tous les fichiers JavaScript
+        run: |
+          for fichier in js/*.js sw.js outils/*.js; do
+            node --check "$fichier"
+          done
+
+      - name: Cartes générées (300 graines)
+        run: node outils/verification-chemins.js 300
+
+      - name: Installer le navigateur de test
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+
+      - name: Partie de test dans un navigateur
+        run: node outils/test-navigateur.js

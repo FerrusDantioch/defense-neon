@@ -111,6 +111,9 @@ const Jeu = {
         // Jeu.credits/integrite/etc. qui repartent de zéro à chaque reinitialiser(),
         // pas Progression.
         Progression.charger();
+        // Partie en cours éventuellement laissée lors d'une visite précédente
+        // (sauvegarde.js) : proposée sur l'écran d'accueil.
+        SauvegardePartie.charger();
         // Préférence son (phase 4B) : lue tôt elle aussi, pour que le bouton Son du
         // HUD affiche le bon libellé dès la première image — bien avant que
         // Son.initialiser() ne crée l'AudioContext lui-même, au premier clic sur
@@ -340,6 +343,11 @@ const Jeu = {
             this.simuler(dt * this.vitesseJeu);
         }
 
+        // Musique d'ambiance : seulement pendant une partie qui avance (ni à l'accueil,
+        // ni sur les écrans de fin, ni en pause). Son s'occupe lui-même de ne rien
+        // faire tant que cet état ne change pas.
+        Son.mettreAJourMusique(this.etatPartie === 'enCours' && !this.enPause);
+
         this.dessinerTout();
         Interface.mettreAJourEcrans(dt);
 
@@ -350,6 +358,11 @@ const Jeu = {
     // projectiles, nettoyage des ennemis arrivés/morts, mise à jour des vagues, puis
     // vérification des conditions de fin de partie.
     simuler(dt) {
+        // Effets de zone (octobre 2026), avant le déplacement qu'ils modifient :
+        // ralentissement des tours Gel, puis soins des Soigneurs.
+        Tour.appliquerRalentissements(this.toursActives, this.ennemisActifs);
+        Ennemi.appliquerSoins(this.ennemisActifs, dt);
+
         for (const ennemi of this.ennemisActifs) {
             ennemi.deplacer(dt);
         }
@@ -383,23 +396,57 @@ const Jeu = {
             if (ennemi.arrive) {
                 // Un ennemi arrivé à destination ne rapporte aucun crédit.
                 this.integrite = Math.max(0, this.integrite - Config.DEGATS_INTEGRITE_PAR_ENNEMI);
+                Statistiques.ennemisPasses++;
                 Son.jouerAlerte();
                 this.ennemisActifs.splice(i, 1);
             } else if (!ennemi.vivant) {
                 this.credits += ennemi.recompense;
+                Statistiques.creditsGagnes += ennemi.recompense;
+                Statistiques.ajouterElimination(ennemi.type);
                 Particules.creerExplosion(ennemi.x, ennemi.y, ennemi.couleur);
                 Son.jouerMort(ennemi.type);
                 this.ennemisActifs.splice(i, 1);
             }
         }
 
+        const vagueEnCoursAvant = Vagues.enCours;
         Vagues.mettreAJour(dt, this.ennemisActifs);
         if (Vagues.credits > 0) {
             this.credits += Vagues.credits;
+            Statistiques.creditsGagnes += Vagues.credits;
             Vagues.credits = 0;
         }
 
         this.verifierFinDePartie();
+
+        // Une vague vient de se terminer et la partie continue : c'est le moment
+        // d'enregistrer la partie en cours (voir sauvegarde.js).
+        if (vagueEnCoursAvant && !Vagues.enCours) {
+            SauvegardePartie.enregistrer();
+        }
+    },
+
+    // Bouton « Lancer la vague » (et touche Espace, voir Interface.gererClavier).
+    // Entre deux vagues, lance simplement la suivante. Pendant une vague dont tous les
+    // ennemis sont déjà apparus, l'appelle en avance (octobre 2026) : la vague en
+    // cours rapporte tout de suite sa récompense habituelle, plus un bonus par ennemi
+    // encore en jeu (voir Config.BONUS_APPEL_ANTICIPE_PAR_ENNEMI).
+    lancerVagueSuivante() {
+        if (this.etatPartie !== 'enCours') return;
+
+        if (Vagues.enCours) {
+            if (!Vagues.peutAppelerEnAvance()) return;
+            const bonus = Vagues.bonusAppelAnticipe(this.ennemisActifs);
+            const gain = Vagues.terminerEnAvance() + bonus;
+            this.credits += gain;
+            Statistiques.creditsGagnes += gain;
+            Statistiques.vaguesAppeleesEnAvance++;
+            // Affiché avant demarrer() : une annonce de boss ou de nouvel ennemi,
+            // plus importante, le remplace le cas échéant.
+            Interface.afficherMessageConstruction(`Vague appelée en avance : +${bonus} crédits de bonus`, 2, true);
+        }
+
+        Vagues.demarrer(Vagues.numeroVagueActuelle + 1);
     },
 
     // Résout, pour chaque Caserne dont l'unité est vivante, le combat au corps à
@@ -453,7 +500,7 @@ const Jeu = {
             // subirDegats, comme le ferait un projectile : c'est ce qui déclenche
             // ennemi.vivant = false le cas échéant, repéré et traité (récompense,
             // explosion, son) par le nettoyage juste après l'appel à cette méthode.
-            ennemiProche.subirDegats(unite.degats * dt);
+            Statistiques.ajouterDegats('caserne', ennemiProche.subirDegats(unite.degats * dt));
 
             if (unite.pointsDeVie <= 0) {
                 unite.pointsDeVie = 0;
@@ -550,6 +597,8 @@ const Jeu = {
         // tourne : jamais à chaque frame ni à chaque vague, voir la note en tête de
         // progression.js.
         Progression.sauvegarder();
+        // La partie est finie : plus rien à reprendre depuis l'écran d'accueil.
+        SauvegardePartie.effacer();
 
         this.derniereProgression = {
             xpGagnee,
@@ -563,8 +612,15 @@ const Jeu = {
             // ne soit refermé — n'arrive pas en pratique (voir Jeu.etatPartie), mais
             // même principe que xpGagnee/niveauAvant ci-dessus, un instantané plutôt
             // qu'une référence live.
-            difficulteSuperieure: this.difficulteSuperieure
+            difficulteSuperieure: this.difficulteSuperieure,
+            // Pour le bouton de partage de l'écran de défaite (défi du jour seulement).
+            modeDefiDuJour: this.modeDefiDuJour,
+            vagueAtteinte: Vagues.numeroVagueActuelle
         };
+
+        // Remplies une seule fois ici plutôt qu'à chaque image : elles ne changent
+        // plus une fois la partie terminée.
+        Interface.afficherStatistiques(estVictoire);
     },
 
     // Démarre une nouvelle partie dans la durée choisie à l'accueil, avec la
@@ -574,6 +630,24 @@ const Jeu = {
         this.idDureeActuelle = idDuree;
         this.reinitialiser(idDuree, undefined, difficulteSuperieure);
         this.etatPartie = 'enCours';
+        // Remplace une éventuelle partie précédente laissée en cours : il n'y a
+        // qu'un emplacement de sauvegarde (voir sauvegarde.js).
+        SauvegardePartie.enregistrer();
+    },
+
+    // Reprend la partie laissée en cours lors d'une visite précédente (bouton
+    // « Reprendre » de l'écran d'accueil). Si la sauvegarde ne correspond plus à la
+    // carte (voir SauvegardePartie.restaurer), elle est abandonnée et le joueur
+    // revient à l'accueil.
+    reprendrePartie() {
+        if (SauvegardePartie.restaurer()) {
+            Interface.afficherMessageConstruction('Partie reprise', 2, true);
+            return;
+        }
+        console.warn('Défense Néon : la partie sauvegardée ne correspond plus à la carte, elle est abandonnée.');
+        SauvegardePartie.effacer();
+        this.reinitialiser(this.idDureeActuelle);
+        this.etatPartie = 'accueil';
     },
 
     // Relance une partie dans la même durée ET la même difficulté que la
@@ -583,6 +657,7 @@ const Jeu = {
     rejouer() {
         this.reinitialiser(this.idDureeActuelle, undefined, this.difficulteSuperieure);
         this.etatPartie = 'enCours';
+        SauvegardePartie.enregistrer();
     },
 
     // Retourne à l'écran d'accueil sans démarrer de partie.
@@ -607,6 +682,7 @@ const Jeu = {
         // repasser à vrai une fois la partie réinitialisée, pas avant.
         this.modeDefiDuJour = true;
         this.etatPartie = 'enCours';
+        SauvegardePartie.enregistrer();
     },
 
     // Remet à zéro tout l'état d'une partie et fixe Jeu.nombreDeVagues d'après
@@ -677,6 +753,7 @@ const Jeu = {
         }
 
         Vagues.reinitialiser();
+        Statistiques.reinitialiser();
 
         // Le type de tour à construire revient au type par défaut à chaque nouvelle
         // partie plutôt que de garder la sélection de la partie précédente ; aucune

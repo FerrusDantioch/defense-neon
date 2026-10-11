@@ -65,7 +65,9 @@ const FICHIERS_A_CHARGER = [
     'ennemi.js',
     'vagues.js',
     'tour.js',
-    'progression.js'
+    'progression.js',
+    // Statistiques (octobre 2026) : tour.js y ajoute les dégâts de chaque impact.
+    'statistiques.js'
 ];
 
 // Construit un contexte vm frais exposant Config, Aleatoire, Carte, Ennemi, Vagues,
@@ -106,7 +108,7 @@ function creerContexteJeu() {
             jouerVente() {},
             jouerAlerte() {},
             jouerAlerteBoss() {},
-            jouerAlerteDrones() {},
+            jouerAlerteNouvelEnnemi() {},
             jouerDefaite() {},
             jouerVictoire() {}
         }
@@ -300,7 +302,12 @@ function jouerStrategieDiversifiee(jeuContext, etat, memoire) {
 // nettoyage des ennemis arrivés/morts, mise à jour des vagues) — seules l'affichage
 // et la vérification de victoire/défaite sont omis, sans objet ici.
 function avancerSimulation(jeuContext, etat, dt) {
-    const { Config, Vagues } = jeuContext;
+    const { Config, Vagues, Tour, Ennemi } = jeuContext;
+
+    // Même ordre que Jeu.simuler : effets de zone (tours Gel, Soigneurs) avant le
+    // déplacement des ennemis.
+    Tour.appliquerRalentissements(etat.toursActives, etat.ennemisActifs);
+    Ennemi.appliquerSoins(etat.ennemisActifs, dt);
 
     for (const ennemi of etat.ennemisActifs) {
         ennemi.deplacer(dt);
