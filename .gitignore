@@ -1,3 +1,5 @@
 .claude/scheduled_tasks.lock
 .DS_Store
 Thumbs.db
+# Installé seulement pour la partie de test (outils/test-navigateur.js).
+node_modules/
