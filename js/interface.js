@@ -7,7 +7,8 @@
 // l'autre n'exécute de code au chargement, tout se déclenche après l'initialisation.
 
 const Interface = {
-    // Écrans superposés au canvas.
+    // Écrans superposés au canvas, et leur conteneur commun (celui du canvas).
+    conteneurCanvas: null,
     ecranAccueil: null,
     ecranVictoire: null,
     ecranDefaite: null,
@@ -135,6 +136,7 @@ const Interface = {
     caserneEnAttenteChoix: null,
 
     initialiser() {
+        this.conteneurCanvas = document.querySelector('.conteneur-canvas');
         this.ecranAccueil = document.getElementById('ecran-accueil');
         this.ecranVictoire = document.getElementById('ecran-victoire');
         this.ecranDefaite = document.getElementById('ecran-defaite');
@@ -838,6 +840,11 @@ const Interface = {
         this.ecrireSiChange(this.ecranAccueil, 'hidden', Jeu.etatPartie !== 'accueil');
         this.ecrireSiChange(this.ecranVictoire, 'hidden', Jeu.etatPartie !== 'victoire');
         this.ecrireSiChange(this.ecranDefaite, 'hidden', Jeu.etatPartie !== 'defaite');
+        // Sur téléphone en portrait, la hauteur minimale réservée aux écrans
+        // superposés ne s'applique que lorsqu'un écran est affiché (voir
+        // .conteneur-canvas.ecran-affiche, style.css) : en partie, elle repoussait
+        // tout le HUD sous le bord de l'écran.
+        this.conteneurCanvas.classList.toggle('ecran-affiche', Jeu.etatPartie !== 'enCours');
         this.ecrireSiChange(this.conteneurHUD, 'hidden', Jeu.etatPartie !== 'enCours');
         this.ecrireSiChange(this.conteneurTypesTours, 'hidden', Jeu.etatPartie !== 'enCours');
         // Masqué en dehors de 'enCours' même si une tour restait sélectionnée (ex. la

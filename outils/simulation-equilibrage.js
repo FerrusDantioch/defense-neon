@@ -106,6 +106,7 @@ function creerContexteJeu() {
             jouerVente() {},
             jouerAlerte() {},
             jouerAlerteBoss() {},
+            jouerAlerteDrones() {},
             jouerDefaite() {},
             jouerVictoire() {}
         }
