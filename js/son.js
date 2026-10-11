@@ -167,6 +167,15 @@ const Son = {
         this.jouerTonalite({ frequenceDebut: 180, frequenceFin: 55, duree: 0.5, typeOnde: 'square', delai: 0.1 });
     },
 
+    // Annonce de l'arrivée des drones (voir Vagues.demarrer) : deux bips aigus et
+    // montants, en onde carrée comme la mort d'un drone (jouerMort) — un timbre
+    // électronique, distinct de l'alerte grave d'une vague de boss juste au-dessus.
+    jouerAlerteDrones() {
+        if (!this.actif) return;
+        this.jouerTonalite({ frequenceDebut: 1200, frequenceFin: 1700, duree: 0.12, typeOnde: 'square' });
+        this.jouerTonalite({ frequenceDebut: 1200, frequenceFin: 1700, duree: 0.12, typeOnde: 'square', delai: 0.18 });
+    },
+
     // Signal d'alerte joué quand un ennemi atteint l'arrivée : deux pulsations graves
     // en dents de scie, nettement plus longues et plus graves que tout autre son du
     // jeu, pour ne jamais être confondu avec un simple bip de tir ou de mort.

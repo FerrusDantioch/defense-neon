@@ -113,6 +113,20 @@ const Vagues = {
         } else {
             this.ennemisRestantsAGenerer = nombreNormalEnnemis;
         }
+
+        // Annonce des drones, au début de la première vague où ils peuvent
+        // apparaître (Config.VAGUE_APPARITION_DRONE) : seul le Flak peut les viser,
+        // et un joueur qui l'ignore perdait presque toute son intégrité à cause
+        // d'eux sans comprendre pourquoi (voir outils/simulation-parties.js). Même
+        // mécanisme que l'annonce de boss ci-dessus, un peu plus longue pour laisser
+        // le temps de lire la consigne. Une seule zone de message : si cette vague
+        // est aussi une vague de boss (réglages modifiés), les deux annonces sont
+        // réunies plutôt que la seconde n'efface la première.
+        if (numero === Config.VAGUE_APPARITION_DRONE) {
+            const prefixe = this.estVagueBoss ? '⚠ VAGUE DE BOSS — ' : '⚠ ';
+            Interface.afficherMessageConstruction(`${prefixe}DRONES : seul le Flak peut les abattre`, 4);
+            Son.jouerAlerteDrones();
+        }
     },
 
     // À appeler une fois par frame avec le dt courant et le tableau des ennemis actifs
@@ -156,9 +170,7 @@ const Vagues = {
                     } else {
                         const type = this.tirerTypeEnnemi(this.numeroVagueActuelle);
                         // Chemins multiples (phase 6A) : chaque ennemi se voit assigner
-                        // l'un des Carte.nombreChemins chemins de la carte en cours (2 la
-                        // plupart du temps, 3 occasionnellement depuis le troisième
-                        // chemin occasionnel, contenu additionnel post-lancement) dès sa
+                        // l'un des Carte.nombreChemins chemins de la carte en cours dès sa
                         // création, toujours via le générateur à graine (jamais
                         // Math.random()) pour que la répartition reste reproductible à
                         // graine égale — voir la note sur Aleatoire dans particules.js

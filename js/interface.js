@@ -7,7 +7,8 @@
 // l'autre n'exécute de code au chargement, tout se déclenche après l'initialisation.
 
 const Interface = {
-    // Écrans superposés au canvas.
+    // Écrans superposés au canvas, et leur conteneur commun (celui du canvas).
+    conteneurCanvas: null,
     ecranAccueil: null,
     ecranVictoire: null,
     ecranDefaite: null,
@@ -56,6 +57,7 @@ const Interface = {
     elementNiveauJoueurActuel: null,
     elementBarreXpConteneur: null,
     elementBarreXpRemplissage: null,
+    largeurBarreXpAffichee: null,
     elementTexteNiveauMaxJoueur: null,
 
     // Défi du jour (contenu additionnel post-lancement), sur l'écran d'accueil
@@ -134,6 +136,7 @@ const Interface = {
     caserneEnAttenteChoix: null,
 
     initialiser() {
+        this.conteneurCanvas = document.querySelector('.conteneur-canvas');
         this.ecranAccueil = document.getElementById('ecran-accueil');
         this.ecranVictoire = document.getElementById('ecran-victoire');
         this.ecranDefaite = document.getElementById('ecran-defaite');
@@ -364,6 +367,15 @@ const Interface = {
         }
     },
 
+    // N'écrit une propriété d'un élément de la page (texte, `hidden`, `disabled`...)
+    // que si sa valeur change. Les fonctions de rafraîchissement ci-dessous sont
+    // rappelées à chaque image : réécrire à l'identique un texte du HUD forçait
+    // quand même le navigateur à recalculer toute la mise en page 60 fois par seconde.
+    ecrireSiChange(element, propriete, valeur) {
+        const nouvelleValeur = propriete === 'textContent' ? String(valeur) : valeur;
+        if (element[propriete] !== nouvelleValeur) element[propriete] = nouvelleValeur;
+    },
+
     // Libellé du bouton Son (phase 4B), rafraîchi immédiatement après chaque clic —
     // pas besoin d'un rafraîchissement par frame comme mettreAJourBoutonsTypesTours,
     // puisque rien d'autre que ce clic ne fait changer Son.actif.
@@ -392,9 +404,9 @@ const Interface = {
         for (const bouton of this.boutonsTypesTours) {
             const type = bouton.dataset.typeTour;
             const cout = this.coutConstruction(type);
-            bouton.textContent = `${Config.TYPES_TOURS[type].nom} — ${cout}`;
+            this.ecrireSiChange(bouton, 'textContent', `${Config.TYPES_TOURS[type].nom} — ${cout}`);
             bouton.classList.toggle('selectionne', type === this.typeSelectionne);
-            bouton.disabled = limiteAtteinte || Jeu.credits < cout;
+            this.ecrireSiChange(bouton, 'disabled', limiteAtteinte || Jeu.credits < cout);
         }
     },
 
@@ -510,6 +522,14 @@ const Interface = {
             return;
         }
 
+        // Une Caserne seulement voisine de l'entrée d'un chemin n'aurait aucun point
+        // de blocage utile (voir Carte.candidatsBlocagePourCaserne) : refusée plutôt
+        // que de faire payer une tour qui ne servirait jamais.
+        if (!this.caserneAUnPointDeBlocage(this.typeSelectionne, colonne, ligne)) {
+            this.afficherMessageConstruction('Aucune case à bloquer ici (entrée de chemin)');
+            return;
+        }
+
         // Limite de tours (phase 6B) : vérifiée avant le coût, comme les crédits —
         // aucune tour ne peut être construite au-delà de Jeu.limiteTours, même si les
         // crédits le permettraient largement. Vendre une tour libère naturellement un
@@ -542,6 +562,14 @@ const Interface = {
             this.caserneEnAttenteChoix = { tour, candidats: tour.candidatsBlocageEnAttente };
             this.afficherMessageConstruction('Choisissez la case à bloquer (en surbrillance)');
         }
+    },
+
+    // Vrai pour tout type autre que la Caserne ; pour elle, vrai seulement si au
+    // moins une case de chemin voisine peut accueillir son unité. Partagée par la
+    // construction et l'aperçu, pour qu'une case refusée au clic s'affiche aussi en
+    // rouge au survol.
+    caserneAUnPointDeBlocage(type, colonne, ligne) {
+        return type !== 'caserne' || Carte.candidatsBlocagePourCaserne(colonne, ligne).length > 0;
     },
 
     // Résout le choix du joueur pour le point de blocage d'une Caserne en attente
@@ -604,7 +632,8 @@ const Interface = {
         const constructible = Carte.estConstructible(colonne, ligne)
             && Jeu.credits >= this.coutConstruction(this.typeSelectionne)
             && !limiteAtteinte
-            && adjacenceRespectee;
+            && adjacenceRespectee
+            && this.caserneAUnPointDeBlocage(this.typeSelectionne, colonne, ligne);
 
         ctx.strokeStyle = constructible ? '#2ecc71' : '#e74c3c';
         ctx.lineWidth = 2;
@@ -682,7 +711,7 @@ const Interface = {
         if (!tour) return;
 
         const nom = Config.TYPES_TOURS[tour.type].nom;
-        this.elementPanneauTitre.textContent = `${nom} — Niveau ${tour.niveau}`;
+        this.ecrireSiChange(this.elementPanneauTitre, 'textContent', `${nom} — Niveau ${tour.niveau}`);
 
         // La Caserne (phase 7E) ne tire jamais : Dégâts/Cadence/Portée n'auraient
         // aucun sens pour elle (this.cadence/this.degats existent bien sur l'instance,
@@ -695,27 +724,27 @@ const Interface = {
             const stats = tour.statsUniteAuNiveauActuel();
             const delai = Config.CASERNE_DELAI_RESPAWN_BASE
                 / (Config.AMELIORATION_MULTIPLICATEUR_CADENCE ** (tour.niveau - 1));
-            this.elementPanneauStats.textContent =
+            this.ecrireSiChange(this.elementPanneauStats, 'textContent',
                 `Points de vie de l'unité : ${stats.pointsDeVieMax} · `
                 + `Dégâts de l'unité : ${Math.round(stats.degats)} · `
-                + `Délai de réapparition : ${delai.toFixed(1)}s`;
+                + `Délai de réapparition : ${delai.toFixed(1)}s`);
         } else {
-            this.elementPanneauStats.textContent =
-                `Dégâts : ${Math.round(tour.degats)} · Cadence : ${tour.cadence.toFixed(2)}/s · Portée : ${Math.round(tour.portee)}`;
+            this.ecrireSiChange(this.elementPanneauStats, 'textContent',
+                `Dégâts : ${Math.round(tour.degats)} · Cadence : ${tour.cadence.toFixed(2)}/s · Portée : ${Math.round(tour.portee)}`);
         }
 
         const coutAmelioration = tour.coutAmelioration();
         if (coutAmelioration === null) {
-            this.boutonAmeliorer.hidden = true;
-            this.elementNiveauMax.hidden = false;
+            this.ecrireSiChange(this.boutonAmeliorer, 'hidden', true);
+            this.ecrireSiChange(this.elementNiveauMax, 'hidden', false);
         } else {
-            this.boutonAmeliorer.hidden = false;
-            this.elementNiveauMax.hidden = true;
-            this.boutonAmeliorer.textContent = `Améliorer (coût : ${coutAmelioration})`;
-            this.boutonAmeliorer.disabled = Jeu.credits < coutAmelioration;
+            this.ecrireSiChange(this.boutonAmeliorer, 'hidden', false);
+            this.ecrireSiChange(this.elementNiveauMax, 'hidden', true);
+            this.ecrireSiChange(this.boutonAmeliorer, 'textContent', `Améliorer (coût : ${coutAmelioration})`);
+            this.ecrireSiChange(this.boutonAmeliorer, 'disabled', Jeu.credits < coutAmelioration);
         }
 
-        this.boutonVendre.textContent = `Vendre (+${tour.montantVente()} crédits)`;
+        this.ecrireSiChange(this.boutonVendre, 'textContent', `Vendre (+${tour.montantVente()} crédits)`);
     },
 
     // Affiche le niveau du joueur et sa progression vers le suivant sur l'écran
@@ -723,15 +752,21 @@ const Interface = {
     // (aucun seuil suivant) : elle est remplacée par un texte dédié plutôt que
     // laissée à 100 % ou vide, ce qui serait ambigu avec « pas encore de progression ».
     mettreAJourProgressionAccueil() {
-        this.elementNiveauJoueurActuel.textContent = Progression.niveau;
+        this.ecrireSiChange(this.elementNiveauJoueurActuel, 'textContent', Progression.niveau);
 
         const seuil = Progression.seuilNiveauSuivant();
         const auNiveauMax = seuil === null;
-        this.elementBarreXpConteneur.hidden = auNiveauMax;
-        this.elementTexteNiveauMaxJoueur.hidden = !auNiveauMax;
+        this.ecrireSiChange(this.elementBarreXpConteneur, 'hidden', auNiveauMax);
+        this.ecrireSiChange(this.elementTexteNiveauMaxJoueur, 'hidden', !auNiveauMax);
 
         if (!auNiveauMax) {
-            this.elementBarreXpRemplissage.style.width = `${(Progression.xpActuelle / seuil) * 100}%`;
+            // Comparée à la dernière valeur écrite plutôt qu'à style.width, que le
+            // navigateur relit sous une forme arrondie (jamais égale à la chaîne écrite).
+            const largeur = `${(Progression.xpActuelle / seuil) * 100}%`;
+            if (this.largeurBarreXpAffichee !== largeur) {
+                this.elementBarreXpRemplissage.style.width = largeur;
+                this.largeurBarreXpAffichee = largeur;
+            }
         }
 
         // Un palier débloqué le reste pour toujours (voir Progression.estDebloque) :
@@ -748,9 +783,9 @@ const Interface = {
             const element = this.elementsPaliersBonus[i];
             element.classList.toggle('palier-debloque', palier.debloque);
             element.classList.toggle('palier-verrouille', !palier.debloque);
-            element.textContent = palier.debloque
+            this.ecrireSiChange(element, 'textContent', palier.debloque
                 ? `✓ ${palier.description}`
-                : `🔒 ${palier.description} — niveau ${palier.niveauRequis}`;
+                : `🔒 ${palier.description} — niveau ${palier.niveauRequis}`);
         }
     },
 
@@ -764,12 +799,12 @@ const Interface = {
     // dépendre d'un rafraîchissement explicite au moment précis où la partie se
     // termine.
     mettreAJourDefiDuJour() {
-        this.elementDefiDuJourDate.textContent = dateDuJourLisible();
+        this.ecrireSiChange(this.elementDefiDuJourDate, 'textContent', dateDuJourLisible());
 
         const tenteAujourdhui = Progression.defiDuJour.date === dateDuJourChaine();
-        this.elementDefiDuJourScore.textContent = tenteAujourdhui
+        this.ecrireSiChange(this.elementDefiDuJourScore, 'textContent', tenteAujourdhui
             ? `Meilleure vague : ${Progression.defiDuJour.meilleureVague}`
-            : 'Pas encore tenté aujourd\'hui';
+            : 'Pas encore tenté aujourd\'hui');
     },
 
     // Affiche l'XP gagnée pendant la partie qui vient de se terminer et, le cas
@@ -787,14 +822,14 @@ const Interface = {
         const resume = Jeu.derniereProgression;
         if (!resume) return;
 
-        elementXp.textContent = resume.xpGagnee;
+        this.ecrireSiChange(elementXp, 'textContent', resume.xpGagnee);
 
-        elementNiveauSuperieur.hidden = resume.niveauxGagnes === 0;
+        this.ecrireSiChange(elementNiveauSuperieur, 'hidden', resume.niveauxGagnes === 0);
         if (resume.niveauxGagnes > 0) {
-            elementNiveauSuperieur.textContent = `Niveau supérieur ! ${resume.niveauAvant} → ${resume.niveauApres}`;
+            this.ecrireSiChange(elementNiveauSuperieur, 'textContent', `Niveau supérieur ! ${resume.niveauAvant} → ${resume.niveauApres}`);
         }
 
-        elementDifficulte.hidden = !resume.difficulteSuperieure;
+        this.ecrireSiChange(elementDifficulte, 'hidden', !resume.difficulteSuperieure);
     },
 
     // Rappelée chaque frame par Jeu.boucle, quel que soit l'état de la partie : bascule
@@ -802,16 +837,21 @@ const Interface = {
     // `dt` est le temps réel écoulé (non affecté par Jeu.vitesseJeu), pour que le
     // minuteur du message de construction ne soit pas accéléré par la vitesse ×2.
     mettreAJourEcrans(dt) {
-        this.ecranAccueil.hidden = Jeu.etatPartie !== 'accueil';
-        this.ecranVictoire.hidden = Jeu.etatPartie !== 'victoire';
-        this.ecranDefaite.hidden = Jeu.etatPartie !== 'defaite';
-        this.conteneurHUD.hidden = Jeu.etatPartie !== 'enCours';
-        this.conteneurTypesTours.hidden = Jeu.etatPartie !== 'enCours';
+        this.ecrireSiChange(this.ecranAccueil, 'hidden', Jeu.etatPartie !== 'accueil');
+        this.ecrireSiChange(this.ecranVictoire, 'hidden', Jeu.etatPartie !== 'victoire');
+        this.ecrireSiChange(this.ecranDefaite, 'hidden', Jeu.etatPartie !== 'defaite');
+        // Sur téléphone en portrait, la hauteur minimale réservée aux écrans
+        // superposés ne s'applique que lorsqu'un écran est affiché (voir
+        // .conteneur-canvas.ecran-affiche, style.css) : en partie, elle repoussait
+        // tout le HUD sous le bord de l'écran.
+        this.conteneurCanvas.classList.toggle('ecran-affiche', Jeu.etatPartie !== 'enCours');
+        this.ecrireSiChange(this.conteneurHUD, 'hidden', Jeu.etatPartie !== 'enCours');
+        this.ecrireSiChange(this.conteneurTypesTours, 'hidden', Jeu.etatPartie !== 'enCours');
         // Masqué en dehors de 'enCours' même si une tour restait sélectionnée (ex. la
         // partie se termine pendant que le panneau est ouvert) : mettreAJourPanneauAmelioration
         // n'est appelée que dans le bloc 'enCours' ci-dessous, donc son contenu ne
         // serait plus rafraîchi une fois la partie terminée sans cette ligne.
-        this.panneauAmelioration.hidden = Jeu.etatPartie !== 'enCours' || this.tourSelectionnee === null;
+        this.ecrireSiChange(this.panneauAmelioration, 'hidden', Jeu.etatPartie !== 'enCours' || this.tourSelectionnee === null);
 
         if (Jeu.etatPartie === 'accueil') {
             this.mettreAJourProgressionAccueil();
@@ -819,16 +859,16 @@ const Interface = {
         }
 
         if (Jeu.etatPartie === 'enCours') {
-            this.elementCredits.textContent = Jeu.credits;
-            this.elementIntegrite.textContent = Jeu.integrite;
-            this.elementNombreTours.textContent = `${Jeu.toursActives.length} / ${Jeu.limiteTours}`;
-            this.elementGraine.textContent = Aleatoire.graineActuelle;
-            this.elementNumeroVague.textContent = Number.isFinite(Jeu.nombreDeVagues)
+            this.ecrireSiChange(this.elementCredits, 'textContent', Jeu.credits);
+            this.ecrireSiChange(this.elementIntegrite, 'textContent', Jeu.integrite);
+            this.ecrireSiChange(this.elementNombreTours, 'textContent', `${Jeu.toursActives.length} / ${Jeu.limiteTours}`);
+            this.ecrireSiChange(this.elementGraine, 'textContent', Aleatoire.graineActuelle);
+            this.ecrireSiChange(this.elementNumeroVague, 'textContent', Number.isFinite(Jeu.nombreDeVagues)
                 ? `${Vagues.numeroVagueActuelle} / ${Jeu.nombreDeVagues}`
-                : `${Vagues.numeroVagueActuelle} / ∞`;
-            this.boutonLancerVague.disabled = Vagues.enCours;
-            this.boutonPause.textContent = Jeu.enPause ? 'Reprendre' : 'Pause';
-            this.boutonVitesse.textContent = `Vitesse ×${Jeu.vitesseJeu}`;
+                : `${Vagues.numeroVagueActuelle} / ∞`);
+            this.ecrireSiChange(this.boutonLancerVague, 'disabled', Vagues.enCours);
+            this.ecrireSiChange(this.boutonPause, 'textContent', Jeu.enPause ? 'Reprendre' : 'Pause');
+            this.ecrireSiChange(this.boutonVitesse, 'textContent', `Vitesse ×${Jeu.vitesseJeu}`);
             // Les crédits changent en continu (récompenses, bonus de fin de vague) :
             // les boutons de type doivent donc être réévalués chaque frame, pas
             // seulement au moment où le joueur change de sélection.
@@ -837,13 +877,13 @@ const Interface = {
         }
 
         if (Jeu.etatPartie === 'victoire') {
-            this.elementVaguesFranchisesVictoire.textContent = Vagues.numeroVagueActuelle;
-            this.elementIntegriteRestanteVictoire.textContent = Jeu.integrite;
+            this.ecrireSiChange(this.elementVaguesFranchisesVictoire, 'textContent', Vagues.numeroVagueActuelle);
+            this.ecrireSiChange(this.elementIntegriteRestanteVictoire, 'textContent', Jeu.integrite);
             this.afficherResumeProgression(this.elementXpGagneeVictoire, this.elementNiveauSuperieurVictoire, this.elementDifficulteSuperieureVictoire);
         }
 
         if (Jeu.etatPartie === 'defaite') {
-            this.elementVagueAtteinteDefaite.textContent = Vagues.numeroVagueActuelle;
+            this.ecrireSiChange(this.elementVagueAtteinteDefaite, 'textContent', Vagues.numeroVagueActuelle);
             // En mode Sans fin, la vague atteinte est le score final du joueur : on
             // la met en évidence plutôt que de l'afficher comme une simple statistique.
             this.elementVagueAtteinteDefaite.classList.toggle('score-sansfin', !Number.isFinite(Jeu.nombreDeVagues));

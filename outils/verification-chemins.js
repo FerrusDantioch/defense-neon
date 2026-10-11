@@ -241,7 +241,7 @@ function executer(nombreDeGraines) {
     console.log('');
     console.log(`Graines testées : ${nombreDeGraines}`);
     console.log(`Chemins générés au total : ${totalChemins} (2 ou 3 par carte, voir ci-dessous)`);
-    console.log(`Cartes à 3 chemins (troisième chemin occasionnel) : ${cartesATroisChemins}/${nombreDeGraines} (${pourcentageTroisChemins.toFixed(1)} %, attendu ≈ ${(Config.PROBABILITE_TROISIEME_CHEMIN * 100).toFixed(0)} %)`);
+    console.log(`Cartes à 3 chemins : ${cartesATroisChemins}/${nombreDeGraines} (${pourcentageTroisChemins.toFixed(1)} % — NOMBRE_CHEMINS_PAR_DEFAUT = ${Config.NOMBRE_CHEMINS_PAR_DEFAUT}, PROBABILITE_TROISIEME_CHEMIN = ${Config.PROBABILITE_TROISIEME_CHEMIN})`);
     console.log(`Cartes en erreur (structure invalide) : ${cartesEnErreur}`);
     console.log(`Cartes non reproductibles à graine égale : ${cartesEchecReproductibilite}`);
     console.log(`Chemin de secours déclenché : ${cheminsSecoursDeclenches}/${totalChemins} (${pourcentageSecours.toFixed(2)} %)`);
@@ -255,7 +255,7 @@ function executer(nombreDeGraines) {
     }
     console.log('');
     console.log(`Espacement minimal toutes paires confondues (entrées et sorties, 2 ou 3 chemins) — pire cas observé : ${pireEcartObserve} ligne(s) (seuil visé : ${Config.ECART_MIN_ENTREES_SORTIES})`);
-    console.log(`Cartes sous ce seuil sur au moins une paire : ${cartesSousEspacementMinimal}/${nombreDeGraines} (${(cartesSousEspacementMinimal / nombreDeGraines * 100).toFixed(1)} %) — voir « Troisième chemin occasionnel » dans ARCHITECTURE.md pour la raison (configurations à 3 lignes rares où aucun espacement complet n'est mathématiquement atteignable dans la bande LIGNE_MIN-LIGNE_MAX).`);
+    console.log(`Cartes sous ce seuil sur au moins une paire : ${cartesSousEspacementMinimal}/${nombreDeGraines} (${(cartesSousEspacementMinimal / nombreDeGraines * 100).toFixed(1)} %) — attendu : 0 depuis Carte.resteDeLaPlace (voir « Améliorations d'octobre 2026 » dans ARCHITECTURE.md).`);
     console.log('');
 
     const succes = cartesEnErreur === 0 && cartesEchecReproductibilite === 0;

@@ -20,6 +20,12 @@ const Decor = {
     batimentsLointain: [],
     batimentsProche: [],
 
+    // Vrai dès que l'image de fond (phase 7C bis) est chargée : opaque et couvrant
+    // tout l'écran, elle cache entièrement le skyline, qui n'est alors plus ni
+    // animé ni redessiné (voir mettreAJour/dessiner) — un dessin plein écran avec
+    // halo à chaque image, pour rien, coûtait du temps de calcul et de la batterie.
+    imageFondVisible: false,
+
     initialiser() {
         this.canvas = document.getElementById('canvas-decor');
         this.ctx = this.canvas.getContext('2d');
@@ -43,7 +49,7 @@ const Decor = {
     },
 
     // Image de fond fixe (phase 7C bis), affichée par-dessus le skyline procédural
-    // quand elle est disponible (#image-decor, images/decor-fond.webp), sans jamais le
+    // quand elle est disponible (#image-decor, images/decor-fond.png), sans jamais le
     // remplacer : au chargement, `.image-decor--visible` la fait apparaître en fondu
     // (voir style.css) ; si elle est absente ou invalide (404, format non supporté...),
     // l'événement `error` se contente d'un avertissement — l'image reste à opacity 0,
@@ -56,6 +62,7 @@ const Decor = {
 
         const surChargement = () => {
             image.classList.add('image-decor--visible');
+            this.imageFondVisible = true;
         };
         const surErreur = () => {
             console.warn('Défense Néon : image de décor introuvable ou invalide, le skyline procédural reste affiché.');
@@ -152,6 +159,7 @@ const Decor = {
     // Jeu.simuler juste après) : la vitesse de défilement ne doit jamais varier avec
     // le bouton Vitesse ×2.
     mettreAJour(dt) {
+        if (this.imageFondVisible) return;
         this.deplacerCouche(this.batimentsLointain, Config.DECOR_VITESSE_LOINTAIN, dt);
         this.deplacerCouche(this.batimentsProche, Config.DECOR_VITESSE_PROCHE, dt);
     },
@@ -183,6 +191,7 @@ const Decor = {
     // entre deux bâtiments espacés doit être rempli explicitement plutôt que de
     // compter sur le CSS pour ne jamais laisser transparaître un bord non dessiné.
     dessiner(ctx) {
+        if (this.imageFondVisible) return;
         ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         ctx.fillStyle = Config.COULEURS.fond;
         ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
