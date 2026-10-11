@@ -45,12 +45,19 @@
 
     <h1>Défense Néon</h1>
 
-    <!-- Bouton Son (phase 4B), volontairement hors de #barre-hud : il doit rester
-         visible à tout moment (y compris à l'accueil et sur les écrans de fin), alors
+    <!-- Réglages du son, volontairement hors de #barre-hud : ils doivent rester
+         visibles à tout moment (y compris à l'accueil et sur les écrans de fin), alors
          que #barre-hud est masqué en dehors de etatPartie === 'enCours' (voir
-         Interface.mettreAJourEcrans). Libellé mis à jour par
-         Interface.mettreAJourBoutonSon(). -->
-    <button id="bouton-son" type="button">Son : ON</button>
+         Interface.mettreAJourEcrans). Bouton Son (phase 4B) pour couper tous les sons,
+         bouton Musique et curseur de volume (octobre 2026). Libellés et position du
+         curseur mis à jour par Interface.mettreAJourReglagesSon(). -->
+    <div id="reglages-son" class="reglages-son">
+        <button id="bouton-son" type="button" title="Raccourci clavier : M">Son : ON</button>
+        <button id="bouton-musique" type="button">Musique : ON</button>
+        <label class="reglage-volume">Volume
+            <input id="curseur-volume" type="range" min="0" max="100" step="5" value="80">
+        </label>
+    </div>
 
     <div class="conteneur-canvas">
         <canvas id="canvas-jeu"></canvas>
@@ -79,6 +86,11 @@
                      rafraîchis ensuite par Interface.mettreAJourProgressionAccueil(). -->
                 <ul id="liste-paliers-bonus" class="liste-paliers-bonus"></ul>
             </div>
+
+            <!-- Partie laissée en cours lors d'une visite précédente (sauvegarde.js) :
+                 visible seulement s'il y en a une. Libellé (durée, vague) écrit par
+                 Interface.mettreAJourReprise. -->
+            <button id="bouton-reprendre" type="button" class="bouton-reprendre" hidden>Reprendre la partie</button>
 
             <div id="choix-duree" class="choix-duree"></div>
             <p id="description-duree" class="description-duree"></p>
@@ -111,6 +123,8 @@
                 <p id="defi-du-jour-date" class="defi-du-jour-date">-</p>
                 <p id="defi-du-jour-score" class="defi-du-jour-score">-</p>
                 <button id="bouton-defi-du-jour" type="button" class="bouton-defi-du-jour">Jouer le défi du jour</button>
+                <!-- Visible dès qu'un score existe pour aujourd'hui. -->
+                <button id="bouton-partager-defi" type="button" class="bouton-partager" hidden>Partager mon score</button>
             </div>
         </div>
 
@@ -126,6 +140,9 @@
                  mention, affichée uniquement si la partie qui vient de se terminer
                  avait ce réglage actif (Interface.afficherResumeProgression). -->
             <p id="difficulte-superieure-victoire" class="difficulte-superieure" hidden>Difficulté supérieure</p>
+            <!-- Statistiques de la partie (octobre 2026), remplies une seule fois à la
+                 fin de la partie par Interface.afficherStatistiques. -->
+            <div id="statistiques-victoire" class="statistiques-partie"></div>
             <div class="boutons-fin-partie">
                 <button type="button" class="bouton-principal bouton-rejouer">Rejouer</button>
                 <button type="button" class="bouton-secondaire bouton-changer-duree">Changer de durée</button>
@@ -143,6 +160,9 @@
             <!-- Difficulté supérieure (contenu additionnel post-lancement) : même
                  principe que sur l'écran de victoire ci-dessus. -->
             <p id="difficulte-superieure-defaite" class="difficulte-superieure" hidden>Difficulté supérieure</p>
+            <div id="statistiques-defaite" class="statistiques-partie"></div>
+            <!-- Défi du jour seulement : partage du score (Interface.partagerDefi). -->
+            <button id="bouton-partager-defaite" type="button" class="bouton-partager" hidden>Partager mon score</button>
             <div class="boutons-fin-partie">
                 <button type="button" class="bouton-principal bouton-rejouer">Rejouer</button>
                 <button type="button" class="bouton-secondaire bouton-changer-duree">Changer de durée</button>
@@ -156,8 +176,11 @@
         <div id="panneau-amelioration" class="panneau-amelioration" hidden>
             <h3 id="panneau-titre">-</h3>
             <p id="panneau-stats">-</p>
-            <button id="bouton-ameliorer" type="button">Améliorer</button>
+            <button id="bouton-ameliorer" type="button" title="Raccourci clavier : A">Améliorer</button>
             <p id="panneau-niveau-max" hidden>Niveau maximum atteint</p>
+            <!-- Choix de la cible (octobre 2026), masqué pour la Caserne et le Gel,
+                 qui ne tirent pas. -->
+            <button id="bouton-ciblage" type="button" title="Raccourci clavier : C">Cible : le plus avancé</button>
             <button id="bouton-vendre" type="button">Vendre</button>
         </div>
     </div>
@@ -169,9 +192,11 @@
         <span>Tours : <span id="nombre-tours">-</span></span>
         <span>Vague : <span id="numero-vague">-</span></span>
         <span class="info-graine">Graine : <span id="graine-actuelle">-</span></span>
-        <button id="bouton-lancer-vague" type="button">Lancer la vague</button>
-        <button id="bouton-pause" type="button">Pause</button>
-        <button id="bouton-vitesse" type="button">Vitesse ×1</button>
+        <button id="bouton-lancer-vague" type="button" title="Raccourci clavier : Espace">Lancer la vague</button>
+        <!-- Aperçu de la prochaine vague (Vagues.descriptionVague). -->
+        <span id="prochaine-vague" class="prochaine-vague"></span>
+        <button id="bouton-pause" type="button" title="Raccourci clavier : P">Pause</button>
+        <button id="bouton-vitesse" type="button" title="Raccourci clavier : V">Vitesse ×1</button>
         <span id="message-construction" class="message-jeu"></span>
     </div>
 
@@ -183,12 +208,28 @@
          (#panneau-amelioration, phase 2B) sans passer par cette barre. -->
     <div id="barre-types-tours" class="barre-types-tours" hidden></div>
 
+    <!-- Fiche de la tour survolée, ou à défaut de la tour sélectionnée pour la
+         construction (Interface.mettreAJourFicheTour) : coût, caractéristiques et
+         rôle, pour choisir en connaissance de cause. -->
+    <p id="fiche-tour" class="fiche-tour" hidden>
+        <strong id="fiche-tour-titre"></strong>
+        <span id="fiche-tour-texte"></span>
+    </p>
+
+    <!-- Raccourcis clavier (Interface.gererClavier), affichés seulement sur un
+         appareil avec souris (voir .aide-clavier dans style.css), sous le plateau
+         plutôt que dans l'écran d'accueil, déjà bien rempli. -->
+    <p class="aide-clavier">Clavier : <kbd>1</kbd>–<kbd>6</kbd> tours · <kbd>Espace</kbd> vague ·
+        <kbd>P</kbd> pause · <kbd>V</kbd> vitesse · <kbd>A</kbd> améliorer · <kbd>C</kbd> cible ·
+        <kbd>Échap</kbd> annuler · <kbd>M</kbd> son</p>
+
     <!-- L'ordre de chargement compte : il n'y a pas de système de modules, chaque
          fichier s'appuie sur les objets globaux définis par les précédents.
          interface.js et jeu.js s'appellent mutuellement (voir la note en tête
          d'interface.js) : l'ordre entre ces deux-là n'a donc pas d'importance pour
          les appels, seulement pour que Config, Carte, Vagues, UniteCaserne, Tour,
-         Progression, Particules, Son et Decor existent déjà. -->
+         Progression, Statistiques, SauvegardePartie, Particules, Son et Decor existent
+         déjà. -->
     <script src="js/config.js"></script>
     <script src="js/aleatoire.js"></script>
     <script src="js/carte.js"></script>
@@ -197,6 +238,8 @@
     <script src="js/unite.js"></script>
     <script src="js/tour.js"></script>
     <script src="js/progression.js"></script>
+    <script src="js/statistiques.js"></script>
+    <script src="js/sauvegarde.js"></script>
     <script src="js/particules.js"></script>
     <script src="js/son.js"></script>
     <script src="js/decor.js"></script>

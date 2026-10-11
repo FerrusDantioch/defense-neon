@@ -41,18 +41,78 @@ const Vagues = {
     },
 
     // Tire le type du prochain ennemi à générer pour la vague `numero`. Les proportions
-    // de Rapide et de Blindé s'additionnent une fois leur vague de déblocage atteinte
+    // de chaque type avancé s'additionnent une fois leur vague de déblocage atteinte
     // (un Blindé n'exclut pas un Rapide) : à partir de la vague 6, un même tirage peut
     // donner l'un ou l'autre, comme demandé par les critères d'acceptation ("des
-    // Blindés apparaissent également" — pas "à la place des Rapides").
+    // Blindés apparaissent également" — pas "à la place des Rapides"). Soigneur et
+    // Bouclier (octobre 2026) sont ajoutés après les deux premiers : avant leur vague
+    // d'apparition, les tirages donnent exactement les mêmes types qu'auparavant.
     tirerTypeEnnemi(numero) {
-        const proportionBlinde = numero >= Config.VAGUE_APPARITION_BLINDE ? Config.PROPORTION_BLINDE : 0;
-        const proportionRapide = numero >= Config.VAGUE_APPARITION_RAPIDE ? Config.PROPORTION_RAPIDE : 0;
         const tirage = Aleatoire.nombre();
-
-        if (tirage < proportionBlinde) return 'blinde';
-        if (tirage < proportionBlinde + proportionRapide) return 'rapide';
+        let seuil = 0;
+        for (const [type, vagueApparition, proportion] of [
+            ['blinde', Config.VAGUE_APPARITION_BLINDE, Config.PROPORTION_BLINDE],
+            ['rapide', Config.VAGUE_APPARITION_RAPIDE, Config.PROPORTION_RAPIDE],
+            ['soigneur', Config.VAGUE_APPARITION_SOIGNEUR, Config.PROPORTION_SOIGNEUR],
+            ['bouclier', Config.VAGUE_APPARITION_BOUCLIER, Config.PROPORTION_BOUCLIER]
+        ]) {
+            if (numero < vagueApparition) continue;
+            seuil += proportion;
+            if (tirage < seuil) return type;
+        }
         return 'standard';
+    },
+
+    // Composition d'une vague, calculée à part pour servir aussi à l'aperçu de la
+    // vague suivante (descriptionVague) sans dupliquer les formules de demarrer().
+    nombreEnnemisNormal(numero) {
+        return Config.ENNEMIS_PAR_VAGUE_BASE + numero * Config.ENNEMIS_PAR_VAGUE_PAR_NUMERO;
+    },
+
+    // Vagues de boss (phase 7G) : tous les Config.VAGUE_INTERVALLE_BOSS paliers, un
+    // simple modulo sur le numéro de vague — valable aussi bien en mode Sans fin
+    // qu'au-delà du nombre de vagues d'une partie Standard/Longue, puisqu'il ne dépend
+    // jamais de Jeu.nombreDeVagues.
+    estVagueDeBoss(numero) {
+        return numero % Config.VAGUE_INTERVALLE_BOSS === 0;
+    },
+
+    tailleEscorte(numero) {
+        return Math.max(1, Math.round(this.nombreEnnemisNormal(numero) * Config.PROPORTION_ESCORTE_VAGUE_BOSS));
+    },
+
+    recompenseFinDeVague(numero) {
+        return Config.RECOMPENSE_FIN_VAGUE_BASE + numero * Config.RECOMPENSE_FIN_VAGUE_PAR_NUMERO;
+    },
+
+    // Types d'ennemis qui apparaissent pour la première fois à la vague `numero` :
+    // annoncés au début de cette vague (demarrer) et signalés dans l'aperçu de la
+    // vague suivante (descriptionVague).
+    nouveauxTypes(numero) {
+        return [
+            ['rapide', Config.VAGUE_APPARITION_RAPIDE],
+            ['blinde', Config.VAGUE_APPARITION_BLINDE],
+            ['drone', Config.VAGUE_APPARITION_DRONE],
+            ['soigneur', Config.VAGUE_APPARITION_SOIGNEUR],
+            ['bouclier', Config.VAGUE_APPARITION_BOUCLIER]
+        ].filter(([, vague]) => vague === numero).map(([type]) => type);
+    },
+
+    // Texte court décrivant la vague `numero`, affiché dans le HUD à côté du bouton
+    // de lancement (voir Interface.mettreAJourEcrans) pour que le joueur se prépare
+    // avant de la lancer : nombre d'ennemis, boss, drones et nouveaux ennemis.
+    descriptionVague(numero) {
+        const parties = [this.estVagueDeBoss(numero)
+            ? `⚠ boss + ${this.tailleEscorte(numero)} ennemis`
+            : `${this.nombreEnnemisNormal(numero)} ennemis`];
+        const nouveaux = this.nouveauxTypes(numero);
+        if (numero > Config.VAGUE_APPARITION_DRONE) {
+            parties.push('drones');
+        }
+        for (const type of nouveaux) {
+            parties.push(`nouveau : ${Config.TYPES_ENNEMIS[type].nom}`);
+        }
+        return parties.join(' · ');
     },
 
     // Initialise l'état de la vague `numero`. Refuse si une vague est déjà en cours,
@@ -79,54 +139,75 @@ const Vagues = {
         // (voir la note sur ce champ dans jeu.js), donc sans effet sur ses PV.
         const multiplicateurDifficulte = Jeu.difficulteSuperieure
             ? Config.DIFFICULTE_SUPERIEURE_MULTIPLICATEUR_PV : 1;
-        this.multiplicateurPointsDeVie = (1 + (numero - 1) * 0.15) * multiplicateurDifficulte;
+        this.multiplicateurPointsDeVie = (1 + (numero - 1) * Config.CROISSANCE_PV_PAR_VAGUE) * multiplicateurDifficulte;
 
         // Le premier ennemi apparaît tout de suite : attendre un intervalle complet
         // après le clic du joueur donnerait une impression de délai injustifié.
         this.tempsDepuisDerniereGeneration = 0;
 
-        const nombreNormalEnnemis = 5 + numero * 2;
-
-        // Vagues de boss (phase 7G) : tous les Config.VAGUE_INTERVALLE_BOSS paliers,
-        // un simple modulo sur le numéro de vague — valable aussi bien en mode Sans
-        // fin qu'au-delà du nombre de vagues d'une partie Standard/Longue, puisqu'il
-        // ne dépend jamais de Jeu.nombreDeVagues. `bossEnAttente` est consommé au tout
-        // premier ennemi généré ci-dessous (mettreAJour), garantissant qu'il apparaît
-        // en tête de file avant même le premier ennemi d'escorte.
-        this.estVagueBoss = numero % Config.VAGUE_INTERVALLE_BOSS === 0;
+        // `bossEnAttente` est consommé au tout premier ennemi généré ci-dessous
+        // (mettreAJour), garantissant que le boss apparaît en tête de file avant même
+        // le premier ennemi d'escorte.
+        this.estVagueBoss = this.estVagueDeBoss(numero);
         this.bossEnAttente = this.estVagueBoss;
+        this.ennemisRestantsAGenerer = this.estVagueBoss
+            ? 1 + this.tailleEscorte(numero)
+            : this.nombreEnnemisNormal(numero);
 
+        // Annonces de début de vague, une seule fois (demarrer() n'est appelée qu'une
+        // fois par vague grâce au garde-fou this.enCours en tête de cette méthode) :
+        // vague de boss (phase 7G), et chaque type d'ennemi qui apparaît pour la
+        // première fois, avec ce qu'il faut savoir pour le contrer. Un joueur qui ne
+        // savait pas que seul le Flak touche les drones perdait presque toute son
+        // intégrité à cause d'eux sans comprendre pourquoi (voir
+        // outils/simulation-parties.js). Une seule zone de message : les annonces
+        // d'une même vague sont réunies plutôt que la dernière n'efface les autres.
+        const annonces = [];
         if (this.estVagueBoss) {
-            const tailleEscorte = Math.max(1, Math.round(nombreNormalEnnemis * Config.PROPORTION_ESCORTE_VAGUE_BOSS));
-            this.ennemisRestantsAGenerer = 1 + tailleEscorte;
-
-            // Bandeau d'annonce et son d'alerte, une seule fois au tout début de la
-            // vague (jamais répétés en boucle, demarrer() n'étant appelée qu'une fois
-            // par vague grâce au garde-fou this.enCours en tête de cette méthode) —
-            // réutilise le même mécanisme d'affichage temporaire que les messages de
-            // construction (Interface.afficherMessageConstruction, généralisé pour
-            // accepter une durée différente de son défaut de 1,5 s), avec une durée
-            // plus longue pour rester bien visible malgré son caractère plus
-            // exceptionnel qu'une simple erreur de construction.
-            Interface.afficherMessageConstruction('⚠ VAGUE DE BOSS', 3);
+            annonces.push('VAGUE DE BOSS');
             Son.jouerAlerteBoss();
-        } else {
-            this.ennemisRestantsAGenerer = nombreNormalEnnemis;
         }
+        const nouveaux = this.nouveauxTypes(numero);
+        for (const type of nouveaux) {
+            const caracteristiques = Config.TYPES_ENNEMIS[type];
+            annonces.push(`NOUVEL ENNEMI : ${caracteristiques.nom} — ${caracteristiques.description}`);
+        }
+        if (nouveaux.length > 0) {
+            Son.jouerAlerteNouvelEnnemi();
+        }
+        if (annonces.length > 0) {
+            // Plus longue quand il y a une consigne à lire.
+            Interface.afficherMessageConstruction(`⚠ ${annonces.join(' — ')}`, nouveaux.length > 0 ? 4 : 3);
+        }
+    },
 
-        // Annonce des drones, au début de la première vague où ils peuvent
-        // apparaître (Config.VAGUE_APPARITION_DRONE) : seul le Flak peut les viser,
-        // et un joueur qui l'ignore perdait presque toute son intégrité à cause
-        // d'eux sans comprendre pourquoi (voir outils/simulation-parties.js). Même
-        // mécanisme que l'annonce de boss ci-dessus, un peu plus longue pour laisser
-        // le temps de lire la consigne. Une seule zone de message : si cette vague
-        // est aussi une vague de boss (réglages modifiés), les deux annonces sont
-        // réunies plutôt que la seconde n'efface la première.
-        if (numero === Config.VAGUE_APPARITION_DRONE) {
-            const prefixe = this.estVagueBoss ? '⚠ VAGUE DE BOSS — ' : '⚠ ';
-            Interface.afficherMessageConstruction(`${prefixe}DRONES : seul le Flak peut les abattre`, 4);
-            Son.jouerAlerteDrones();
+    // Vrai quand le joueur peut appeler la vague suivante sans attendre la fin de
+    // celle-ci (voir Jeu.lancerVagueSuivante) : tous ses ennemis sont déjà apparus, et
+    // la partie compte encore au moins une vague.
+    peutAppelerEnAvance() {
+        return this.enCours
+            && this.ennemisRestantsAGenerer <= 0
+            && this.numeroVagueActuelle < Jeu.nombreDeVagues;
+    },
+
+    // Bonus versé pour un appel anticipé : proportionnel au nombre d'ennemis encore
+    // en jeu, donc au risque pris (voir Config.BONUS_APPEL_ANTICIPE_PAR_ENNEMI).
+    // Rappelée à chaque image par le HUD (libellé du bouton) : une simple boucle
+    // plutôt qu'un filter() qui créerait un tableau à chaque fois.
+    bonusAppelAnticipe(listeEnnemis) {
+        let enJeu = 0;
+        for (const ennemi of listeEnnemis) {
+            if (ennemi.vivant && !ennemi.arrive) enJeu++;
         }
+        return enJeu * Config.BONUS_APPEL_ANTICIPE_PAR_ENNEMI;
+    },
+
+    // Considère la vague en cours comme terminée sans attendre ses derniers ennemis
+    // (appel anticipé) et renvoie sa récompense habituelle, que l'appelant verse
+    // lui-même. Les ennemis restants continuent leur route normalement.
+    terminerEnAvance() {
+        this.enCours = false;
+        return this.recompenseFinDeVague(this.numeroVagueActuelle);
     },
 
     // À appeler une fois par frame avec le dt courant et le tableau des ennemis actifs
@@ -193,7 +274,7 @@ const Vagues = {
             const resteDesEnnemisEnJeu = listeEnnemis.some(e => e.vivant && !e.arrive);
             if (!resteDesEnnemisEnJeu) {
                 this.enCours = false;
-                this.credits += 20 + this.numeroVagueActuelle * 5;
+                this.credits += this.recompenseFinDeVague(this.numeroVagueActuelle);
             }
         }
     },

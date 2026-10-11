@@ -292,13 +292,48 @@ const Config = {
     // `degatsCorpsACorps: 35`, nettement au-dessus du Blindé (20) : en fait la menace
     // la plus sérieuse au corps-à-corps contre une unité de Caserne rencontrée
     // jusqu'ici.
+    //
+    // `nom` et `description` (annonces de vague, aperçu de la vague suivante,
+    // statistiques de fin de partie) : le texte montré au joueur, au singulier.
+    //
+    // Soigneur et Bouclier (octobre 2026) : deux ennemis au sol de plus, pensés pour
+    // donner un intérêt au choix de la cible de chaque tour (voir MODES_CIBLAGE).
+    // Le Soigneur rend des points de vie à ses voisins (voir SOIGNEUR_*), le Bouclier
+    // porte un bouclier qui absorbe les dégâts avant ses points de vie et se recharge
+    // s'il n'est plus touché (voir BOUCLIER_*) ; `bouclier` est sa valeur de base,
+    // multipliée comme les points de vie au fil des vagues.
     TYPES_ENNEMIS: {
-        standard: { pointsDeVie: 100, vitesse: 60, recompense: 10, couleur: 'cyan', degatsCorpsACorps: 8 },
-        rapide: { pointsDeVie: 60, vitesse: 110, recompense: 15, couleur: 'jaune', degatsCorpsACorps: 4 },
-        blinde: { pointsDeVie: 300, vitesse: 35, recompense: 25, couleur: 'orange', degatsCorpsACorps: 20 },
-        drone: { pointsDeVie: 50, vitesse: 90, recompense: 20, couleur: 'neonBlanc', vole: true, degatsCorpsACorps: 0 },
-        boss: { pointsDeVie: 2000, vitesse: 40, recompense: 150, couleur: 'neonRouge', vole: false, degatsCorpsACorps: 35 }
+        standard: { nom: 'Standard', pointsDeVie: 100, vitesse: 60, recompense: 10, couleur: 'cyan', degatsCorpsACorps: 8,
+            description: 'ennemi de base' },
+        rapide: { nom: 'Rapide', pointsDeVie: 60, vitesse: 110, recompense: 15, couleur: 'jaune', degatsCorpsACorps: 4,
+            description: 'très rapide mais fragile' },
+        blinde: { nom: 'Blindé', pointsDeVie: 300, vitesse: 35, recompense: 25, couleur: 'orange', degatsCorpsACorps: 20,
+            description: 'lent mais très résistant' },
+        drone: { nom: 'Drone', pointsDeVie: 50, vitesse: 90, recompense: 20, couleur: 'neonBlanc', vole: true, degatsCorpsACorps: 0,
+            description: 'il vole : seul le Flak peut l\'abattre' },
+        boss: { nom: 'Boss', pointsDeVie: 2000, vitesse: 40, recompense: 150, couleur: 'neonRouge', vole: false, degatsCorpsACorps: 35,
+            description: 'énorme réserve de points de vie' },
+        soigneur: { nom: 'Soigneur', pointsDeVie: 120, vitesse: 55, recompense: 20, couleur: 'vertSoin', degatsCorpsACorps: 6,
+            description: 'soigne ses voisins : éliminez-le en premier' },
+        bouclier: { nom: 'Bouclier', pointsDeVie: 150, vitesse: 50, recompense: 25, couleur: 'bleuBouclier', degatsCorpsACorps: 10,
+            bouclier: 120, description: 'son bouclier se recharge : tirez sans relâche' }
     },
+
+    // Soigneur : chaque seconde, rend SOIGNEUR_SOIN_PAR_SECONDE points de vie
+    // (multipliés comme ses propres points de vie au fil des vagues) à chaque autre
+    // ennemi au sol situé à moins de SOIGNEUR_RAYON pixels (échelle de référence).
+    // Plusieurs Soigneurs proches ne cumulent pas leurs soins (voir
+    // Jeu.appliquerEffetsDeZone) : sinon un groupe de Soigneurs rendrait les ennemis
+    // presque immortels. Un soin fixe plutôt qu'un pourcentage : un boss n'en reçoit
+    // ainsi qu'une part négligeable de sa vie.
+    SOIGNEUR_RAYON: 70,
+    SOIGNEUR_SOIN_PAR_SECONDE: 10,
+
+    // Bouclier : se recharge de BOUCLIER_RECHARGE_PAR_SECONDE (part du bouclier
+    // maximum, par seconde) dès que l'ennemi n'a plus été touché depuis
+    // BOUCLIER_DELAI_RECHARGE secondes. Un tir continu l'empêche donc de se recharger.
+    BOUCLIER_DELAI_RECHARGE: 2.5,
+    BOUCLIER_RECHARGE_PAR_SECONDE: 0.3,
 
     // À partir de quelle vague le drone commence à apparaître, et dans quelle
     // proportion des ennemis générés ce jour-là (phase 7F) — même mécanisme que
@@ -338,6 +373,31 @@ const Config = {
     PROPORTION_RAPIDE: 0.25,
     VAGUE_APPARITION_BLINDE: 6,
     PROPORTION_BLINDE: 0.20,
+    // Soigneur et Bouclier : jamais sur une vague de boss (multiple de
+    // VAGUE_INTERVALLE_BOSS) pour que leur annonce reste lisible, et après la vague 10
+    // pour qu'une partie Rapide ne les rencontre jamais.
+    VAGUE_APPARITION_SOIGNEUR: 11,
+    PROPORTION_SOIGNEUR: 0.08,
+    VAGUE_APPARITION_BOUCLIER: 13,
+    PROPORTION_BOUCLIER: 0.12,
+
+    // Composition et récompense d'une vague (voir Vagues.demarrer et
+    // Vagues.recompenseFinDeVague) : ENNEMIS_PAR_VAGUE_BASE + numéro *
+    // ENNEMIS_PAR_VAGUE_PAR_NUMERO ennemis ; points de vie multipliés par
+    // 1 + (numéro - 1) * CROISSANCE_PV_PAR_VAGUE ; RECOMPENSE_FIN_VAGUE_BASE + numéro *
+    // RECOMPENSE_FIN_VAGUE_PAR_NUMERO crédits une fois la vague terminée.
+    ENNEMIS_PAR_VAGUE_BASE: 5,
+    ENNEMIS_PAR_VAGUE_PAR_NUMERO: 2,
+    CROISSANCE_PV_PAR_VAGUE: 0.15,
+    RECOMPENSE_FIN_VAGUE_BASE: 20,
+    RECOMPENSE_FIN_VAGUE_PAR_NUMERO: 5,
+
+    // Appel anticipé d'une vague (voir Jeu.lancerVagueSuivante) : une fois tous les
+    // ennemis de la vague en cours apparus, le joueur peut appeler la suivante sans
+    // attendre qu'ils aient tous disparu. La vague en cours est alors considérée comme
+    // terminée (sa récompense est versée tout de suite), et chaque ennemi encore en
+    // jeu rapporte en plus ce bonus : plus le joueur prend de risques, plus il gagne.
+    BONUS_APPEL_ANTICIPE_PAR_ENNEMI: 3,
 
     // Durées de partie proposées à l'écran d'accueil. `nombreDeVagues` vaut Infinity
     // pour le mode Sans fin : tout code qui affiche ou calcule une progression à
@@ -401,14 +461,48 @@ const Config = {
     // voir Tour.chercherCible, qui ignore complètement un ennemi volant pour toute
     // tour dont ce champ n'est pas vrai, comme s'il n'existait pas. Le Flak est pour
     // l'instant la seule tour à valoir true.
+    //
+    // `description` : une phrase affichée dans la fiche de la tour, sous la barre de
+    // construction (voir Interface.mettreAJourFicheTour). L'ordre des types ci-dessous
+    // est aussi celui des boutons et des raccourcis clavier 1 à 6.
+    //
+    // Gel (octobre 2026) : ne tire pas. Chaque ennemi à sa portée, drones compris,
+    // avance moins vite (voir GEL_* plus bas et Jeu.appliquerEffetsDeZone). `degats`
+    // et `cadence` ne servent pas ; seule sa portée suit la formule d'amélioration
+    // commune, la force du ralentissement ayant sa propre progression.
     TYPES_TOURS: {
-        mitrailleuse: { nom: 'Mitrailleuse', portee: 100, degats: 10, cadence: 4, cout: 40, couleur: 'cyan', typeDegats: 'unique', peutViserVolant: false },
-        canon: { nom: 'Canon', portee: 120, degats: 45, cadence: 1, cout: 70, couleur: 'orange', typeDegats: 'unique', peutViserVolant: false },
-        sniper: { nom: 'Sniper', portee: 200, degats: 80, cadence: 0.5, cout: 100, couleur: 'magenta', typeDegats: 'unique', peutViserVolant: false },
-        flak: { nom: 'Flak', portee: 110, degats: 26, cadence: 1.2, cout: 80, couleur: '#7fff6b', typeDegats: 'zone', peutViserVolant: true },
-        caserne: { nom: 'Caserne', portee: 60, degats: 15, cadence: 1, cout: 90, couleur: '#3b82f6', typeDegats: 'caserne', peutViserVolant: false }
+        mitrailleuse: { nom: 'Mitrailleuse', portee: 100, degats: 10, cadence: 4, cout: 40, couleur: 'cyan', typeDegats: 'unique', peutViserVolant: false,
+            description: 'Tir très rapide et bon marché : efficace contre les ennemis légers.' },
+        canon: { nom: 'Canon', portee: 120, degats: 45, cadence: 1, cout: 70, couleur: 'orange', typeDegats: 'unique', peutViserVolant: false,
+            description: 'Gros dégâts par tir, cadence lente : idéal contre les Blindés.' },
+        sniper: { nom: 'Sniper', portee: 200, degats: 80, cadence: 0.5, cout: 100, couleur: 'magenta', typeDegats: 'unique', peutViserVolant: false,
+            description: 'Très longue portée : touche les ennemis bien avant les autres tours.' },
+        flak: { nom: 'Flak', portee: 110, degats: 26, cadence: 1.2, cout: 80, couleur: '#7fff6b', typeDegats: 'zone', peutViserVolant: true,
+            description: 'Seule tour capable d\'abattre les drones. Dégâts de zone.' },
+        caserne: { nom: 'Caserne', portee: 60, degats: 15, cadence: 1, cout: 90, couleur: '#3b82f6', typeDegats: 'caserne', peutViserVolant: false,
+            description: 'Pose un soldat qui bloque le chemin et combat au corps à corps.' },
+        gel: { nom: 'Gel', portee: 90, degats: 0, cadence: 1, cout: 60, couleur: '#b9a8ff', typeDegats: 'gel', peutViserVolant: true,
+            description: 'Ne tire pas : ralentit tous les ennemis à sa portée, drones compris.' }
     },
     TYPE_TOUR_PAR_DEFAUT: 'mitrailleuse',
+
+    // Tour Gel : part de la vitesse retirée aux ennemis à sa portée, au niveau 1, puis
+    // en plus à chaque amélioration (35 % au niveau 1, 65 % au niveau 7). Plusieurs
+    // tours Gel ne se cumulent pas : seul le ralentissement le plus fort compte. Le
+    // boss ne subit que GEL_EFFET_SUR_BOSS de l'effet, pour qu'une vague de boss ne
+    // devienne pas triviale.
+    GEL_RALENTISSEMENT_BASE: 0.35,
+    GEL_RALENTISSEMENT_PAR_NIVEAU: 0.05,
+    GEL_EFFET_SUR_BOSS: 0.5,
+
+    // Choix de la cible de chaque tour (voir Tour.chercherCible), dans l'ordre où le
+    // bouton du panneau d'amélioration les fait défiler. Le premier est le mode par
+    // défaut, le seul qui existait avant octobre 2026.
+    MODES_CIBLAGE: [
+        { id: 'premier', nom: 'le plus avancé' },
+        { id: 'fort', nom: 'le plus résistant' },
+        { id: 'proche', nom: 'le plus proche' }
+    ],
 
     // Unité de blocage de la Caserne (phase 7E, voir tour.js/unite.js). Comme pour les
     // autres tours, ces bases montent avec le niveau de la tour via les mêmes
@@ -534,6 +628,22 @@ const Config = {
     // Volume modéré par défaut, jamais à pleine échelle.
     SON_VOLUME_MAITRE: 0.3,
     CLE_SAUVEGARDE_SON: 'defense-neon-son-actif',
+
+    // Volume général réglable (curseur à côté du bouton Son, de 0 à 1) et musique
+    // d'ambiance, elle aussi synthétisée (voir Son.planifierMusique). Le volume
+    // multiplie tous les sons ; MUSIQUE_VOLUME règle la musique par rapport aux
+    // effets, pour qu'elle reste en fond. MUSIQUE_TEMPO en battements par minute.
+    SON_VOLUME_PAR_DEFAUT: 0.8,
+    CLE_SAUVEGARDE_VOLUME: 'defense-neon-volume',
+    CLE_SAUVEGARDE_MUSIQUE: 'defense-neon-musique-active',
+    MUSIQUE_VOLUME: 0.35,
+    MUSIQUE_TEMPO: 104,
+
+    // Sauvegarde de la partie en cours (voir sauvegarde.js) : écrite entre deux
+    // vagues, effacée à la fin de la partie. Le numéro de version permet d'ignorer
+    // une sauvegarde d'un format plus ancien plutôt que de mal la relire.
+    CLE_SAUVEGARDE_PARTIE: 'defense-neon-partie-en-cours',
+    VERSION_SAUVEGARDE_PARTIE: 1,
 
     // Difficulté supérieure (contenu additionnel post-lancement, « phase 7I ») :
     // réglage orthogonal au choix de durée (Rapide/Standard/Longue/Sans fin,
