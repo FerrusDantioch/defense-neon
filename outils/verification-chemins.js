@@ -255,7 +255,7 @@ function executer(nombreDeGraines) {
     }
     console.log('');
     console.log(`Espacement minimal toutes paires confondues (entrées et sorties, 2 ou 3 chemins) — pire cas observé : ${pireEcartObserve} ligne(s) (seuil visé : ${Config.ECART_MIN_ENTREES_SORTIES})`);
-    console.log(`Cartes sous ce seuil sur au moins une paire : ${cartesSousEspacementMinimal}/${nombreDeGraines} (${(cartesSousEspacementMinimal / nombreDeGraines * 100).toFixed(1)} %) — voir « Troisième chemin occasionnel » dans ARCHITECTURE.md pour la raison (configurations à 3 lignes rares où aucun espacement complet n'est mathématiquement atteignable dans la bande LIGNE_MIN-LIGNE_MAX).`);
+    console.log(`Cartes sous ce seuil sur au moins une paire : ${cartesSousEspacementMinimal}/${nombreDeGraines} (${(cartesSousEspacementMinimal / nombreDeGraines * 100).toFixed(1)} %) — attendu : 0 depuis Carte.resteDeLaPlace (voir « Améliorations d'octobre 2026 » dans ARCHITECTURE.md).`);
     console.log('');
 
     const succes = cartesEnErreur === 0 && cartesEchecReproductibilite === 0;
