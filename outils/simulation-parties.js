@@ -12,7 +12,8 @@
 // couvre le plus de trajectoires de drone pas encore couvertes par un autre Flak. Il
 // lance chaque vague dès que la précédente est finie. Deux stratégies :
 // - « équilibrée » : un Flak sur six tours ;
-// - « anti-drones » : un Flak sur deux tours.
+// - « anti-drones » : un Flak sur deux tours ;
+// - « anti-drones avec Gel » : la même, avec une tour Gel à la place d'un Flak.
 //
 // Compare les règles actuelles (Config tel quel : 3 voies, tours obligatoirement le
 // long d'une voie) aux anciennes (2 voies plus 25 % de chances d'une 3e, construction
@@ -36,7 +37,8 @@ const INTERVALLE_DECISION = 0.25;
 
 const STRATEGIES = [
     { nom: 'équilibrée (1 Flak sur 6)', rotation: ['mitrailleuse', 'canon', 'mitrailleuse', 'flak', 'sniper', 'canon'] },
-    { nom: 'anti-drones (1 Flak sur 2)', rotation: ['mitrailleuse', 'flak', 'canon', 'flak', 'sniper', 'flak'] }
+    { nom: 'anti-drones (1 Flak sur 2)', rotation: ['mitrailleuse', 'flak', 'canon', 'flak', 'sniper', 'flak'] },
+    { nom: 'anti-drones avec Gel', rotation: ['mitrailleuse', 'flak', 'canon', 'gel', 'sniper', 'flak'] }
 ];
 
 const REGLES = [
@@ -56,10 +58,10 @@ function creerContexte() {
         Son: new Proxy({}, { get: () => () => {} })
     };
     vm.createContext(sandbox);
-    const fichiers = ['config.js', 'aleatoire.js', 'carte.js', 'ennemi.js', 'vagues.js', 'unite.js', 'tour.js', 'progression.js'];
+    const fichiers = ['config.js', 'aleatoire.js', 'carte.js', 'ennemi.js', 'vagues.js', 'unite.js', 'tour.js', 'progression.js', 'statistiques.js'];
     const source = fichiers.map(f => fs.readFileSync(path.join(DOSSIER_JS, f), 'utf8')).join('\n;\n');
     new vm.Script(
-        source + '\n;Object.assign(globalThis, { Config, Carte, Vagues, Tour, Projectile });',
+        source + '\n;Object.assign(globalThis, { Config, Carte, Vagues, Ennemi, Tour, Projectile });',
         { filename: 'defense-neon-concatene.js' }
     ).runInContext(sandbox);
     return sandbox;
@@ -74,7 +76,7 @@ function distanceAuSegment(p, a, b) {
 
 // Joue une partie complète ; renvoie son issue et l'intégrité perdue par type d'ennemi.
 function jouerPartie(graine, regles, strategie, difficulteSuperieure) {
-    const { Config, Carte, Vagues, Tour, Projectile, Jeu } = creerContexte();
+    const { Config, Carte, Vagues, Ennemi, Tour, Projectile, Jeu } = creerContexte();
     if (!regles.actuelles) {
         Config.NOMBRE_CHEMINS_PAR_DEFAUT = regles.nombreChemins;
         Config.PROBABILITE_TROISIEME_CHEMIN = regles.probabiliteTroisieme;
@@ -178,6 +180,8 @@ function jouerPartie(graine, regles, strategie, difficulteSuperieure) {
         Vagues.demarrer(numero);
         while (Vagues.enCours) {
             // Même ordre que Jeu.simuler (jeu.js), sans les Casernes.
+            Tour.appliquerRalentissements(tours, ennemis);
+            Ennemi.appliquerSoins(ennemis, DT);
             for (const ennemi of ennemis) ennemi.deplacer(DT);
             for (const tour of tours) tour.mettreAJour(DT, ennemis, projectiles);
             for (const projectile of projectiles) projectile.mettreAJour(DT, ennemis);

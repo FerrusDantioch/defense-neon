@@ -23,8 +23,30 @@ const Interface = {
     boutonLancerVague: null,
     boutonPause: null,
     boutonVitesse: null,
-    boutonSon: null,
+    elementProchaineVague: null,
     elementMessageConstruction: null,
+
+    // Réglages du son, visibles en permanence (voir mettreAJourReglagesSon).
+    boutonSon: null,
+    boutonMusique: null,
+    curseurVolume: null,
+
+    // Fiche de la tour survolée ou sélectionnée pour la construction (voir
+    // mettreAJourFicheTour). `typeSurvole` : type du bouton survolé à la souris ou
+    // atteint au clavier, null sinon.
+    elementFicheTour: null,
+    elementFicheTourTitre: null,
+    elementFicheTourTexte: null,
+    typeSurvole: null,
+
+    // Reprise d'une partie sauvegardée et partage du défi du jour (octobre 2026).
+    boutonReprendre: null,
+    boutonPartagerDefi: null,
+    boutonPartagerDefaite: null,
+
+    // Statistiques de fin de partie (voir afficherStatistiques).
+    elementStatistiquesVictoire: null,
+    elementStatistiquesDefaite: null,
 
     // Écran d'accueil.
     boutonsDuree: [],
@@ -99,6 +121,7 @@ const Interface = {
     elementPanneauStats: null,
     boutonAmeliorer: null,
     elementNiveauMax: null,
+    boutonCiblage: null,
     boutonVendre: null,
     tourSelectionnee: null,
 
@@ -150,17 +173,32 @@ const Interface = {
         this.boutonLancerVague = document.getElementById('bouton-lancer-vague');
         this.boutonPause = document.getElementById('bouton-pause');
         this.boutonVitesse = document.getElementById('bouton-vitesse');
+        this.elementProchaineVague = document.getElementById('prochaine-vague');
         this.elementMessageConstruction = document.getElementById('message-construction');
 
-        // Bouton Son (phase 4B) : placé hors de #barre-hud dans le HTML précisément
-        // parce qu'il doit rester visible à tout moment (y compris à l'accueil, avant
+        // Réglages du son : placés hors de #barre-hud dans le HTML précisément parce
+        // qu'ils doivent rester visibles à tout moment (y compris à l'accueil, avant
         // même qu'une partie ne démarre), alors que #barre-hud est masqué en dehors de
         // 'enCours' (voir mettreAJourEcrans) — jamais soumis à cette bascule.
         this.boutonSon = document.getElementById('bouton-son');
-        this.mettreAJourBoutonSon();
+        this.boutonMusique = document.getElementById('bouton-musique');
+        this.curseurVolume = document.getElementById('curseur-volume');
+        this.mettreAJourReglagesSon();
         this.boutonSon.addEventListener('click', () => {
             Son.basculer();
-            this.mettreAJourBoutonSon();
+            this.mettreAJourReglagesSon();
+        });
+        this.boutonMusique.addEventListener('click', () => {
+            Son.basculerMusique();
+            this.mettreAJourReglagesSon();
+        });
+        this.curseurVolume.addEventListener('input', () => {
+            Son.reglerVolume(Number(this.curseurVolume.value) / 100);
+        });
+        // Un petit bip au relâchement du curseur, pour entendre le nouveau volume —
+        // seulement si l'audio a déjà été autorisé par un premier clic sur Jouer.
+        this.curseurVolume.addEventListener('change', () => {
+            if (Son.contexte) Son.jouerConstruction();
         });
 
         this.elementDescriptionDuree = document.getElementById('description-duree');
@@ -178,6 +216,23 @@ const Interface = {
             Son.initialiser();
             Jeu.demarrerDefiDuJour();
         });
+
+        this.boutonReprendre = document.getElementById('bouton-reprendre');
+        this.boutonReprendre.addEventListener('click', () => {
+            Son.initialiser();
+            Jeu.reprendrePartie();
+        });
+
+        this.boutonPartagerDefi = document.getElementById('bouton-partager-defi');
+        this.boutonPartagerDefi.addEventListener('click', () => {
+            this.partagerDefi(this.boutonPartagerDefi, Progression.defiDuJour.meilleureVague);
+        });
+        this.boutonPartagerDefaite = document.getElementById('bouton-partager-defaite');
+        this.boutonPartagerDefaite.addEventListener('click', () => {
+            this.partagerDefi(this.boutonPartagerDefaite, Jeu.derniereProgression.vagueAtteinte);
+        });
+        this.elementStatistiquesVictoire = document.getElementById('statistiques-victoire');
+        this.elementStatistiquesDefaite = document.getElementById('statistiques-defaite');
 
         this.elementNiveauJoueurActuel = document.getElementById('niveau-joueur-actuel');
         this.elementBarreXpConteneur = document.getElementById('barre-xp-conteneur');
@@ -261,25 +316,45 @@ const Interface = {
         // Les boutons de type de tour sont générés depuis Config.TYPES_TOURS, pour la
         // même raison que ceux de durée : ne jamais avoir deux sources de vérité.
         this.conteneurTypesTours = document.getElementById('barre-types-tours');
-        for (const [type, caracteristiques] of Object.entries(Config.TYPES_TOURS)) {
+        Object.entries(Config.TYPES_TOURS).forEach(([type, caracteristiques], index) => {
             const bouton = document.createElement('button');
             bouton.type = 'button';
             bouton.textContent = `${caracteristiques.nom} — ${caracteristiques.cout}`;
             bouton.dataset.typeTour = type;
+            bouton.title = `Raccourci clavier : ${index + 1}`;
             bouton.addEventListener('click', () => this.selectionnerTypeTour(type));
+            // La fiche montre la tour survolée à la souris (ou atteinte au clavier)
+            // avant même de la sélectionner. Pas sur tactile : un tap sélectionne
+            // directement, et la fiche suit alors la sélection.
+            bouton.addEventListener('pointerenter', evenement => {
+                if (this.supportSurvol(evenement)) this.typeSurvole = type;
+            });
+            bouton.addEventListener('pointerleave', () => { this.typeSurvole = null; });
+            // Focus au clavier seulement (touche Tab) : un bouton cliqué garde aussi
+            // le focus, mais la fiche doit alors suivre la sélection.
+            bouton.addEventListener('focus', () => {
+                if (bouton.matches(':focus-visible')) this.typeSurvole = type;
+            });
+            bouton.addEventListener('blur', () => { this.typeSurvole = null; });
             this.conteneurTypesTours.appendChild(bouton);
-        }
+        });
         this.boutonsTypesTours = Array.from(this.conteneurTypesTours.querySelectorAll('button'));
         this.selectionnerTypeTour(Config.TYPE_TOUR_PAR_DEFAUT);
+
+        this.elementFicheTour = document.getElementById('fiche-tour');
+        this.elementFicheTourTitre = document.getElementById('fiche-tour-titre');
+        this.elementFicheTourTexte = document.getElementById('fiche-tour-texte');
 
         this.panneauAmelioration = document.getElementById('panneau-amelioration');
         this.elementPanneauTitre = document.getElementById('panneau-titre');
         this.elementPanneauStats = document.getElementById('panneau-stats');
         this.boutonAmeliorer = document.getElementById('bouton-ameliorer');
         this.elementNiveauMax = document.getElementById('panneau-niveau-max');
+        this.boutonCiblage = document.getElementById('bouton-ciblage');
         this.boutonVendre = document.getElementById('bouton-vendre');
 
         this.boutonAmeliorer.addEventListener('click', () => this.ameliorerTourSelectionnee());
+        this.boutonCiblage.addEventListener('click', () => this.changerCiblageTourSelectionnee());
         this.boutonVendre.addEventListener('click', () => this.vendreTourSelectionnee());
 
         // Un clic n'importe où ailleurs que sur le canvas (déjà géré par
@@ -308,9 +383,8 @@ const Interface = {
             bouton.addEventListener('click', () => Jeu.retourAccueil());
         }
 
-        this.boutonLancerVague.addEventListener('click', () => {
-            Vagues.demarrer(Vagues.numeroVagueActuelle + 1);
-        });
+        // Lance la vague suivante, ou l'appelle en avance (voir Jeu.lancerVagueSuivante).
+        this.boutonLancerVague.addEventListener('click', () => Jeu.lancerVagueSuivante());
 
         // Bouton unique Pause/Reprendre : agit sur la même variable Jeu.enPause que
         // la pause automatique déclenchée par visibilitychange (dans jeu.js), sans
@@ -339,6 +413,60 @@ const Interface = {
                 this.caseSurvolee = null;
             }
         });
+
+        document.addEventListener('keydown', evenement => this.gererClavier(evenement));
+    },
+
+    // Raccourcis clavier (octobre 2026), rappelés sur l'écran d'accueil (.aide-clavier).
+    // Les chiffres sont lus via `evenement.code` (position de la touche) plutôt que
+    // `evenement.key` : sur un clavier AZERTY, la rangée du haut donne « & é " ' »
+    // sans la touche Maj, alors que c'est bien la touche « 1 » que le joueur vise.
+    gererClavier(evenement) {
+        if (evenement.ctrlKey || evenement.metaKey || evenement.altKey) return;
+        // Le curseur de volume se règle aux flèches : ses touches ne sont pas des
+        // raccourcis.
+        if (evenement.target instanceof HTMLInputElement) return;
+        const touche = (evenement.key || '').toLowerCase();
+
+        if (touche === 'm') {
+            Son.basculer();
+            this.mettreAJourReglagesSon();
+            return;
+        }
+        if (Jeu.etatPartie !== 'enCours') return;
+
+        const chiffre = /^(Digit|Numpad)([1-9])$/.exec(evenement.code);
+        if (chiffre) {
+            const type = Object.keys(Config.TYPES_TOURS)[Number(chiffre[2]) - 1];
+            if (type) {
+                this.selectionnerTypeTour(type);
+                // La fiche montre la tour qu'on vient de choisir, même si un autre
+                // bouton de tour a encore le focus.
+                this.typeSurvole = null;
+            }
+            return;
+        }
+
+        if (evenement.code === 'Space') {
+            // Empêche aussi le défilement de la page et le clic du bouton qui aurait
+            // le focus (sinon Espace après un clic sur « Pause » remettrait en pause).
+            evenement.preventDefault();
+            Jeu.lancerVagueSuivante();
+            return;
+        }
+
+        if (touche === 'p') {
+            Jeu.enPause = !Jeu.enPause;
+        } else if (touche === 'v') {
+            Jeu.vitesseJeu = Jeu.vitesseJeu === 1 ? 2 : 1;
+        } else if (touche === 'a') {
+            this.ameliorerTourSelectionnee();
+        } else if (touche === 'c') {
+            this.changerCiblageTourSelectionnee();
+        } else if (touche === 'escape') {
+            this.tourSelectionnee = null;
+            this.effacerAttenteConfirmationTactile();
+        }
     },
 
     selectionnerDuree(id) {
@@ -376,11 +504,58 @@ const Interface = {
         if (element[propriete] !== nouvelleValeur) element[propriete] = nouvelleValeur;
     },
 
-    // Libellé du bouton Son (phase 4B), rafraîchi immédiatement après chaque clic —
-    // pas besoin d'un rafraîchissement par frame comme mettreAJourBoutonsTypesTours,
-    // puisque rien d'autre que ce clic ne fait changer Son.actif.
-    mettreAJourBoutonSon() {
+    // Libellés des boutons Son et Musique et position du curseur de volume, rafraîchis
+    // immédiatement après chaque changement — pas besoin d'un rafraîchissement par
+    // frame comme mettreAJourBoutonsTypesTours, puisque rien d'autre que ces
+    // contrôles (et la touche M) ne les fait changer.
+    mettreAJourReglagesSon() {
         this.boutonSon.textContent = Son.actif ? 'Son : ON' : 'Son : OFF';
+        this.boutonMusique.textContent = Son.musiqueActive ? 'Musique : ON' : 'Musique : OFF';
+        // Sans son, la musique ne joue de toute façon pas : son bouton est grisé.
+        this.boutonMusique.disabled = !Son.actif;
+        this.curseurVolume.value = String(Math.round(Son.volume * 100));
+        this.curseurVolume.disabled = !Son.actif;
+    },
+
+    // Fiche de la tour survolée, ou de la tour sélectionnée pour la construction :
+    // coût réel, caractéristiques de base (niveau 1) et rôle. Rappelée à chaque image
+    // en partie ; ecrireSiChange évite de réécrire un texte identique.
+    mettreAJourFicheTour() {
+        const type = this.typeSurvole || this.typeSelectionne;
+        const caracteristiques = Config.TYPES_TOURS[type];
+        let valeurs;
+        if (caracteristiques.typeDegats === 'caserne') {
+            valeurs = `Soldat : ${Config.CASERNE_UNITE_PV_BASE} points de vie, ${Config.CASERNE_UNITE_DEGATS_BASE} dégâts/s`;
+        } else if (caracteristiques.typeDegats === 'gel') {
+            valeurs = `Ralentit de ${Math.round(Config.GEL_RALENTISSEMENT_BASE * 100)} % · portée ${caracteristiques.portee}`;
+        } else {
+            valeurs = `Dégâts ${caracteristiques.degats} · ${caracteristiques.cadence.toLocaleString('fr-FR')} tir/s · portée ${caracteristiques.portee}`;
+        }
+        this.ecrireSiChange(this.elementFicheTourTitre, 'textContent', `${caracteristiques.nom} — ${this.coutConstruction(type)} crédits`);
+        this.ecrireSiChange(this.elementFicheTourTexte, 'textContent', `${valeurs}. ${caracteristiques.description}`);
+    },
+
+    // Bouton « Lancer la vague » et aperçu de la vague suivante, rappelés à chaque
+    // image en partie. Le bouton sert aussi à appeler la vague suivante en avance
+    // (voir Jeu.lancerVagueSuivante), en affichant le bonus que cela rapporterait.
+    mettreAJourLancementVague() {
+        let libelle = 'Lancer la vague';
+        let desactive = false;
+        if (Vagues.enCours) {
+            if (Vagues.peutAppelerEnAvance()) {
+                libelle = `Appeler la vague (+${Vagues.bonusAppelAnticipe(Jeu.ennemisActifs)})`;
+            } else {
+                libelle = 'Vague en cours';
+                desactive = true;
+            }
+        }
+        this.ecrireSiChange(this.boutonLancerVague, 'textContent', libelle);
+        this.ecrireSiChange(this.boutonLancerVague, 'disabled', desactive);
+
+        const prochaine = Vagues.numeroVagueActuelle + 1;
+        this.ecrireSiChange(this.elementProchaineVague, 'textContent', prochaine <= Jeu.nombreDeVagues
+            ? `À venir — vague ${prochaine} : ${Vagues.descriptionVague(prochaine)}`
+            : 'Dernière vague !');
     },
 
     // Coût réel de construction d'un type de tour, réduction permanente du joueur
@@ -550,6 +725,7 @@ const Interface = {
         Jeu.toursActives.push(tour);
         Carte.grille[ligne][colonne] = 'OCCUPEE';
         Jeu.credits -= cout;
+        Statistiques.toursConstruites++;
         Son.jouerConstruction();
 
         // Choix du point de blocage d'une Caserne (contenu additionnel
@@ -562,6 +738,9 @@ const Interface = {
             this.caserneEnAttenteChoix = { tour, candidats: tour.candidatsBlocageEnAttente };
             this.afficherMessageConstruction('Choisissez la case à bloquer (en surbrillance)');
         }
+        // Sans effet en pleine vague ou pendant le choix ci-dessus (voir
+        // SauvegardePartie.peutEnregistrer).
+        SauvegardePartie.enregistrer();
     },
 
     // Vrai pour tout type autre que la Caserne ; pour elle, vrai seulement si au
@@ -585,6 +764,7 @@ const Interface = {
 
         tour.resoudreChoixBlocage(choisi);
         this.caserneEnAttenteChoix = null;
+        SauvegardePartie.enregistrer();
     },
 
     // Affiche un message temporaire superposé au HUD, 1,5 seconde par défaut — les
@@ -595,8 +775,11 @@ const Interface = {
     // caractère plus exceptionnel qu'une simple erreur de construction — d'où le nom
     // de cette méthode, conservé tel quel plutôt que renommé, qui ne reflète donc plus
     // exactement tous ses appelants.
-    afficherMessageConstruction(texte, duree = 1.5) {
+    // `positif` (octobre 2026) : affiche le message en vert plutôt qu'en rouge, pour
+    // une bonne nouvelle (bonus d'appel anticipé, partie reprise).
+    afficherMessageConstruction(texte, duree = 1.5, positif = false) {
         this.elementMessageConstruction.textContent = texte;
+        this.elementMessageConstruction.classList.toggle('message-positif', positif);
         this.dureeRestanteMessageConstruction = duree;
     },
 
@@ -609,6 +792,8 @@ const Interface = {
     // aperçu de construction normal n'a de sens tant que ce choix n'est pas résolu,
     // seule interaction encore possible sur le plateau (voir gererClicCanvas).
     dessinerApercuConstruction(ctx) {
+        this.dessinerSelectionTour(ctx);
+
         if (this.caserneEnAttenteChoix) {
             this.dessinerSurbrillanceChoixCaserne(ctx);
             return;
@@ -651,6 +836,38 @@ const Interface = {
         ctx.stroke();
     },
 
+    // Tour sélectionnée (panneau d'amélioration ouvert) : contour de sa case et cercle
+    // de sa portée actuelle, pour voir ce qu'elle couvre et ce qu'une amélioration
+    // changerait. Pour une Caserne, qui ne tire pas, c'est plutôt la case de chemin
+    // bloquée par son soldat qui est entourée.
+    dessinerSelectionTour(ctx) {
+        const tour = this.tourSelectionnee;
+        if (!tour) return;
+
+        const taille = Carte.tailleCase;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(tour.colonne * taille + 1, tour.ligne * taille + 1, taille - 2, taille - 2);
+
+        if (tour.typeDegats === 'caserne') {
+            if (tour.cheminIndex === null) return;
+            const caseBloquee = Carte.chemins[tour.cheminIndex].chemin[tour.indexPointDePassage];
+            ctx.strokeStyle = Config.COULEURS.neonBleu;
+            ctx.setLineDash([5, 4]);
+            ctx.strokeRect(caseBloquee.colonne * taille + 2, caseBloquee.ligne * taille + 2, taille - 4, taille - 4);
+            ctx.setLineDash([]);
+            return;
+        }
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.beginPath();
+        ctx.arc(tour.x, tour.y, tour.portee * Jeu.facteurEchelle, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+    },
+
     // Met en surbrillance chaque case candidate pendant un choix de blocage de
     // Caserne en attente (contenu additionnel post-lancement) — un contour distinct
     // dans Config.COULEURS.neonBleu, la couleur déjà associée à la Caserne (phase
@@ -682,6 +899,17 @@ const Interface = {
         Jeu.credits -= cout;
         tour.ameliorer();
         Son.jouerAmelioration();
+        SauvegardePartie.enregistrer();
+    },
+
+    // Fait passer la tour sélectionnée au mode de ciblage suivant (bouton « Cible »
+    // du panneau, ou touche C). Sans effet pour la Caserne et le Gel, qui ne tirent
+    // pas.
+    changerCiblageTourSelectionnee() {
+        const tour = this.tourSelectionnee;
+        if (!tour || tour.typeDegats === 'caserne' || tour.typeDegats === 'gel') return;
+        tour.changerModeCiblage();
+        SauvegardePartie.enregistrer();
     },
 
     // Rembourse un pourcentage de l'investissement total de la tour sélectionnée,
@@ -700,6 +928,7 @@ const Interface = {
 
         this.tourSelectionnee = null;
         Son.jouerVente();
+        SauvegardePartie.enregistrer();
     },
 
     // Rafraîchit le contenu du panneau d'amélioration/vente d'après la tour
@@ -712,6 +941,11 @@ const Interface = {
 
         const nom = Config.TYPES_TOURS[tour.type].nom;
         this.ecrireSiChange(this.elementPanneauTitre, 'textContent', `${nom} — Niveau ${tour.niveau}`);
+
+        // Le panneau, dans un coin du plateau, ne doit pas cacher la tour qu'il décrit
+        // ni le cercle de sa portée : pour une tour dans la moitié droite, il passe à
+        // gauche.
+        this.panneauAmelioration.classList.toggle('panneau-a-gauche', tour.colonne >= Config.COLONNES / 2);
 
         // La Caserne (phase 7E) ne tire jamais : Dégâts/Cadence/Portée n'auraient
         // aucun sens pour elle (this.cadence/this.degats existent bien sur l'instance,
@@ -728,9 +962,20 @@ const Interface = {
                 `Points de vie de l'unité : ${stats.pointsDeVieMax} · `
                 + `Dégâts de l'unité : ${Math.round(stats.degats)} · `
                 + `Délai de réapparition : ${delai.toFixed(1)}s`);
+        } else if (tour.typeDegats === 'gel') {
+            this.ecrireSiChange(this.elementPanneauStats, 'textContent',
+                `Ralentissement : ${Math.round(tour.forceRalentissement() * 100)} % · Portée : ${Math.round(tour.portee)}`);
         } else {
             this.ecrireSiChange(this.elementPanneauStats, 'textContent',
                 `Dégâts : ${Math.round(tour.degats)} · Cadence : ${tour.cadence.toFixed(2)}/s · Portée : ${Math.round(tour.portee)}`);
+        }
+
+        // Choix de la cible : seulement pour les tours qui tirent.
+        const tire = tour.typeDegats !== 'caserne' && tour.typeDegats !== 'gel';
+        this.ecrireSiChange(this.boutonCiblage, 'hidden', !tire);
+        if (tire) {
+            const mode = Config.MODES_CIBLAGE.find(m => m.id === tour.modeCiblage);
+            this.ecrireSiChange(this.boutonCiblage, 'textContent', `Cible : ${mode.nom}`);
         }
 
         const coutAmelioration = tour.coutAmelioration();
@@ -805,6 +1050,131 @@ const Interface = {
         this.ecrireSiChange(this.elementDefiDuJourScore, 'textContent', tenteAujourdhui
             ? `Meilleure vague : ${Progression.defiDuJour.meilleureVague}`
             : 'Pas encore tenté aujourd\'hui');
+        this.ecrireSiChange(this.boutonPartagerDefi, 'hidden', !tenteAujourdhui);
+    },
+
+    // Bouton « Reprendre la partie » de l'écran d'accueil, visible seulement si une
+    // partie a été laissée en cours (voir sauvegarde.js), avec sa durée et la vague
+    // qui l'attend.
+    mettreAJourReprise() {
+        const donnees = SauvegardePartie.donnees;
+        this.ecrireSiChange(this.boutonReprendre, 'hidden', !donnees);
+        if (!donnees) return;
+
+        const duree = Config.DUREES_PARTIE.find(d => d.id === donnees.idDuree);
+        const nom = donnees.modeDefiDuJour && donnees.graine === calculerGraineDuJour()
+            ? 'Défi du jour'
+            : (duree ? duree.label : '');
+        const difficulte = donnees.difficulteSuperieure ? ', supérieure' : '';
+        this.ecrireSiChange(this.boutonReprendre, 'textContent',
+            `Reprendre la partie (${nom}${difficulte}, vague ${donnees.numeroVague + 1})`);
+    },
+
+    // Partage du score du défi du jour (octobre 2026) : la fenêtre de partage du
+    // téléphone quand elle existe, sinon une copie dans le presse-papiers, confirmée
+    // sur le bouton lui-même.
+    async partagerDefi(bouton, vague) {
+        const texte = `Défense Néon — défi du ${dateDuJourLisible()} : j'ai atteint la vague ${vague} !`;
+        // Sous file://, l'adresse ne servirait à personne d'autre : on ne la partage pas.
+        const adresse = location.protocol.startsWith('http') ? location.origin + location.pathname : '';
+
+        if (navigator.share) {
+            try {
+                await navigator.share(adresse ? { title: 'Défense Néon', text: texte, url: adresse } : { title: 'Défense Néon', text: texte });
+                return;
+            } catch (erreur) {
+                // Le joueur a refermé la fenêtre de partage : rien de plus à faire.
+                if (erreur.name === 'AbortError') return;
+            }
+        }
+
+        const copie = await this.copierTexte(adresse ? `${texte} ${adresse}` : texte);
+        this.confirmerSurBouton(bouton, copie ? 'Copié dans le presse-papiers !' : 'Copie impossible');
+    },
+
+    // Copie un texte dans le presse-papiers. L'API moderne n'existe que sur une page
+    // sécurisée (https ou localhost) : sinon, ancienne méthode via une zone de texte
+    // invisible.
+    async copierTexte(texte) {
+        try {
+            await navigator.clipboard.writeText(texte);
+            return true;
+        } catch {
+            const zone = document.createElement('textarea');
+            zone.value = texte;
+            zone.setAttribute('readonly', '');
+            zone.style.position = 'fixed';
+            zone.style.opacity = '0';
+            document.body.appendChild(zone);
+            zone.select();
+            let copie = false;
+            try {
+                copie = document.execCommand('copy');
+            } catch {
+                copie = false;
+            }
+            zone.remove();
+            return copie;
+        }
+    },
+
+    // Remplace un instant le libellé d'un bouton par un message de confirmation.
+    confirmerSurBouton(bouton, texte) {
+        if (!bouton.dataset.libelle) bouton.dataset.libelle = bouton.textContent;
+        bouton.textContent = texte;
+        clearTimeout(bouton.minuteurConfirmation);
+        bouton.minuteurConfirmation = setTimeout(() => {
+            bouton.textContent = bouton.dataset.libelle;
+        }, 2000);
+    },
+
+    // Statistiques de la partie qui vient de se terminer (voir Statistiques), sur
+    // l'écran de victoire ou de défaite. Appelée une seule fois, par
+    // Jeu.finaliserPartie : ces chiffres ne changent plus ensuite.
+    afficherStatistiques(estVictoire) {
+        const conteneur = estVictoire ? this.elementStatistiquesVictoire : this.elementStatistiquesDefaite;
+        const nombre = (valeur) => Math.round(valeur).toLocaleString('fr-FR');
+        const ajouterLigne = (texte) => {
+            const paragraphe = document.createElement('p');
+            paragraphe.textContent = texte;
+            conteneur.appendChild(paragraphe);
+        };
+        conteneur.replaceChildren();
+
+        const boss = Statistiques.eliminationsParType.boss || 0;
+        ajouterLigne(`Ennemis détruits : ${nombre(Statistiques.totalEliminations())}`
+            + (boss > 0 ? ` (dont ${boss} boss)` : '')
+            + ` · passés : ${Statistiques.ennemisPasses}`);
+        ajouterLigne(`Crédits gagnés : ${nombre(Statistiques.creditsGagnes)} · tours construites : ${Statistiques.toursConstruites}`);
+        if (Statistiques.vaguesAppeleesEnAvance > 0) {
+            ajouterLigne(`Vagues appelées en avance : ${Statistiques.vaguesAppeleesEnAvance}`);
+        }
+
+        // Part des dégâts de chaque type de tour, en barres horizontales : la tour la
+        // plus utile de la partie saute aux yeux.
+        const classement = Statistiques.classementTours();
+        if (classement.length === 0) return;
+        ajouterLigne('Dégâts infligés par type de tour :');
+        const liste = document.createElement('ul');
+        liste.className = 'graphique-degats';
+        for (const { type, degats, part } of classement) {
+            const element = document.createElement('li');
+            const nom = document.createElement('span');
+            nom.textContent = Config.TYPES_TOURS[type].nom;
+            const barre = document.createElement('span');
+            barre.className = 'graphique-degats-barre';
+            const remplissage = document.createElement('span');
+            remplissage.style.width = `${Math.max(2, part * 100)}%`;
+            // Couleur de la tour (mots-clés CSS ou valeurs hexadécimales, tous valides ici).
+            remplissage.style.background = Config.TYPES_TOURS[type].couleur;
+            barre.appendChild(remplissage);
+            const valeur = document.createElement('span');
+            valeur.textContent = `${Math.round(part * 100)} %`;
+            valeur.title = `${nombre(degats)} dégâts`;
+            element.append(nom, barre, valeur);
+            liste.appendChild(element);
+        }
+        conteneur.appendChild(liste);
     },
 
     // Affiche l'XP gagnée pendant la partie qui vient de se terminer et, le cas
@@ -853,9 +1223,12 @@ const Interface = {
         // serait plus rafraîchi une fois la partie terminée sans cette ligne.
         this.ecrireSiChange(this.panneauAmelioration, 'hidden', Jeu.etatPartie !== 'enCours' || this.tourSelectionnee === null);
 
+        this.ecrireSiChange(this.elementFicheTour, 'hidden', Jeu.etatPartie !== 'enCours');
+
         if (Jeu.etatPartie === 'accueil') {
             this.mettreAJourProgressionAccueil();
             this.mettreAJourDefiDuJour();
+            this.mettreAJourReprise();
         }
 
         if (Jeu.etatPartie === 'enCours') {
@@ -866,13 +1239,14 @@ const Interface = {
             this.ecrireSiChange(this.elementNumeroVague, 'textContent', Number.isFinite(Jeu.nombreDeVagues)
                 ? `${Vagues.numeroVagueActuelle} / ${Jeu.nombreDeVagues}`
                 : `${Vagues.numeroVagueActuelle} / ∞`);
-            this.ecrireSiChange(this.boutonLancerVague, 'disabled', Vagues.enCours);
+            this.mettreAJourLancementVague();
             this.ecrireSiChange(this.boutonPause, 'textContent', Jeu.enPause ? 'Reprendre' : 'Pause');
             this.ecrireSiChange(this.boutonVitesse, 'textContent', `Vitesse ×${Jeu.vitesseJeu}`);
             // Les crédits changent en continu (récompenses, bonus de fin de vague) :
             // les boutons de type doivent donc être réévalués chaque frame, pas
             // seulement au moment où le joueur change de sélection.
             this.mettreAJourBoutonsTypesTours();
+            this.mettreAJourFicheTour();
             this.mettreAJourPanneauAmelioration();
         }
 
@@ -888,6 +1262,8 @@ const Interface = {
             // la met en évidence plutôt que de l'afficher comme une simple statistique.
             this.elementVagueAtteinteDefaite.classList.toggle('score-sansfin', !Number.isFinite(Jeu.nombreDeVagues));
             this.afficherResumeProgression(this.elementXpGagneeDefaite, this.elementNiveauSuperieurDefaite, this.elementDifficulteSuperieureDefaite);
+            this.ecrireSiChange(this.boutonPartagerDefaite, 'hidden',
+                !(Jeu.derniereProgression && Jeu.derniereProgression.modeDefiDuJour));
         }
 
         if (this.dureeRestanteMessageConstruction > 0) {

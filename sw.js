@@ -9,7 +9,8 @@
 // ce nom ne sert plus qu'à repartir d'un cache entièrement neuf (activate() ci-dessous
 // purge tout cache dont le nom diffère) ; v28 marque le passage à cette stratégie, et
 // remplace donc une bonne fois les copies laissées par l'ancienne (cache d'abord).
-const CACHE_NOM = 'defense-neon-v28';
+// v29 : ajout de statistiques.js et sauvegarde.js à la liste ci-dessous (octobre 2026).
+const CACHE_NOM = 'defense-neon-v29';
 
 // Au-delà de ce délai sans réponse du réseau (connexion présente mais quasi
 // inutilisable), la copie en cache est servie à la place, si elle existe.
@@ -33,6 +34,8 @@ const FICHIERS_A_METTRE_EN_CACHE = [
     './js/unite.js',
     './js/tour.js',
     './js/progression.js',
+    './js/statistiques.js',
+    './js/sauvegarde.js',
     './js/particules.js',
     './js/son.js',
     './js/decor.js',

@@ -2,8 +2,9 @@
 
 HTML/CSS/JS vanilla, sans module ES6 ni dépendance. Fichiers chargés dans cet ordre par
 `index.html` : `config.js`, `aleatoire.js`, `carte.js`, `ennemi.js`, `vagues.js`,
-`unite.js`, `tour.js`, `progression.js`, `particules.js`, `son.js`, `decor.js`,
-`interface.js`, `jeu.js`.
+`unite.js`, `tour.js`, `progression.js`, `statistiques.js`, `sauvegarde.js`,
+`particules.js`, `son.js`, `decor.js`, `interface.js`, `jeu.js`. Une présentation
+simple du jeu, pour les joueurs et pour démarrer, se trouve dans `README.md`.
 
 ## Fichiers
 
@@ -223,6 +224,16 @@ HTML/CSS/JS vanilla, sans module ES6 ni dépendance. Fichiers chargés dans cet 
 - **`outils/simulation-parties.js`** — fait jouer des parties complètes à un joueur
   simulé, règles actuelles contre anciennes, pour vérifier l'équilibrage après un
   changement de règles — voir « Améliorations d'octobre 2026 » ci-dessous.
+- **`js/statistiques.js`** et **`js/sauvegarde.js`** — objets `Statistiques` (chiffres
+  de la partie en cours, affichés sur l'écran de fin) et `SauvegardePartie` (reprise
+  d'une partie après fermeture de la page) — voir « Améliorations d'octobre 2026
+  (deuxième série) » ci-dessous.
+- **`outils/test-navigateur.js`** et **`.github/workflows/verifications.yml`** — partie
+  de test jouée dans Chromium via Playwright, lancée automatiquement par GitHub à chaque
+  envoi avec la vérification de syntaxe et `verification-chemins.js` — voir la même
+  section.
+- **`README.md`** — présentation du jeu (règles, tours, ennemis, raccourcis) et
+  démarrage (test en local, mise en ligne, vérifications automatiques).
 
 ## Algorithme de génération du chemin (`carte.js`)
 
@@ -238,7 +249,8 @@ tentative (jusqu'à `MAX_TENTATIVES_GENERATION`) ; au-delà, chemin de secours e
 ## Système de vagues (`vagues.js`)
 
 Pour la vague `n` : `5 + n * 2` ennemis à générer, multiplicateur de points de vie
-`1 + (n - 1) * 0.15`, intervalle d'apparition `INTERVALLE_APPARITION_INITIAL *
+`1 + (n - 1) * 0.15` (valeurs dans `Config.ENNEMIS_PAR_VAGUE_*` et
+`Config.CROISSANCE_PV_PAR_VAGUE` depuis octobre 2026), intervalle d'apparition `INTERVALLE_APPARITION_INITIAL *
 (1 - REDUCTION_INTERVALLE_PAR_VAGUE)^(n - 1)` (réduction composée, plancher
 `INTERVALLE_APPARITION_MIN`). Le type de chaque ennemi généré est tiré avec
 `Aleatoire.nombre()` : proportion `PROPORTION_BLINDE` de Blindés à partir de la vague
@@ -663,7 +675,9 @@ tant que l'écran de fin reste affiché.
 (`Interface.mettreAJourEcrans`), alors que le prompt exige que ce bouton reste « visible
 à tout moment ». Placé en conséquence comme élément persistant hors de `#barre-hud`
 (juste sous le titre, dans `index.html`), sans bascule `hidden` liée à l'état de partie —
-seul son libellé change, via `Interface.mettreAJourBoutonSon()`.
+seul son libellé change, via `Interface.mettreAJourBoutonSon()` (devenue
+`mettreAJourReglagesSon()` en octobre 2026, avec le bouton Musique et le curseur de
+volume placés à côté de lui dans `.reglages-son`).
 
 ## Installation et fonctionnement hors ligne (phase 5)
 
@@ -3531,7 +3545,8 @@ limite de tours (environ 31) est désormais atteinte en fin de partie.
 Suite directe de la mesure ci-dessus : au début de la vague
 `Config.VAGUE_APPARITION_DRONE` (8), `Vagues.demarrer` affiche « ⚠ DRONES : seul le
 Flak peut les abattre » pendant 4 s, dans la même zone que l'annonce de boss, avec un
-son dédié (`Son.jouerAlerteDrones`, deux bips aigus montants). Si cette vague était
+son dédié (`Son.jouerAlerteDrones`, deux bips aigus montants — depuis généralisés à
+tout nouvel ennemi, voir la deuxième série plus bas). Si cette vague était
 aussi une vague de boss (réglages modifiés), les deux annonces sont réunies dans un
 seul message. `outils/simulation-equilibrage.js` reçoit le bouchon correspondant.
 
@@ -3546,6 +3561,119 @@ l'écran. Cette hauteur ne s'applique plus qu'avec la classe `ecran-affiche`, po
 plateau et tout tient à l'écran (vérifié à 320 et 390px de large). Le panneau
 d'amélioration reçoit `max-height` et `overflow-y: auto` : à 320px de large, plus
 haut que le plateau, il défile au lieu de déborder sur le HUD.
+
+## Améliorations d'octobre 2026 (deuxième série)
+
+Quatorze améliorations proposées après la revue, toutes réalisées. L'équilibrage a
+été vérifié avec `outils/simulation-parties.js` (Standard, 12 graines par ligne,
+règles actuelles) avant et après :
+
+| Difficulté | Stratégie | Avant | Après (Soigneur, Bouclier) |
+| --- | --- | --- | --- |
+| normale | 1 Flak sur 6 | 2/12 victoires | 3/12 |
+| normale | 1 Flak sur 2 | 12/12 (intégrité 18,1) | 12/12 (17,9) |
+| supérieure | 1 Flak sur 2 | 10/12 (intégrité 3,3) | 10/12 (3,7) |
+
+Les deux nouveaux ennemis ne changent donc pas la difficulté globale. La tour Gel
+remplace utilement un Canon (12/12 et 9/12 victoires contre 12/12 et 10/12), et l'ajouter
+en plus aide légèrement : ni inutile ni indispensable, aucun réglage changé.
+
+### Aide au joueur
+
+- **Fiche de tour** (`Interface.mettreAJourFicheTour`, `#fiche-tour`) : sous la barre
+  de construction, coût réel, caractéristiques de base et rôle de la tour survolée (ou
+  atteinte au clavier par Tab), à défaut de la tour sélectionnée. Les phrases vivent
+  dans `Config.TYPES_TOURS[type].description`.
+- **Portée d'une tour construite** (`Interface.dessinerSelectionTour`) : la tour
+  sélectionnée est entourée et sa portée actuelle dessinée ; pour une Caserne, c'est la
+  case de chemin bloquée par son soldat qui est mise en évidence. Le panneau passe à
+  gauche du plateau pour une tour de la moitié droite (classe `panneau-a-gauche`), pour
+  ne jamais la cacher.
+- **Annonce de la vague suivante** (`Vagues.descriptionVague`, `#prochaine-vague`) :
+  nombre d'ennemis, boss, drones et nouveaux ennemis de la prochaine vague. Au début
+  d'une vague, `Vagues.demarrer` annonce aussi chaque type qui apparaît pour la
+  première fois (`Vagues.nouveauxTypes`, avec `Config.TYPES_ENNEMIS[type].nom` et
+  `.description`) : l'annonce des drones est généralisée aux Rapides, Blindés,
+  Soigneurs et Boucliers, et `Son.jouerAlerteDrones` devient
+  `Son.jouerAlerteNouvelEnnemi`.
+
+### Gameplay
+
+- **Appel anticipé** (`Jeu.lancerVagueSuivante`, `Vagues.peutAppelerEnAvance`,
+  `bonusAppelAnticipe`, `terminerEnAvance`) : dès que tous les ennemis d'une vague sont
+  apparus, le bouton devient « Appeler la vague (+bonus) ». La vague en cours est
+  alors considérée terminée (sa récompense est versée tout de suite) et chaque ennemi
+  encore en jeu rapporte `Config.BONUS_APPEL_ANTICIPE_PAR_ENNEMI` (3) crédits. Les
+  ennemis restants continuent leur route ; la vague suivante ne se termine que quand
+  plus aucun ennemi n'est en jeu, et la victoire attend toujours un plateau vide.
+- **Choix de la cible** (`Tour.modeCiblage`, `Tour.scoreCible`,
+  `Tour.changerModeCiblage`, `Config.MODES_CIBLAGE`) : le plus avancé (par défaut,
+  seul mode existant auparavant), le plus résistant (points de vie + bouclier) ou le
+  plus proche. Le verrouillage de cible existant (pas de changement tant que la cible
+  reste valide) est conservé pour les trois modes.
+- **Tour Gel** (`typeDegats: 'gel'`, `Tour.appliquerRalentissements`,
+  `Tour.forceRalentissement`, `Config.GEL_*`) : ne tire pas ; chaque ennemi à sa portée,
+  drones compris, perd 35 % de sa vitesse (+5 % par niveau, 65 % au niveau 7). Plusieurs
+  tours Gel ne se cumulent pas ; le boss n'en subit que la moitié. Les ennemis ralentis
+  portent un anneau de givre.
+- **Soigneur et Bouclier** (`Config.TYPES_ENNEMIS`, `Ennemi.appliquerSoins`,
+  `Ennemi.subirDegats`, `Config.SOIGNEUR_*`, `Config.BOUCLIER_*`) : le Soigneur (dès la
+  vague 11) rend 10 points de vie par seconde (multipliés comme ses propres points de
+  vie) aux ennemis au sol à moins de 70 px, sans cumul entre Soigneurs ; le Bouclier
+  (dès la vague 13) porte un bouclier qui absorbe les dégâts avant ses points de vie et
+  se recharge après 2,5 s sans être touché. Ajoutés en fin de tirage dans
+  `Vagues.tirerTypeEnnemi` : avant leur vague d'apparition, les tirages donnent
+  exactement les mêmes types qu'auparavant. Les effets de zone (Gel, soins) sont des
+  méthodes de classe appelées par `Jeu.simuler` avant le déplacement des ennemis, pour
+  que les outils de simulation, qui n'ont pas `jeu.js`, les appliquent à l'identique.
+- **Statistiques de fin de partie** (`statistiques.js`,
+  `Interface.afficherStatistiques`) : ennemis détruits (dont boss) et passés, crédits
+  gagnés, tours construites, vagues appelées en avance, et part des dégâts de chaque
+  type de tour en barres. `Ennemi.subirDegats` renvoie désormais les dégâts réellement
+  encaissés, et chaque projectile connaît le type de sa tour (`Projectile.typeTour`).
+- Les derniers nombres en dur de `vagues.js` (composition et récompense d'une vague,
+  croissance des points de vie) sont passés dans `Config`.
+
+### Confort
+
+- **Sauvegarde de la partie en cours** (`sauvegarde.js`) : enregistrée seulement entre
+  deux vagues, sans aucun ennemi en jeu (`SauvegardePartie.peutEnregistrer`) — au
+  début de la partie, après chaque construction, amélioration, vente ou changement de
+  cible, et à la fin de chaque vague. Contenu : durée, graine (la carte est
+  régénérée), état du générateur aléatoire (les vagues suivantes sont identiques à
+  celles de la partie d'origine), crédits, intégrité, numéro de vague, tours (niveau,
+  investissement, cible, case bloquée par une Caserne) et statistiques. Effacée à la
+  fin de la partie ; une nouvelle partie remplace l'ancienne (un seul emplacement).
+  Une sauvegarde qui ne correspond plus à la carte (génération modifiée par une mise à
+  jour) est abandonnée plutôt que de poser des tours au mauvais endroit. Un défi du
+  jour repris un autre jour continue comme une partie Sans fin ordinaire.
+- **Raccourcis clavier** (`Interface.gererClavier`, `.aide-clavier` sous le plateau,
+  affichée seulement avec une souris) : 1 à 6 (lus via `event.code`, pour fonctionner
+  aussi en AZERTY sans Maj), Espace, P, V, A, C, Échap, M. Espace empêche aussi le clic
+  du bouton qui a le focus. Les infobulles des boutons rappellent leur touche.
+- **Partage du défi du jour** (`Interface.partagerDefi`) : fenêtre de partage du
+  téléphone si elle existe, sinon copie dans le presse-papiers (avec une méthode de
+  secours hors https), confirmée sur le bouton. Sur l'écran de défaite d'un défi et
+  dans l'encart du défi de l'accueil.
+- **Volume et musique** (`son.js`, `.reglages-son`) : curseur de volume général
+  (`Son.gainGeneral`) et bouton Musique, sauvegardés. La musique est synthétisée :
+  grille de huit accords (`MUSIQUE_ACCORDS`) jouée par une basse, une nappe filtrée,
+  un arpège et un charleston, planifiés 250 ms à l'avance sur l'horloge audio
+  (`Son.planifierMusique`). Elle ne joue que pendant une partie qui avance
+  (`Son.mettreAJourMusique`, appelée par `Jeu.boucle`). Mesuré dans Chromium : environ
+  9 dB sous les effets sonores, sans saturation, silencieuse en pause.
+
+### En coulisses
+
+- **Vérifications automatiques** (`.github/workflows/verifications.yml`) : à chaque
+  envoi et sur chaque pull request, syntaxe de tous les fichiers JavaScript,
+  `verification-chemins.js` sur 300 graines, puis `outils/test-navigateur.js` : une
+  partie dans Chromium (37 vérifications : construction par clics, clavier, cible,
+  appel anticipé, sauvegarde et reprise après rechargement, annonce, effets du Gel,
+  du Soigneur et du Bouclier, écran de fin, partage, musique, affichage sur
+  téléphone). Playwright y est installé à la volée, sans `package.json`.
+- **`README.md`** : présentation courte du jeu et du démarrage, `ARCHITECTURE.md`
+  restant la référence technique.
 
 ## Avancement (feuille de route)
 
