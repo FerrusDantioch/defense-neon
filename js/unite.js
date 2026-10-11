@@ -10,11 +10,9 @@
 
 class UniteCaserne {
     // `x`/`y` : position en pixels du point de blocage au moment de l'apparition —
-    // fixée une fois ici, jamais recalculée ensuite (même limitation qu'un Tour, dont
-    // this.x/this.y ne sont eux non plus jamais recalculés après construction : un
-    // redimensionnement du canvas en cours de partie décale légèrement l'un comme
-    // l'autre jusqu'à la prochaine apparition/reconstruction, pas une régression
-    // propre à cette phase). `pointsDeVie`/`degats` viennent de
+    // l'unité ne se déplace jamais ; seul un redimensionnement du canvas en cours de
+    // partie la repositionne, comme sa tour (voir Jeu.mettreAEchelleEntites, jeu.js).
+    // `pointsDeVie`/`degats` viennent de
     // Tour.statsUniteAuNiveauActuel() ; `cheminIndex`/`indexPointDePassage` sont
     // recopiés du point de blocage de la tour, pour que Jeu.resoudreCombatsCasernes
     // et Ennemi.deplacer puissent les lire directement sur l'unité plutôt que de

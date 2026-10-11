@@ -5,7 +5,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const racine = process.argv[2] || '.';
+const racine = path.resolve(process.argv[2] || '.');
 const port = parseInt(process.argv[3], 10) || 8080;
 
 const typesMime = {
@@ -16,13 +16,30 @@ const typesMime = {
     // Ajoutés en phase 5 (PWA) : sans le bon type MIME pour le manifeste et les
     // icônes, certains navigateurs refusent de considérer l'app comme installable.
     '.webmanifest': 'application/manifest+json; charset=utf-8',
-    '.png': 'image/png'
+    '.png': 'image/png',
+    '.webp': 'image/webp'
 };
 
 http.createServer((req, res) => {
-    let chemin = decodeURIComponent(req.url.split('?')[0]);
+    let chemin;
+    try {
+        chemin = decodeURIComponent(req.url.split('?')[0]);
+    } catch {
+        // Adresse mal encodée (ex. « %E0%A4%A ») : sans ce garde-fou, l'exception
+        // arrêtait le serveur entier au lieu de refuser cette seule requête.
+        res.writeHead(400);
+        res.end('Bad request');
+        return;
+    }
     if (chemin === '/') chemin = '/index.html';
     const fichier = path.join(racine, chemin);
+
+    // Refuse toute adresse qui sortirait du dossier servi (ex. « /../../etc/passwd »).
+    if (fichier !== racine && !fichier.startsWith(racine + path.sep)) {
+        res.writeHead(403);
+        res.end('Forbidden');
+        return;
+    }
 
     fs.readFile(fichier, (err, data) => {
         if (err) {

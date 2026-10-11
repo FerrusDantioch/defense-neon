@@ -146,6 +146,9 @@ function trouverEmplacementLibrePlusProche(Carte, referenceColonne, referenceLig
     for (let ligne = 0; ligne < Carte.grille.length; ligne++) {
         for (let colonne = 0; colonne < Carte.grille[ligne].length; colonne++) {
             if (!Carte.estConstructible(colonne, ligne)) continue;
+            // Même règle que le vrai jeu (Interface.tenterConstruireTour) : toute tour
+            // doit être orthogonalement adjacente à un chemin.
+            if (!Carte.estAdjacentAUnChemin(colonne, ligne)) continue;
             if (emplacementsExclus.has(`${colonne},${ligne}`)) continue;
 
             const distance = Math.hypot(colonne - referenceColonne, ligne - referenceLigne);
@@ -621,9 +624,9 @@ function executerExperience4(jeuContext, graines, nombreVagues, dt) {
 }
 
 // Phase 6B — Mesure informative (pas une expérience de stratégie) : nombre de cases
-// 'LIBRE' juste après génération d'une carte (2 chemins la plupart du temps, 3
-// occasionnellement depuis le troisième chemin occasionnel, contenu additionnel
-// post-lancement — voir Carte.nombreChemins dans carte.js), sur les mêmes huit
+// 'LIBRE' et adjacentes à un chemin (les seules constructibles, et les seules
+// comptées par Jeu.reinitialiser pour la limite de tours) juste après génération
+// d'une carte (Carte.nombreChemins chemins, voir carte.js), sur les mêmes huit
 // graines que les expériences précédentes. Sert uniquement à vérifier que
 // Config.PROPORTION_LIMITE_TOURS (la limite de tours constructibles est
 // `Math.floor(casesLibres * PROPORTION_LIMITE_TOURS)`, voir Jeu.limiteTours dans
@@ -636,9 +639,11 @@ function mesurerCasesLibres(jeuContext, graines) {
     const details = graines.map(graine => {
         Carte.generer(graine);
         let casesLibres = 0;
-        for (const rangee of Carte.grille) {
-            for (const etat of rangee) {
-                if (etat === 'LIBRE') casesLibres++;
+        for (let ligne = 0; ligne < Carte.grille.length; ligne++) {
+            for (let colonne = 0; colonne < Carte.grille[ligne].length; colonne++) {
+                if (Carte.grille[ligne][colonne] === 'LIBRE' && Carte.estAdjacentAUnChemin(colonne, ligne)) {
+                    casesLibres++;
+                }
             }
         }
         return { graine, casesLibres };
@@ -864,7 +869,7 @@ function main() {
 
     console.log('');
     console.log(
-        `=== Phase 6B — Cases libres après génération (2-3 chemins selon la carte, mêmes ${GRAINES_GENERALISATION.length} graines) ===`
+        `=== Phase 6B — Cases libres adjacentes à un chemin après génération (mêmes ${GRAINES_GENERALISATION.length} graines) ===`
     );
     console.log('');
 

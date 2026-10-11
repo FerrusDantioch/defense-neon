@@ -156,9 +156,7 @@ const Vagues = {
                     } else {
                         const type = this.tirerTypeEnnemi(this.numeroVagueActuelle);
                         // Chemins multiples (phase 6A) : chaque ennemi se voit assigner
-                        // l'un des Carte.nombreChemins chemins de la carte en cours (2 la
-                        // plupart du temps, 3 occasionnellement depuis le troisième
-                        // chemin occasionnel, contenu additionnel post-lancement) dès sa
+                        // l'un des Carte.nombreChemins chemins de la carte en cours dès sa
                         // création, toujours via le générateur à graine (jamais
                         // Math.random()) pour que la répartition reste reproductible à
                         // graine égale — voir la note sur Aleatoire dans particules.js
