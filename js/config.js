@@ -30,12 +30,13 @@ const Config = {
     // propre entrée et sortie (voir Carte.chemins dans carte.js), peut croiser un
     // autre chemin mais jamais se toucher lui-même — voir la note sur
     // caseValidePourChemin dans carte.js. Le nombre réel de chemins d'une carte
-    // donnée (2 la plupart du temps, 3 occasionnellement) n'est plus une constante
-    // fixe mais une valeur calculée à chaque génération et stockée sur
-    // `Carte.nombreChemins` (voir Carte.generer) : `NOMBRE_CHEMINS_PAR_DEFAUT`
-    // ci-dessous, plus un chemin supplémentaire tiré via `Aleatoire` avec une
-    // probabilité de `PROBABILITE_TROISIEME_CHEMIN` — reproductible à graine égale,
-    // comme le reste de la génération.
+    // est calculé à chaque génération et stocké sur `Carte.nombreChemins` (voir
+    // Carte.generer) : `NOMBRE_CHEMINS_PAR_DEFAUT` ci-dessous, plus un chemin
+    // supplémentaire tiré via `Aleatoire` avec une probabilité de
+    // `PROBABILITE_TROISIEME_CHEMIN` — reproductible à graine égale, comme le reste
+    // de la génération. Réglage actuel : 3 voies sur chaque carte, sans chemin
+    // supplémentaire (probabilité 0) ; Config.COULEURS.cheminsNeon n'a que 3 teintes,
+    // à compléter si l'on dépasse un jour 3 chemins.
     NOMBRE_CHEMINS_PAR_DEFAUT: 3,
     PROBABILITE_TROISIEME_CHEMIN: 0,
     // Écart minimal, en lignes, entre deux entrées (et indépendamment, entre deux

@@ -41,8 +41,9 @@ const Carte = {
     // post-lancement, troisième chemin occasionnel) : calculé une seule fois par
     // generer(), tout au début, avant de tracer le moindre chemin — remplace
     // l'ancienne constante fixe Config.NOMBRE_CHEMINS (retirée), puisque ce nombre
-    // varie désormais d'une carte à l'autre (2 la plupart du temps, 3
-    // occasionnellement, voir Config.PROBABILITE_TROISIEME_CHEMIN). Toujours égal à
+    // peut varier d'une carte à l'autre (voir Config.NOMBRE_CHEMINS_PAR_DEFAUT et
+    // Config.PROBABILITE_TROISIEME_CHEMIN ; 3 sur chaque carte avec le réglage
+    // actuel). Toujours égal à
     // `this.chemins.length` une fois la génération terminée ; conservé comme
     // propriété à part entière (plutôt que de relire systématiquement
     // `this.chemins.length` ailleurs) parce qu'il est déjà connu avant que
@@ -92,10 +93,10 @@ const Carte = {
     },
 
     // Vraie si au moins une des 4 cases orthogonalement voisines appartient à un
-    // chemin (phase 7E) : condition de construction propre à la tour Caserne, qui a
-    // besoin d'un chemin adjacent où poser son unité — voir
-    // Interface.tenterConstruireTour, seul appelant qui applique cette règle
-    // uniquement pour ce type de tour.
+    // chemin (phase 7E) : condition de construction de TOUTES les tours depuis le
+    // passage à 3 voies (réservée à la seule Caserne auparavant) — voir
+    // Interface.tenterConstruireTour, et Jeu.reinitialiser qui ne compte que ces
+    // cases pour la limite de tours.
     estAdjacentAUnChemin(colonne, ligne) {
         for (const voisine of this.voisinesOrthogonales(colonne, ligne)) {
             if (this.dansLaGrille(voisine.colonne, voisine.ligne)
@@ -491,9 +492,10 @@ const Carte = {
         // Troisième chemin occasionnel (contenu additionnel post-lancement) : tiré
         // ici, tout au premier tirage de cette génération (avant le moindre tracé de
         // chemin ou choix de ligne d'entrée/sortie), via Aleatoire — donc
-        // reproductible à graine égale, comme le reste de la génération. La plupart
-        // des cartes gardent NOMBRE_CHEMINS_PAR_DEFAUT (2) chemins ; une carte sur
-        // quatre (PROBABILITE_TROISIEME_CHEMIN) en gagne un troisième.
+        // reproductible à graine égale, comme le reste de la génération : chaque
+        // carte a NOMBRE_CHEMINS_PAR_DEFAUT chemins, plus un avec une probabilité
+        // de PROBABILITE_TROISIEME_CHEMIN (le tirage a lieu même à probabilité 0,
+        // pour ne pas changer les cartes produites par une graine donnée).
         this.nombreChemins = Config.NOMBRE_CHEMINS_PAR_DEFAUT
             + (Aleatoire.nombre() < Config.PROBABILITE_TROISIEME_CHEMIN ? 1 : 0);
 

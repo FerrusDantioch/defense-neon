@@ -241,7 +241,7 @@ function executer(nombreDeGraines) {
     console.log('');
     console.log(`Graines testées : ${nombreDeGraines}`);
     console.log(`Chemins générés au total : ${totalChemins} (2 ou 3 par carte, voir ci-dessous)`);
-    console.log(`Cartes à 3 chemins (troisième chemin occasionnel) : ${cartesATroisChemins}/${nombreDeGraines} (${pourcentageTroisChemins.toFixed(1)} %, attendu ≈ ${(Config.PROBABILITE_TROISIEME_CHEMIN * 100).toFixed(0)} %)`);
+    console.log(`Cartes à 3 chemins : ${cartesATroisChemins}/${nombreDeGraines} (${pourcentageTroisChemins.toFixed(1)} % — NOMBRE_CHEMINS_PAR_DEFAUT = ${Config.NOMBRE_CHEMINS_PAR_DEFAUT}, PROBABILITE_TROISIEME_CHEMIN = ${Config.PROBABILITE_TROISIEME_CHEMIN})`);
     console.log(`Cartes en erreur (structure invalide) : ${cartesEnErreur}`);
     console.log(`Cartes non reproductibles à graine égale : ${cartesEchecReproductibilite}`);
     console.log(`Chemin de secours déclenché : ${cheminsSecoursDeclenches}/${totalChemins} (${pourcentageSecours.toFixed(2)} %)`);

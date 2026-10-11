@@ -3389,6 +3389,47 @@ resserrement est proportionné et n'introduit pas de rupture brutale, mais un te
 manuel par un joueur humain reste la meilleure confirmation avant de considérer les
 quatre multiplicateurs définitivement calibrés.
 
+## Trois voies par carte et construction le long des voies
+
+Réglage modifié après la phase 7I (sans section dédiée jusqu'ici) :
+`Config.NOMBRE_CHEMINS_PAR_DEFAUT` passe à 3 et `Config.PROBABILITE_TROISIEME_CHEMIN`
+à 0 — chaque carte a désormais exactement trois voies (les mentions « 2 la plupart du
+temps, 3 occasionnellement » des sections précédentes décrivent l'état d'alors). Le
+tirage du troisième chemin a toujours lieu (`Aleatoire.nombre() < 0`), ce qui ne
+change rien à la suite des tirages. Toutes les tours (plus seulement la Caserne)
+doivent être orthogonalement adjacentes à un chemin (`Interface.tenterConstruireTour`
+et l'aperçu au survol), et `Jeu.limiteTours` ne compte plus que les cases `'LIBRE'`
+adjacentes à un chemin (environ 27 à 38 tours selon la carte, au lieu de 61 à 71).
+`outils/simulation-equilibrage.js` applique les mêmes règles (placement adjacent,
+même comptage de la limite), et `outils/verification-chemins.js` affiche le réglage
+réel au lieu d'un pourcentage « attendu » devenu faux.
+
+## Correctifs de la revue d'octobre 2026
+
+- **Cache hors ligne non renouvelé** : `CACHE_NOM` (`sw.js`) n'avait pas été incrémenté
+  depuis les trois voies et le correctif du blocage de la Caserne ; avec la stratégie
+  cache-first, un jeu déjà installé continuait de servir l'ancienne version. Passé à
+  `'defense-neon-v27'`. À refaire à chaque modification déployée.
+- **Redimensionnement en cours de partie** (rotation d'un téléphone, fenêtre
+  redimensionnée) : tours, unités de Caserne, ennemis (trajet du drone compris),
+  projectiles et particules gardaient leurs coordonnées en pixels de l'ancienne taille
+  — tours dessinées hors du plateau et tirant depuis un mauvais point, ennemis décalés
+  de leur route (mesuré : jusqu'à 226 px). `Jeu.redimensionner` appelle désormais
+  `Jeu.mettreAEchelleEntites(ratio)`, qui replace tout à la nouvelle échelle (toutes
+  ces positions sont proportionnelles à `Carte.tailleCase`).
+- **Haut des écrans superposés inaccessible** : `justify-content: center` faisait
+  déborder un contenu trop haut aussi vers le haut, hors de portée du défilement — le
+  niveau du joueur et sa barre d'XP étaient coupés sur l'écran d'accueil, sur desktop
+  comme sur mobile. Remplacé par des marges automatiques sur le premier et le dernier
+  enfant (même centrage quand tout tient).
+- **Paysage mobile** : `.conteneur-canvas` héritait du `align-items: center` de `body`
+  et se retrouvait centré dans une zone de grille plus haute que l'écran ; le bas du
+  plateau (environ deux rangées) était caché dès le chargement. Corrigé par
+  `align-self: start`.
+- **`outils/serveur-statique.js`** : refuse les adresses qui sortent du dossier servi
+  (`/../../etc/...` était lisible) et répond 400 à une adresse mal encodée au lieu de
+  planter le serveur.
+
 ## Avancement (feuille de route)
 
 - **1A — Socle et carte** : fait. Génération, affichage, redimensionnement, reproductibilité
