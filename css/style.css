@@ -141,7 +141,8 @@ h2 {
 #bouton-lancer-vague,
 #bouton-pause,
 #bouton-vitesse,
-#bouton-son {
+#bouton-son,
+#bouton-musique {
     min-height: 44px;
     padding: 0 16px;
     font-size: 0.95rem;
@@ -154,10 +155,46 @@ h2 {
     box-shadow: 0 0 8px rgba(0, 229, 255, 0.4);
 }
 
-#bouton-lancer-vague:disabled {
+#bouton-lancer-vague:disabled,
+#bouton-musique:disabled {
     background: #3a3a42;
     color: #7a7a84;
     cursor: not-allowed;
+    box-shadow: none;
+}
+
+/* Réglages du son (octobre 2026) : boutons Son et Musique et curseur de volume,
+   regroupés sur une ligne qui passe à la ligne sur les écrans étroits. */
+.reglages-son {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+#bouton-musique {
+    background: #b9a8ff;
+    box-shadow: 0 0 8px rgba(185, 168, 255, 0.4);
+}
+
+.reglage-volume {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    color: #a0a0aa;
+}
+
+.reglage-volume input {
+    width: 110px;
+    accent-color: #00e5ff;
+}
+
+/* Aperçu de la vague suivante, à côté du bouton de lancement. */
+.prochaine-vague {
+    font-size: 0.85rem;
+    color: #a0a0aa;
 }
 
 #bouton-pause,
@@ -168,6 +205,32 @@ h2 {
 .message-jeu {
     color: #e74c3c;
     font-weight: 600;
+}
+
+/* Bonne nouvelle (bonus d'appel anticipé, partie reprise) plutôt qu'une erreur. */
+.message-jeu.message-positif {
+    color: #2ecc71;
+}
+
+/* Fiche de la tour survolée ou sélectionnée, sous la barre de construction. Hauteur
+   minimale de deux lignes : passer d'une tour à l'autre ne fait pas sauter la mise en
+   page quand la description tient sur une ligne de moins. */
+.fiche-tour {
+    width: 100%;
+    max-width: 900px;
+    min-height: 2.6em;
+    margin: 0;
+    padding: 4px 10px;
+    font-size: 0.85rem;
+    color: #c8c8d0;
+    text-align: center;
+    /* Fond sombre : le texte reste lisible par-dessus l'image de fond. */
+    background: rgba(11, 11, 20, 0.7);
+    border-radius: 6px;
+}
+
+.fiche-tour strong {
+    color: #00e5ff;
 }
 
 /* Barre de sélection du type de tour à construire (phase 2A), affichée sous le HUD.
@@ -283,6 +346,13 @@ h2 {
     overflow-y: auto;
 }
 
+/* Tour sélectionnée dans la moitié droite du plateau : le panneau passe à gauche pour
+   ne pas la cacher (voir Interface.mettreAJourPanneauAmelioration). */
+.panneau-amelioration.panneau-a-gauche {
+    right: auto;
+    left: 8px;
+}
+
 .panneau-amelioration h3 {
     margin: 0;
     font-size: 1rem;
@@ -321,6 +391,12 @@ h2 {
 #bouton-vendre {
     background: #e74c3c;
     color: #10120f;
+}
+
+#bouton-ciblage {
+    background: #2f4a5a;
+    color: #e8e8ec;
+    border: 1px solid #00e5ff;
 }
 
 /* Écrans superposés au canvas (accueil, victoire, défaite) : un seul à la fois est
@@ -618,6 +694,113 @@ h2 {
     background: #e0245c;
 }
 
+/* Reprise d'une partie laissée en cours (octobre 2026), mise en avant sur l'écran
+   d'accueil : c'est sans doute ce que veut faire un joueur qui revient. */
+.bouton-reprendre {
+    min-height: 44px;
+    padding: 0 20px;
+    font-size: 1rem;
+    font-weight: 600;
+    background: #00e5ff;
+    color: #10120f;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    box-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+}
+
+/* Partage du score du défi du jour, plus discret que les boutons principaux. */
+.bouton-partager {
+    min-height: 40px;
+    padding: 0 16px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    background: transparent;
+    color: #ff2d6b;
+    border: 2px solid #ff2d6b;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+/* Raccourcis clavier, sous le plateau, seulement sur un appareil avec une souris (donc
+   probablement un clavier) : inutiles et encombrants sur un téléphone. */
+.aide-clavier {
+    display: none;
+    margin: 0;
+    max-width: 900px;
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    color: #a0a0aa;
+    text-align: center;
+    background: rgba(11, 11, 20, 0.7);
+    border-radius: 6px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .aide-clavier {
+        display: block;
+    }
+}
+
+kbd {
+    padding: 0 4px;
+    border: 1px solid #4a4a55;
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 0.95em;
+    color: #c8c8d0;
+}
+
+/* Statistiques de fin de partie (octobre 2026). */
+.statistiques-partie {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+    max-width: 340px;
+    font-size: 0.85rem;
+    color: #c8c8d0;
+}
+
+.statistiques-partie:empty {
+    display: none;
+}
+
+.statistiques-partie p {
+    margin: 0;
+}
+
+/* Une ligne par type de tour : nom, barre proportionnelle à sa part des dégâts,
+   pourcentage. */
+.graphique-degats {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.graphique-degats li {
+    display: grid;
+    grid-template-columns: 90px 1fr 42px;
+    align-items: center;
+    gap: 8px;
+    text-align: left;
+}
+
+.graphique-degats-barre {
+    height: 8px;
+    background: #2a2a30;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.graphique-degats-barre span {
+    display: block;
+    height: 100%;
+}
+
 .boutons-fin-partie {
     display: flex;
     flex-wrap: wrap;
@@ -659,7 +842,7 @@ h2 {
     body {
         display: grid;
         grid-template-columns: 1fr 200px;
-        grid-template-rows: auto auto 1fr auto;
+        grid-template-rows: auto auto 1fr auto auto;
         min-height: 100dvh;
         padding: 8px;
         gap: 8px;
@@ -671,9 +854,22 @@ h2 {
         font-size: 1.15rem;
     }
 
-    #bouton-son {
+    .reglages-son {
         grid-column: 2;
         grid-row: 2;
+        justify-content: flex-start;
+        gap: 6px;
+    }
+
+    #bouton-son,
+    #bouton-musique {
+        min-height: 36px;
+        padding: 0 10px;
+        font-size: 0.8rem;
+    }
+
+    .reglage-volume input {
+        width: 80px;
     }
 
     /* S'étire sur toutes les lignes de la grille (peu importe qu'elle en compte trois
@@ -744,6 +940,17 @@ h2 {
 
     .barre-types-tours {
         grid-row: 4;
+    }
+
+    .aide-clavier {
+        grid-column: 2;
+    }
+
+    .fiche-tour {
+        grid-column: 2;
+        grid-row: 5;
+        font-size: 0.75rem;
+        text-align: left;
     }
 
     /* overflow-y: auto sur .ecran-superpose vit désormais dans la règle de base

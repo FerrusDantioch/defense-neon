@@ -9,7 +9,9 @@
 // 'caserne'`), ne tire jamais : elle fait apparaître une unité statique de blocage
 // (UniteCaserne, voir unite.js) qui combat à sa place — voir mettreAJourCaserne,
 // faireApparaitreUnite et statsUniteAuNiveauActuel ci-dessous, et
-// Jeu.resoudreCombatsCasernes (jeu.js) pour le combat lui-même. Une tour peut aussi
+// Jeu.resoudreCombatsCasernes (jeu.js) pour le combat lui-même. Le sixième, le Gel
+// (octobre 2026, `typeDegats === 'gel'`), ne tire pas non plus : il ralentit tous les
+// ennemis à sa portée (voir Tour.appliquerRalentissements). Une tour peut aussi
 // être améliorée (jusqu'à Config.NIVEAU_MAX_TOUR) ou vendue (phase 2B) : voir
 // recalculerStats, coutAmelioration, ameliorer et montantVente ci-dessous — génériques,
 // aucune de ces méthodes ne fait référence à un type précis, donc valables pour le
@@ -64,6 +66,9 @@ class Tour {
 
         this.tempsDepuisDernierTir = 0;
         this.cible = null;
+        // Choix de la cible (octobre 2026) : un id de Config.MODES_CIBLAGE, changé par
+        // le bouton du panneau d'amélioration (voir changerModeCiblage).
+        this.modeCiblage = Config.MODES_CIBLAGE[0].id;
 
         // Caserne (phase 7E) : ne cherche jamais de cible ni ne tire (voir
         // mettreAJour ci-dessous, qui bifurque entièrement avant de lire tempsDepuisDernierTir/cible
@@ -230,14 +235,51 @@ class Tour {
         return Math.round(this.investissementTotal * Config.VENTE_POURCENTAGE_REMBOURSEMENT);
     }
 
+    // Tour Gel : part de la vitesse retirée aux ennemis à sa portée, à son niveau
+    // actuel (voir Config.GEL_RALENTISSEMENT_BASE). `niveau` permet d'afficher aussi
+    // la valeur du niveau suivant dans le panneau d'amélioration.
+    forceRalentissement(niveau = this.niveau) {
+        return Config.GEL_RALENTISSEMENT_BASE + (niveau - 1) * Config.GEL_RALENTISSEMENT_PAR_NIVEAU;
+    }
+
+    // Passe au mode de ciblage suivant (voir Config.MODES_CIBLAGE). La cible actuelle
+    // est oubliée pour que le nouveau mode s'applique dès le tir suivant.
+    changerModeCiblage() {
+        const modes = Config.MODES_CIBLAGE;
+        const index = modes.findIndex(mode => mode.id === this.modeCiblage);
+        this.modeCiblage = modes[(index + 1) % modes.length].id;
+        this.cible = null;
+    }
+
+    // Ralentissements des tours Gel, pour tous les ennemis d'un coup, une fois par
+    // image avant leur déplacement (voir Jeu.simuler). Remet d'abord chaque
+    // ralentissement à zéro : un ennemi sorti de toute zone de Gel retrouve sa
+    // vitesse. Plusieurs tours Gel ne se cumulent pas, seule la plus forte compte.
+    // Méthode de classe pour que les outils de simulation (outils/) l'appliquent
+    // exactement comme le jeu, comme Ennemi.appliquerSoins.
+    static appliquerRalentissements(tours, ennemis) {
+        for (const ennemi of ennemis) {
+            ennemi.ralentissement = 0;
+        }
+        for (const tour of tours) {
+            if (tour.typeDegats !== 'gel') continue;
+            const portee = tour.portee * Jeu.facteurEchelle;
+            const force = tour.forceRalentissement();
+            for (const ennemi of ennemis) {
+                if (!ennemi.vivant || ennemi.arrive) continue;
+                if (Math.hypot(ennemi.x - tour.x, ennemi.y - tour.y) > portee) continue;
+                const effet = ennemi.type === 'boss' ? force * Config.GEL_EFFET_SUR_BOSS : force;
+                if (effet > ennemi.ralentissement) ennemi.ralentissement = effet;
+            }
+        }
+    }
+
     // Choisit l'ennemi à attaquer parmi ceux à portée. Ne réévalue pas la cible tant
     // que celle en cours reste valide (vivante, pas arrivée, toujours à portée) :
     // sans cette vérification, deux ennemis à progression égale feraient tourner le
-    // canon de l'un à l'autre à chaque frame, ce qui donne un rendu tremblant. Compare
-    // `ennemi.progression()` (phase 6A, généralisée en phase 7F pour couvrir aussi
-    // bien un ennemi au sol qu'un drone — voir ennemi.js, qui a remplacé l'ancienne
-    // Tour.progressionEnnemi ne sachant lire qu'un indexPointDePassage) plutôt que
-    // l'index brut, pour rester correcte même entre deux ennemis de nature différente.
+    // canon de l'un à l'autre à chaque frame, ce qui donne un rendu tremblant.
+    // Parmi les ennemis à portée, garde celui qui a le meilleur score selon le mode de
+    // ciblage de la tour (octobre 2026, voir scoreCible) : le plus avancé par défaut.
     chercherCible(ennemis) {
         const portee = this.portee * Jeu.facteurEchelle;
 
@@ -257,7 +299,7 @@ class Tour {
         const peutViserVolant = Config.TYPES_TOURS[this.type].peutViserVolant;
 
         let meilleureCible = null;
-        let meilleureProgression = -Infinity;
+        let meilleurScore = -Infinity;
         for (const ennemi of ennemis) {
             if (!ennemi.vivant || ennemi.arrive) continue;
             // Un ennemi volant qu'un type de tour ne sait pas viser est ignoré ici
@@ -270,14 +312,28 @@ class Tour {
             const distance = Math.hypot(ennemi.x - this.x, ennemi.y - this.y);
             if (distance > portee) continue;
 
-            const progression = ennemi.progression();
-            if (!meilleureCible || progression > meilleureProgression) {
+            const score = this.scoreCible(ennemi, distance);
+            if (!meilleureCible || score > meilleurScore) {
                 meilleureCible = ennemi;
-                meilleureProgression = progression;
+                meilleurScore = score;
             }
         }
 
         this.cible = meilleureCible;
+    }
+
+    // Score d'un ennemi à portée selon le mode de ciblage : la tour vise celui qui a
+    // le plus haut score.
+    // - 'premier' : le plus avancé sur son trajet, comparé via `ennemi.progression()`
+    //   (phase 6A, généralisée en phase 7F pour couvrir aussi bien un ennemi au sol
+    //   qu'un drone — voir ennemi.js) plutôt que l'index brut du point de passage,
+    //   pour rester correct entre deux chemins de longueurs différentes ;
+    // - 'fort' : celui qui a le plus de points de vie et de bouclier restants ;
+    // - 'proche' : le plus proche de la tour.
+    scoreCible(ennemi, distance) {
+        if (this.modeCiblage === 'fort') return ennemi.pointsDeVie + ennemi.bouclier;
+        if (this.modeCiblage === 'proche') return -distance;
+        return ennemi.progression();
     }
 
     mettreAJour(dt, ennemis, pool) {
@@ -291,6 +347,10 @@ class Tour {
             this.mettreAJourCaserne(dt);
             return;
         }
+
+        // Tour Gel : ni cible ni tir, son effet est appliqué à tous les ennemis à la
+        // fois par Tour.appliquerRalentissements.
+        if (this.typeDegats === 'gel') return;
 
         this.chercherCible(ennemis);
 
@@ -333,7 +393,7 @@ class Tour {
         const projectile = pool.find(p => !p.actif);
         if (!projectile) return;
 
-        projectile.activer(this.x, this.y, this.cible, this.degats, this.couleur, this.typeDegats);
+        projectile.activer(this.x, this.y, this.cible, this.degats, this.couleur, this.typeDegats, this.type);
 
         // Flash de tir (phase 4B) : quelques particules projetées vers la cible,
         // depuis un point légèrement décalé du centre pour évoquer le canon plutôt
@@ -392,7 +452,8 @@ class Tour {
     //   antiaérienne à tir multiple plutôt qu'un canon unique ;
     // - Caserne : pentagone (bâtiment plutôt qu'une arme), sans aucun canon — elle
     //   ne vise ni ne tire jamais (voir mettreAJourCaserne), son unité (UniteCaserne,
-    //   unite.js) combat à sa place, sur la case de chemin qu'elle bloque.
+    //   unite.js) combat à sa place, sur la case de chemin qu'elle bloque ;
+    // - Gel : hexagone surmonté d'un flocon, entouré de sa zone de ralentissement.
     // Le halo néon (couleur du type, voir Config.HALO_FLOU_TOUR_BASE) s'intensifie
     // légèrement à chaque amélioration, pour que le niveau d'une tour se lise aussi
     // d'un coup d'œil sans ouvrir le panneau d'amélioration — même mécanisme pour
@@ -422,6 +483,10 @@ class Tour {
             this.dessinerSoclePolygone(ctx, taille * 0.34, 8, 0);
         } else if (this.type === 'sniper') {
             this.dessinerSoclePolygone(ctx, taille * 0.36, 3, -Math.PI / 2);
+        } else if (this.type === 'gel') {
+            // Gel : hexagone, seule forme encore libre parmi les tours, surmonté d'un
+            // flocon (voir plus bas) plutôt que d'un canon.
+            this.dessinerSoclePolygone(ctx, taille * 0.34, 6, 0);
         } else if (this.type === 'flak') {
             // Même rotation que la Mitrailleuse (Math.PI/4, cotes=4) — c'est ce qui
             // donne un carré aux côtés bien à plat plutôt qu'un losange pointu
@@ -464,6 +529,23 @@ class Tour {
             for (const decalageAngle of [-3, -1, 1, 3]) {
                 this.dessinerCanon(ctx, angle + decalageAngle * (Math.PI / 8), longueur, epaisseur, 0);
             }
+        } else if (this.type === 'gel') {
+            // Flocon : trois traits clairs qui se croisent au centre, et une zone
+            // translucide qui montre en permanence la portée du ralentissement.
+            ctx.strokeStyle = '#f2efff';
+            ctx.lineWidth = Math.max(1.5, taille * 0.05);
+            ctx.beginPath();
+            for (let i = 0; i < 3; i++) {
+                const angleBranche = i * Math.PI / 3 + Math.PI / 2;
+                ctx.moveTo(this.x - Math.cos(angleBranche) * taille * 0.22, this.y - Math.sin(angleBranche) * taille * 0.22);
+                ctx.lineTo(this.x + Math.cos(angleBranche) * taille * 0.22, this.y + Math.sin(angleBranche) * taille * 0.22);
+            }
+            ctx.stroke();
+
+            ctx.fillStyle = 'rgba(185, 168, 255, 0.07)';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.portee * Jeu.facteurEchelle, 0, Math.PI * 2);
+            ctx.fill();
         }
         // Caserne : aucun canon, elle ne vise ni ne tire jamais (voir mettreAJour).
     }
@@ -482,18 +564,22 @@ class Projectile {
         // 'unique' ou 'zone' (phase 7D), copié depuis la tour tireuse à l'activation —
         // voir Tour.typeDegats (tour.js) et la bifurcation dans mettreAJour ci-dessous.
         this.typeDegats = 'unique';
+        // Type de la tour tireuse, pour attribuer les dégâts dans les statistiques de
+        // fin de partie (voir Statistiques.ajouterDegats).
+        this.typeTour = null;
         this.actif = false;
     }
 
     // Réinitialise les propriétés d'un projectile inactif du pool au lieu d'en créer
     // un nouveau avec `new` (voir la note en tête de fichier).
-    activer(x, y, cible, degats, couleur, typeDegats) {
+    activer(x, y, cible, degats, couleur, typeDegats, typeTour) {
         this.x = x;
         this.y = y;
         this.cible = cible;
         this.degats = degats;
         this.couleur = couleur;
         this.typeDegats = typeDegats;
+        this.typeTour = typeTour;
         this.actif = true;
     }
 
@@ -529,7 +615,7 @@ class Projectile {
                     if (!ennemi.vivant) continue;
                     const distanceExplosion = Math.hypot(ennemi.x - this.x, ennemi.y - this.y);
                     if (distanceExplosion < rayon) {
-                        ennemi.subirDegats(this.degats);
+                        Statistiques.ajouterDegats(this.typeTour, ennemi.subirDegats(this.degats));
                     }
                 }
                 // Toujours déclenchée, même sans aucun ennemi touché : le joueur doit
@@ -539,7 +625,7 @@ class Projectile {
                 // matérialiser l'étendue touchée.
                 Particules.creerExplosion(this.x, this.y, this.couleur, Config.PARTICULE_NOMBRE_EXPLOSION_ZONE);
             } else {
-                this.cible.subirDegats(this.degats);
+                Statistiques.ajouterDegats(this.typeTour, this.cible.subirDegats(this.degats));
                 // Impact sans mise à mort (phase 4B) : la mort elle-même déclenche sa
                 // propre explosion ailleurs (Jeu.simuler, au moment où l'ennemi est
                 // retiré de la liste des actifs), pour ne jamais superposer les deux
