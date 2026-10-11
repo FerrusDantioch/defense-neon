@@ -58,6 +58,14 @@ const Config = {
     // négligeable sur le même échantillon, sans mesure perceptible sur le temps de
     // génération (chaque essai reste une opération bon marché).
     MAX_ESSAIS_ESPACEMENT_CHEMIN: 40,
+    // Même rôle pour la sortie d'un chemin (boucle `essaiSortie` de Carte.generer),
+    // qui ne peut pas être choisie directement : elle dépend du tracé au hasard,
+    // et une sortie bien précise (la seule ligne encore assez espacée des autres,
+    // par exemple) peut demander davantage de tracés. Mesuré sur 10 000 graines à
+    // 3 chemins : 0,33 % de cartes avec deux sorties trop proches à 40 essais,
+    // aucune à 120. Les essais s'arrêtent dès qu'une sortie convient : une carte
+    // déjà réussie en moins de 40 essais reste identique.
+    MAX_ESSAIS_SORTIE_CHEMIN: 120,
 
     // Limite de tours constructibles (phase 6B) : une proportion plutôt qu'un nombre
     // fixe, puisque la surface réellement constructible d'une carte à deux chemins

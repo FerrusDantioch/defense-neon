@@ -92,7 +92,7 @@ class Tour {
                 // normalisé ci-dessous, jamais lu directement.
                 const pointBlocage = candidats[0] || null;
                 // pointBlocage ne devrait jamais être null ici : Interface.tenterConstruireTour
-                // vérifie déjà Carte.estAdjacentAUnChemin avant de construire une Caserne.
+                // refuse déjà une Caserne sans aucune case de chemin à bloquer.
                 // Gardé par robustesse pour un appel direct qui sauterait cette
                 // vérification (ex. un outil de test) — la tour existe alors sans jamais
                 // faire apparaître d'unité, plutôt que de lever une exception.

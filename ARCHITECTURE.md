@@ -220,6 +220,9 @@ HTML/CSS/JS vanilla, sans module ES6 ni dépendance. Fichiers chargés dans cet 
   `icones/icone-192.png` et `icones/icone-512.png` — voir « Installation et
   fonctionnement hors ligne (phase 5) » ci-dessous pour le détail de cette étape
   manuelle.
+- **`outils/simulation-parties.js`** — fait jouer des parties complètes à un joueur
+  simulé, règles actuelles contre anciennes, pour vérifier l'équilibrage après un
+  changement de règles — voir « Améliorations d'octobre 2026 » ci-dessous.
 
 ## Algorithme de génération du chemin (`carte.js`)
 
@@ -3409,7 +3412,8 @@ réel au lieu d'un pourcentage « attendu » devenu faux.
 - **Cache hors ligne non renouvelé** : `CACHE_NOM` (`sw.js`) n'avait pas été incrémenté
   depuis les trois voies et le correctif du blocage de la Caserne ; avec la stratégie
   cache-first, un jeu déjà installé continuait de servir l'ancienne version. Passé à
-  `'defense-neon-v27'`. À refaire à chaque modification déployée.
+  `'defense-neon-v27'` (plus nécessaire depuis la v28, voir « Améliorations d'octobre
+  2026 » ci-dessous).
 - **Redimensionnement en cours de partie** (rotation d'un téléphone, fenêtre
   redimensionnée) : tours, unités de Caserne, ennemis (trajet du drone compris),
   projectiles et particules gardaient leurs coordonnées en pixels de l'ancienne taille
@@ -3429,6 +3433,98 @@ réel au lieu d'un pourcentage « attendu » devenu faux.
 - **`outils/serveur-statique.js`** : refuse les adresses qui sortent du dossier servi
   (`/../../etc/...` était lisible) et répond 400 à une adresse mal encodée au lieu de
   planter le serveur.
+
+## Améliorations d'octobre 2026
+
+### Cache hors ligne en « réseau d'abord » (`sw.js`)
+
+Remplace la stratégie cache d'abord de la phase 5, qui obligeait à incrémenter
+`CACHE_NOM` à chaque déploiement (oubli fait deux fois). En ligne, chaque fichier vient
+du réseau et sa copie en cache est remplacée ; hors ligne, ou si le serveur est en
+panne (erreur 5xx), la copie est servie — une redirection ou un 404 est transmis tel
+quel, pour ne jamais masquer une redirection d'hébergeur par une page périmée ; si le
+réseau ne répond pas en `DELAI_RESEAU_MS`
+(3 s), la copie est servie sans l'attendre et la réponse tardive met la copie à jour
+pour la fois suivante. Seules les requêtes GET de même origine sont concernées. La
+copie de la réponse (`clone()`) est faite avant que la page ne la lise, et la mise en
+cache est tenue par `waitUntil`. L'installation précharge toujours tous les fichiers
+(`cache: 'reload'`, pour contourner le cache HTTP), ce qui garde le jeu jouable hors
+ligne dès la première visite. `CACHE_NOM` passe à v28 une dernière fois pour purger
+les copies de l'ancienne stratégie ; le changer ne sert plus qu'à repartir d'un cache
+vide. Limite connue : sur une connexion très lente juste après un déploiement, une
+même page peut mélanger fichiers neufs (réseau) et anciens (copie) ; le chargement
+suivant est cohérent.
+
+Vérifié sur une copie servie localement (navigateur réel, profil persistant) :
+migration depuis la v27 installée (la nouvelle version prend le relais au deuxième
+chargement, cycle normal d'un service worker), fichier modifié sans toucher `sw.js`
+visible dès le rechargement suivant, partie lancée hors ligne, réseau ralenti à 6 s
+par fichier : page ouverte en ~6 s depuis la copie, puis copie mise à jour en
+arrière-plan.
+
+### Espacement des entrées et sorties (`carte.js`, `config.js`)
+
+Avec trois voies sur chaque carte, 8,7 % des cartes avaient deux entrées ou deux
+sorties à moins de `ECART_MIN_ENTREES_SORTIES` lignes : un choix bien espacé pouvait
+ne plus laisser aucune place au suivant (entrées sur 3 et 8 : aucune ligne à 3
+d'écart des deux pour la troisième). `Carte.resteDeLaPlace(lignes, nombreRestant)`
+compte, trou par trou, combien de lignes tiennent encore dans la bande
+LIGNE_MIN-LIGNE_MAX ; une entrée ou une sortie n'est retenue que si elle laisse de la
+place aux chemins suivants. Si les tirages d'entrée échouent tous,
+`choisirLigneEspacee` choisit directement parmi les lignes qui conviennent. La sortie
+ne pouvant pas être choisie (elle découle du tracé), ses essais passent à
+`MAX_ESSAIS_SORTIE_CHEMIN` (120, contre 40) ; ils s'arrêtent dès qu'une sortie
+convient. Résultat sur 10 000 graines : 0 carte mal espacée (contre 8,7 %), sans
+coût mesurable. Seules les cartes autrefois mal espacées changent à graine égale
+(174 sur 2000) ; les autres, et les défis du jour testés (11 au 13 octobre 2026),
+sont identiques.
+
+### Caserne sans point de blocage utile (`carte.js`, `interface.js`, `tour.js`)
+
+Un ennemi apparaît sur la première case de sa voie et vise déjà la suivante : une
+unité posée sur cette case d'entrée ne bloquait jamais rien. Environ 2 cases
+constructibles par carte n'avaient que ce point de blocage, et une Caserne y était
+payée pour rien. `Carte.candidatsBlocagePourCaserne` exclut désormais l'index 0 (en
+retenant, si la case est aussi traversée plus loin par une autre voie, cette
+autre voie) ; une Caserne sans aucun point utile est refusée (« Aucune case à bloquer
+ici (entrée de chemin) ») et son aperçu au survol est rouge
+(`Interface.caserneAUnPointDeBlocage`). Les autres tours restent constructibles sur
+ces cases.
+
+### Fluidité (`interface.js`, `decor.js`)
+
+Le HUD, la barre de tours, le panneau d'amélioration et l'écran d'accueil étaient
+réécrits à chaque image, même à l'identique, ce qui forçait un recalcul complet de la
+mise en page 60 fois par seconde. `Interface.ecrireSiChange(element, propriete,
+valeur)` n'écrit plus que les valeurs qui changent (la largeur de la barre d'XP est
+comparée à la dernière valeur écrite, `style.width` étant relu arrondi). Le skyline
+du décor n'est plus animé ni redessiné une fois l'image de fond chargée
+(`Decor.imageFondVisible`), qu'il ne pouvait plus montrer. Mesuré sur 5 s de partie
+(Chrome) : mises en page 300 → 1, temps de style et de mise en page ~165 ms → 0,
+temps total d'exécution −35 à −40 %. Sans image de fond, le skyline défile comme
+avant.
+
+### Vérification de l'équilibrage (`outils/simulation-parties.js`)
+
+Nouvel outil : un joueur simulé joue des parties complètes avec les règles actuelles
+et les anciennes (2 voies plus 25 % de 3e, construction libre), en difficulté normale
+et supérieure, selon deux stratégies (1 Flak sur 6 tours, ou 1 sur 2). Résultats en
+Standard, 24 graines par ligne :
+
+| Difficulté | Stratégie | Anciennes règles | Règles actuelles |
+| --- | --- | --- | --- |
+| normale | 1 Flak sur 6 | 10/24 victoires | 4/24 |
+| normale | 1 Flak sur 2 | 24/24 (intégrité 17,5) | 24/24 (17,8) |
+| supérieure | 1 Flak sur 6 | 0/24 | 0/24 |
+| supérieure | 1 Flak sur 2 | 18/24 | 16/24 |
+
+Conclusion : pas de réglage à changer. Avec assez de Flak, les règles actuelles sont
+aussi jouables que les anciennes ; sans assez de Flak, les drones (à partir de la
+vague 8) causent presque toutes les pertes d'intégrité (98 à 99 %) dans les deux cas.
+La troisième voie explique l'essentiel de l'écart restant ; l'obligation de
+construire le long des voies pèse peu, et ni une limite de tours relevée à 75 % ni
+200 crédits de départ n'ont amélioré les résultats de la stratégie à 1 Flak sur 6. La
+limite de tours (environ 31) est désormais atteinte en fin de partie.
 
 ## Avancement (feuille de route)
 
