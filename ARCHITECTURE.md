@@ -3526,6 +3526,27 @@ construire le long des voies pèse peu, et ni une limite de tours relevée à 75
 200 crédits de départ n'ont amélioré les résultats de la stratégie à 1 Flak sur 6. La
 limite de tours (environ 31) est désormais atteinte en fin de partie.
 
+### Annonce des drones (`vagues.js`, `son.js`)
+
+Suite directe de la mesure ci-dessus : au début de la vague
+`Config.VAGUE_APPARITION_DRONE` (8), `Vagues.demarrer` affiche « ⚠ DRONES : seul le
+Flak peut les abattre » pendant 4 s, dans la même zone que l'annonce de boss, avec un
+son dédié (`Son.jouerAlerteDrones`, deux bips aigus montants). Si cette vague était
+aussi une vague de boss (réglages modifiés), les deux annonces sont réunies dans un
+seul message. `outils/simulation-equilibrage.js` reçoit le bouchon correspondant.
+
+### HUD visible sur téléphone en portrait (`interface.js`, `css/style.css`)
+
+Découvert en vérifiant cette annonce : sous 480px de large, la hauteur minimale de
+600px réservée à l'écran d'accueil s'appliquait aussi en partie, laissant sous le
+plateau un vide d'environ 400px. Sur un téléphone de 700px de haut, le HUD commençait
+à 735px : crédits, boutons, messages et barre des tours étaient sous le bord de
+l'écran. Cette hauteur ne s'applique plus qu'avec la classe `ecran-affiche`, posée par
+`Interface.mettreAJourEcrans` hors partie ; le HUD commence désormais juste sous le
+plateau et tout tient à l'écran (vérifié à 320 et 390px de large). Le panneau
+d'amélioration reçoit `max-height` et `overflow-y: auto` : à 320px de large, plus
+haut que le plateau, il défile au lieu de déborder sur le HUD.
+
 ## Avancement (feuille de route)
 
 - **1A — Socle et carte** : fait. Génération, affichage, redimensionnement, reproductibilité
