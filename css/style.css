@@ -237,9 +237,13 @@ h2 {
    le contenu réel à 557px (mesuré via ecran-accueil.scrollHeight à 375px de large,
    même chevauchement du bouton Son observé et corrigé avant d'ajuster cette valeur),
    au-delà des 500px fixés en phase 3B — même cause, même correctif, la marge de
-   sécurité déjà en place s'appliquant à cette nouvelle valeur. */
+   sécurité déjà en place s'appliquant à cette nouvelle valeur.
+   Réservée aux moments où un écran superposé est affiché (classe `ecran-affiche`,
+   posée par Interface.mettreAJourEcrans) : appliquée aussi en partie, elle laissait
+   sous le plateau un vide d'environ 400px qui repoussait le HUD, ses messages et la
+   barre des tours sous le bord inférieur de l'écran d'un téléphone. */
 @media (max-width: 480px) {
-    .conteneur-canvas {
+    .conteneur-canvas.ecran-affiche {
         min-height: 600px;
     }
 }
@@ -272,6 +276,11 @@ h2 {
     box-shadow: 0 0 12px rgba(0, 229, 255, 0.35);
     text-align: left;
     font-size: 0.85rem;
+    /* Sur les plus petits écrans, le plateau peut être moins haut que le panneau
+       (Caserne surtout, au texte plus long) : il défile alors à l'intérieur plutôt
+       que de déborder sur le HUD placé juste sous le plateau. */
+    max-height: calc(100% - 16px);
+    overflow-y: auto;
 }
 
 .panneau-amelioration h3 {
@@ -336,20 +345,33 @@ h2 {
    généreuse sur téléphone, mais qui n'a plus besoin d'être parfaitement exacte
    puisque ce filet de sécurité couvre désormais le reste). Sans effet visible tant
    que le contenu tient dans la boîte (seul un contenu qui déborde réellement
-   déclenche la barre de défilement). */
+   déclenche la barre de défilement).
+   Centrage vertical par marges automatiques (premier et dernier enfant) plutôt que
+   `justify-content: center` : avec ce dernier, un contenu plus haut que la boîte
+   déborde aussi vers le HAUT, hors de portée du défilement — le niveau du joueur et
+   sa barre d'XP, en tête de l'écran d'accueil, étaient ainsi coupés et
+   inaccessibles. Les marges automatiques centrent pareil quand tout tient, et
+   s'annulent sinon, laissant le contenu partir du haut et défiler normalement. */
 .ecran-superpose {
     position: absolute;
     inset: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
     gap: 16px;
     padding: 16px;
     background: rgba(16, 16, 18, 0.92);
     border-radius: 4px;
     text-align: center;
     overflow-y: auto;
+}
+
+.ecran-superpose > :first-child {
+    margin-top: auto;
+}
+
+.ecran-superpose > :last-child {
+    margin-bottom: auto;
 }
 
 .choix-duree {
@@ -672,10 +694,15 @@ h2 {
        plateau resterait invisible sous le bord inférieur de l'écran ; `max-height`
        l'empêche de dépasser la hauteur réelle du viewport, et `position: sticky` le
        garde alors visible et jouable pendant que le reste de la page défile autour de
-       lui, plutôt que de le laisser défiler hors champ avec le reste. */
+       lui, plutôt que de le laisser défiler hors champ avec le reste.
+       `align-self: start` : sans lui, le `align-items: center` hérité de la règle
+       `body` de base centrait ce conteneur dans une zone de grille plus haute que
+       l'écran (quand la colonne de droite déborde), repoussant le bas du plateau
+       sous le bord inférieur de l'écran dès le chargement. */
     .conteneur-canvas {
         grid-column: 1;
         grid-row: 1 / -1;
+        align-self: start;
         max-width: none;
         height: 100%;
         max-height: calc(100dvh - 16px);

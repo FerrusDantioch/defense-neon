@@ -200,6 +200,7 @@ const Jeu = {
         this.canvas.width = largeur;
         this.canvas.height = hauteur;
 
+        const ancienneTailleCase = Carte.tailleCase;
         Carte.tailleCase = largeur / Config.COLONNES;
         Carte.recalculerPixels();
 
@@ -208,7 +209,50 @@ const Jeu = {
         // ont été calibrées (Config.LARGEUR_REFERENCE / Config.COLONNES).
         this.facteurEchelle = Carte.tailleCase / 40;
 
+        // 0 au tout premier appel (Jeu.initialiser) : rien à remettre à l'échelle.
+        if (ancienneTailleCase > 0 && ancienneTailleCase !== Carte.tailleCase) {
+            this.mettreAEchelleEntites(Carte.tailleCase / ancienneTailleCase);
+        }
+
         this.dessinerTout();
+    },
+
+    // Redimensionnement en cours de partie (rotation d'un téléphone, fenêtre
+    // redimensionnée) : tours, unités, ennemis, projectiles et particules stockent
+    // leur position en pixels. Sans cette remise à l'échelle, ils resteraient à leurs
+    // anciennes coordonnées — tours dessinées hors du plateau, ennemis décalés de leur
+    // route. Toutes ces positions étant proportionnelles à Carte.tailleCase, les
+    // multiplier par `ratio` (nouvelle taille / ancienne) les replace exactement.
+    mettreAEchelleEntites(ratio) {
+        for (const tour of this.toursActives) {
+            const centre = Carte.caseVersPixels(tour.colonne, tour.ligne);
+            tour.x = centre.x;
+            tour.y = centre.y;
+            if (tour.unite) {
+                const point = Carte.chemins[tour.unite.cheminIndex].pointsDePassage[tour.unite.indexPointDePassage];
+                tour.unite.x = point.x;
+                tour.unite.y = point.y;
+            }
+        }
+
+        for (const ennemi of this.ennemisActifs) {
+            ennemi.x *= ratio;
+            ennemi.y *= ratio;
+            // Drone (phase 7F) : son trajet en ligne droite est lui aussi en pixels.
+            if (ennemi.vole) {
+                ennemi.pointDepart = { x: ennemi.pointDepart.x * ratio, y: ennemi.pointDepart.y * ratio };
+                ennemi.pointArrivee = { x: ennemi.pointArrivee.x * ratio, y: ennemi.pointArrivee.y * ratio };
+            }
+        }
+
+        for (const projectile of this.poolProjectiles) {
+            projectile.x *= ratio;
+            projectile.y *= ratio;
+        }
+        for (const particule of Particules.pool) {
+            particule.x *= ratio;
+            particule.y *= ratio;
+        }
     },
 
     // Crée le pool de projectiles réutilisables, une seule fois pour toute la durée

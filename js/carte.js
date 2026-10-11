@@ -41,8 +41,9 @@ const Carte = {
     // post-lancement, troisième chemin occasionnel) : calculé une seule fois par
     // generer(), tout au début, avant de tracer le moindre chemin — remplace
     // l'ancienne constante fixe Config.NOMBRE_CHEMINS (retirée), puisque ce nombre
-    // varie désormais d'une carte à l'autre (2 la plupart du temps, 3
-    // occasionnellement, voir Config.PROBABILITE_TROISIEME_CHEMIN). Toujours égal à
+    // peut varier d'une carte à l'autre (voir Config.NOMBRE_CHEMINS_PAR_DEFAUT et
+    // Config.PROBABILITE_TROISIEME_CHEMIN ; 3 sur chaque carte avec le réglage
+    // actuel). Toujours égal à
     // `this.chemins.length` une fois la génération terminée ; conservé comme
     // propriété à part entière (plutôt que de relire systématiquement
     // `this.chemins.length` ailleurs) parce qu'il est déjà connu avant que
@@ -92,10 +93,10 @@ const Carte = {
     },
 
     // Vraie si au moins une des 4 cases orthogonalement voisines appartient à un
-    // chemin (phase 7E) : condition de construction propre à la tour Caserne, qui a
-    // besoin d'un chemin adjacent où poser son unité — voir
-    // Interface.tenterConstruireTour, seul appelant qui applique cette règle
-    // uniquement pour ce type de tour.
+    // chemin (phase 7E) : condition de construction de TOUTES les tours depuis le
+    // passage à 3 voies (réservée à la seule Caserne auparavant) — voir
+    // Interface.tenterConstruireTour, et Jeu.reinitialiser qui ne compte que ces
+    // cases pour la limite de tours.
     estAdjacentAUnChemin(colonne, ligne) {
         for (const voisine of this.voisinesOrthogonales(colonne, ligne)) {
             if (this.dansLaGrille(voisine.colonne, voisine.ligne)
@@ -117,9 +118,14 @@ const Carte = {
     // elle-même ne distingue de toute façon pas lequel (voir la note en tête de ce
     // fichier).
     //
-    // Renvoie un tableau (potentiellement vide si estAdjacentAUnChemin renverrait
-    // faux pour cette case — ne devrait normalement jamais arriver ici, l'appelant
-    // étant censé avoir déjà vérifié cette condition avant de construire) d'objets
+    // La toute première case d'un chemin (index 0, son entrée) n'est jamais
+    // candidate : un ennemi y apparaît et vise déjà le point suivant, il ne peut
+    // donc jamais y être bloqué (voir Ennemi.deplacer) — une unité posée là ne
+    // servirait à rien. Si cette case est aussi traversée plus loin par un autre
+    // chemin, c'est ce chemin-là qui est retenu.
+    //
+    // Renvoie un tableau (vide si aucune case de chemin utile n'est adjacente :
+    // Interface.tenterConstruireTour refuse alors la Caserne) d'objets
     // `{ colonne, ligne, cheminIndex, indexPointDePassage }` — `colonne`/`ligne`
     // (contenu additionnel post-lancement, absents avant) identifient la case
     // elle-même, nécessaires pour la mettre en surbrillance et détecter qu'un clic
@@ -140,7 +146,7 @@ const Carte = {
                 const indexPointDePassage = this.chemins[cheminIndex].chemin.findIndex(
                     c => c.colonne === voisine.colonne && c.ligne === voisine.ligne
                 );
-                if (indexPointDePassage !== -1) {
+                if (indexPointDePassage > 0) {
                     candidats.push({ colonne: voisine.colonne, ligne: voisine.ligne, cheminIndex, indexPointDePassage });
                     break;
                 }
@@ -224,6 +230,29 @@ const Carte = {
         return Math.min(...lignesDejaChoisies.map(l => Math.abs(l - valeur)));
     },
 
+    // Vraie s'il reste possible d'ajouter `nombreRestant` lignes à `lignes` (déjà
+    // espacées entre elles) en respectant Config.ECART_MIN_ENTREES_SORTIES dans la
+    // bande LIGNE_MIN-LIGNE_MAX. Sans cette vérification, un choix pourtant bien
+    // espacé pouvait condamner le suivant : avec 3 voies, des entrées sur les
+    // lignes 3 et 8 ne laissent aucune ligne à 3 d'écart des deux pour la
+    // troisième. Compte, trou par trou, combien de lignes y tiennent au maximum en
+    // les tassant les unes contre les autres (le meilleur rangement possible sur
+    // une seule dimension).
+    resteDeLaPlace(lignes, nombreRestant) {
+        if (nombreRestant <= 0) return true;
+        const ecart = Config.ECART_MIN_ENTREES_SORTIES;
+        let place = 0;
+        // Plus petite ligne encore utilisable dans le trou en cours.
+        let debutTrou = Config.LIGNE_MIN;
+        for (const ligne of [...lignes].sort((a, b) => a - b)) {
+            const finTrou = ligne - ecart;
+            if (finTrou >= debutTrou) place += Math.floor((finTrou - debutTrou) / ecart) + 1;
+            debutTrou = ligne + ecart;
+        }
+        if (Config.LIGNE_MAX >= debutTrou) place += Math.floor((Config.LIGNE_MAX - debutTrou) / ecart) + 1;
+        return place >= nombreRestant;
+    },
+
     // Tire une ligne (entre LIGNE_MIN et LIGNE_MAX) espacée d'au moins
     // Config.ECART_MIN_ENTREES_SORTIES de toutes les lignes déjà choisies (entrées
     // entre elles, ou sorties entre elles — jamais les deux mélangées, voir les deux
@@ -232,10 +261,10 @@ const Carte = {
     // parmi TOUS les essais (celui dont la distance minimale aux lignes déjà
     // choisies est la plus grande — jamais seulement le dernier tiré, voir la note
     // sur ce choix dans config.js) plutôt que de bloquer la génération pour un
-    // simple critère esthétique. Un tableau vide (premier chemin) valide toujours
-    // le premier tirage, puisque `lignesDejaChoisies.length === 0` renvoie toujours
-    // Infinity ci-dessus.
-    choisirLigneEspacee(lignesDejaChoisies) {
+    // simple critère esthétique. Un candidat bien espacé n'est retenu que s'il
+    // laisse encore de la place pour les `nombreRestantApres` lignes à choisir
+    // ensuite (voir resteDeLaPlace).
+    choisirLigneEspacee(lignesDejaChoisies, nombreRestantApres) {
         let meilleureCandidate = null;
         let meilleureDistance = -1;
 
@@ -243,13 +272,30 @@ const Carte = {
             const candidate = Aleatoire.entier(Config.LIGNE_MIN, Config.LIGNE_MAX);
             const distance = this.distanceMinimaleAuxLignes(candidate, lignesDejaChoisies);
 
-            if (distance >= Config.ECART_MIN_ENTREES_SORTIES) return candidate;
+            if (distance >= Config.ECART_MIN_ENTREES_SORTIES
+                && this.resteDeLaPlace([...lignesDejaChoisies, candidate], nombreRestantApres)) {
+                return candidate;
+            }
 
             if (distance > meilleureDistance) {
                 meilleureDistance = distance;
                 meilleureCandidate = candidate;
             }
         }
+
+        // Tous les tirages ont échoué alors qu'une ligne convenable existe peut-être
+        // (cas d'une seule ligne valable sur dix, ex. entrées sur 3 et 7 : seule la
+        // ligne 10 convient) : on la choisit directement parmi celles qui conviennent.
+        // N'intervient qu'après les essais ci-dessus, pour ne rien changer aux cartes
+        // déjà générées correctement par une graine donnée.
+        const convenables = [];
+        for (let ligne = Config.LIGNE_MIN; ligne <= Config.LIGNE_MAX; ligne++) {
+            if (this.distanceMinimaleAuxLignes(ligne, lignesDejaChoisies) >= Config.ECART_MIN_ENTREES_SORTIES
+                && this.resteDeLaPlace([...lignesDejaChoisies, ligne], nombreRestantApres)) {
+                convenables.push(ligne);
+            }
+        }
+        if (convenables.length > 0) return Aleatoire.choix(convenables);
 
         return meilleureCandidate;
     },
@@ -491,9 +537,10 @@ const Carte = {
         // Troisième chemin occasionnel (contenu additionnel post-lancement) : tiré
         // ici, tout au premier tirage de cette génération (avant le moindre tracé de
         // chemin ou choix de ligne d'entrée/sortie), via Aleatoire — donc
-        // reproductible à graine égale, comme le reste de la génération. La plupart
-        // des cartes gardent NOMBRE_CHEMINS_PAR_DEFAUT (2) chemins ; une carte sur
-        // quatre (PROBABILITE_TROISIEME_CHEMIN) en gagne un troisième.
+        // reproductible à graine égale, comme le reste de la génération : chaque
+        // carte a NOMBRE_CHEMINS_PAR_DEFAUT chemins, plus un avec une probabilité
+        // de PROBABILITE_TROISIEME_CHEMIN (le tirage a lieu même à probabilité 0,
+        // pour ne pas changer les cartes produites par une graine donnée).
         this.nombreChemins = Config.NOMBRE_CHEMINS_PAR_DEFAUT
             + (Aleatoire.nombre() < Config.PROBABILITE_TROISIEME_CHEMIN ? 1 : 0);
 
@@ -502,13 +549,16 @@ const Carte = {
         this.chemins = [];
 
         for (let index = 0; index < this.nombreChemins; index++) {
-            const ligneEntree = this.choisirLigneEspacee(lignesEntreesChoisies);
+            // Chemins encore à tracer après celui-ci, pour lesquels il doit rester
+            // une entrée et une sortie bien espacées (voir resteDeLaPlace).
+            const cheminsRestantsApres = this.nombreChemins - index - 1;
+            const ligneEntree = this.choisirLigneEspacee(lignesEntreesChoisies, cheminsRestantsApres);
 
             // La ligne de sortie n'est pas tirée indépendamment comme celle d'entrée :
             // elle émerge de la marche aléatoire (tenterTracerChemin), qui n'a aucune
             // notion de « ligne visée ». Pour lui appliquer la même règle d'espacement
             // sans changer l'algorithme de tracé lui-même (voir la note de phase 6A du
-            // prompt), on retrace jusqu'à Config.MAX_ESSAIS_ESPACEMENT_CHEMIN chemins
+            // prompt), on retrace jusqu'à Config.MAX_ESSAIS_SORTIE_CHEMIN chemins
             // complets depuis la même ligneEntree et on retient le premier dont la
             // sortie respecte l'espacement — ou, faute de mieux, le meilleur tracé
             // rencontré parmi TOUS les essais (celui dont la sortie a la plus grande
@@ -521,15 +571,18 @@ const Carte = {
             // augmentant fortement le nombre d'essais (voir la note sur
             // MAX_ESSAIS_ESPACEMENT_CHEMIN dans config.js) — le problème n'était pas
             // un manque d'essais mais le fait de jeter l'information des tentatives
-            // précédentes à chaque nouvel essai infructueux.
+            // précédentes à chaque nouvel essai infructueux. Comme pour les entrées,
+            // une sortie bien espacée doit aussi laisser de la place aux sorties
+            // des chemins suivants (resteDeLaPlace).
             let cheminRetenu = null;
             let meilleureDistanceSortie = -1;
-            for (let essaiSortie = 0; essaiSortie < Config.MAX_ESSAIS_ESPACEMENT_CHEMIN; essaiSortie++) {
+            for (let essaiSortie = 0; essaiSortie < Config.MAX_ESSAIS_SORTIE_CHEMIN; essaiSortie++) {
                 const candidat = this.genererUnChemin(ligneEntree);
                 const ligneSortie = candidat[candidat.length - 1].ligne;
                 const distance = this.distanceMinimaleAuxLignes(ligneSortie, lignesSortiesChoisies);
 
-                if (distance >= Config.ECART_MIN_ENTREES_SORTIES) {
+                if (distance >= Config.ECART_MIN_ENTREES_SORTIES
+                    && this.resteDeLaPlace([...lignesSortiesChoisies, ligneSortie], cheminsRestantsApres)) {
                     cheminRetenu = candidat;
                     break;
                 }

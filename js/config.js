@@ -30,12 +30,13 @@ const Config = {
     // propre entrée et sortie (voir Carte.chemins dans carte.js), peut croiser un
     // autre chemin mais jamais se toucher lui-même — voir la note sur
     // caseValidePourChemin dans carte.js. Le nombre réel de chemins d'une carte
-    // donnée (2 la plupart du temps, 3 occasionnellement) n'est plus une constante
-    // fixe mais une valeur calculée à chaque génération et stockée sur
-    // `Carte.nombreChemins` (voir Carte.generer) : `NOMBRE_CHEMINS_PAR_DEFAUT`
-    // ci-dessous, plus un chemin supplémentaire tiré via `Aleatoire` avec une
-    // probabilité de `PROBABILITE_TROISIEME_CHEMIN` — reproductible à graine égale,
-    // comme le reste de la génération.
+    // est calculé à chaque génération et stocké sur `Carte.nombreChemins` (voir
+    // Carte.generer) : `NOMBRE_CHEMINS_PAR_DEFAUT` ci-dessous, plus un chemin
+    // supplémentaire tiré via `Aleatoire` avec une probabilité de
+    // `PROBABILITE_TROISIEME_CHEMIN` — reproductible à graine égale, comme le reste
+    // de la génération. Réglage actuel : 3 voies sur chaque carte, sans chemin
+    // supplémentaire (probabilité 0) ; Config.COULEURS.cheminsNeon n'a que 3 teintes,
+    // à compléter si l'on dépasse un jour 3 chemins.
     NOMBRE_CHEMINS_PAR_DEFAUT: 3,
     PROBABILITE_TROISIEME_CHEMIN: 0,
     // Écart minimal, en lignes, entre deux entrées (et indépendamment, entre deux
@@ -57,6 +58,14 @@ const Config = {
     // négligeable sur le même échantillon, sans mesure perceptible sur le temps de
     // génération (chaque essai reste une opération bon marché).
     MAX_ESSAIS_ESPACEMENT_CHEMIN: 40,
+    // Même rôle pour la sortie d'un chemin (boucle `essaiSortie` de Carte.generer),
+    // qui ne peut pas être choisie directement : elle dépend du tracé au hasard,
+    // et une sortie bien précise (la seule ligne encore assez espacée des autres,
+    // par exemple) peut demander davantage de tracés. Mesuré sur 10 000 graines à
+    // 3 chemins : 0,33 % de cartes avec deux sorties trop proches à 40 essais,
+    // aucune à 120. Les essais s'arrêtent dès qu'une sortie convient : une carte
+    // déjà réussie en moins de 40 essais reste identique.
+    MAX_ESSAIS_SORTIE_CHEMIN: 120,
 
     // Limite de tours constructibles (phase 6B) : une proportion plutôt qu'un nombre
     // fixe, puisque la surface réellement constructible d'une carte à deux chemins
