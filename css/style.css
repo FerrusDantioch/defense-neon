@@ -751,6 +751,45 @@ kbd {
     color: #c8c8d0;
 }
 
+/* Section « À propos », tout en bas de la page : même fond sombre que .aide-clavier
+   (le texte reste lisible par-dessus l'image de fond), mais sans la lueur néon des
+   autres titres : c'est une simple mention, pas un élément du jeu. */
+.a-propos {
+    width: 100%;
+    max-width: 900px;
+    padding: 8px 10px;
+    font-size: 0.85rem;
+    color: #c8c8d0;
+    text-align: center;
+    background: rgba(11, 11, 20, 0.7);
+    border-radius: 6px;
+}
+
+.a-propos h2 {
+    margin-bottom: 4px;
+    font-size: 0.95rem;
+    color: #c8c8d0;
+    text-shadow: none;
+}
+
+.a-propos p {
+    margin: 0 0 4px;
+}
+
+/* Ligne du lien : plus petite et plus discrète que le texte au-dessus. Le lien garde
+   la couleur du texte autour (juste souligné) ; une adresse trop longue pour un petit
+   écran passe à la ligne au lieu de déborder. */
+.a-propos-lien {
+    font-size: 0.75rem;
+    color: #a0a0aa;
+}
+
+.a-propos-lien a {
+    color: inherit;
+    text-underline-offset: 3px;
+    overflow-wrap: anywhere;
+}
+
 /* Statistiques de fin de partie (octobre 2026). */
 .statistiques-partie {
     display: flex;
