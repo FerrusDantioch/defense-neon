@@ -2,7 +2,7 @@
 // (les navigateurs exigent une origine http/https, voir ARCHITECTURE.md) : sous ce
 // protocole, navigator.serviceWorker.register échoue simplement, et le jeu continue de
 // fonctionner sans les bénéfices d'installation et de cache explicite qu'il apporte une
-// fois servi par Netlify ou un serveur local.
+// fois servi par un hébergement web ou un serveur local.
 //
 // Stratégie « réseau d'abord » (voir le gestionnaire fetch plus bas) : une mise à jour
 // du jeu arrive d'elle-même au chargement suivant, sans rien incrémenter ici. Changer
