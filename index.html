@@ -223,6 +223,15 @@
         <kbd>P</kbd> pause · <kbd>V</kbd> vitesse · <kbd>A</kbd> améliorer · <kbd>C</kbd> cible ·
         <kbd>Échap</kbd> annuler · <kbd>M</kbd> son</p>
 
+    <!-- À propos : qui a conçu le jeu, et un lien discret vers les autres projets
+         (ouvert dans un nouvel onglet, pour ne pas quitter la partie). Tout en bas de
+         la page, sous le plateau : jamais dans le chemin pendant une partie. -->
+    <section class="a-propos" aria-labelledby="titre-a-propos">
+        <h2 id="titre-a-propos">À propos</h2>
+        <p>Cette application a été conçue et développée par Ferrus Dantioch, avec l'aide de Claude (une intelligence artificielle d'Anthropic).</p>
+        <p class="a-propos-lien">Voir d'autres projets : <a href="https://ferrusdantioch.github.io/omni-systeme/" target="_blank" rel="noopener noreferrer">https://ferrusdantioch.github.io/omni-systeme/</a></p>
+    </section>
+
     <!-- L'ordre de chargement compte : il n'y a pas de système de modules, chaque
          fichier s'appuie sur les objets globaux définis par les précédents.
          interface.js et jeu.js s'appellent mutuellement (voir la note en tête
