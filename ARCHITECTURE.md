@@ -690,8 +690,8 @@ doit continuer à fonctionner en ouvrant `index.html` directement depuis le disq
 `file://`, le jeu tourne donc exactement comme avant cette phase, simplement sans
 installation possible ni mise en cache explicite — ce qui ne prive le joueur de rien de
 réellement utile, puisqu'un fichier déjà sur son disque n'a pas besoin d'être mis en
-cache. Le service worker n'apporte de valeur qu'une fois le jeu servi par Netlify, ou
-testé localement via `outils/serveur-statique.js` (`http://localhost`).
+cache. Le service worker n'apporte de valeur qu'une fois le jeu servi par un hébergement
+web, ou testé localement via `outils/serveur-statique.js` (`http://localhost`).
 
 ### Icônes (`outils/generateur-icones.html`, `icones/`)
 
@@ -3742,7 +3742,7 @@ en plus aide légèrement : ni inutile ni indispensable, aucun réglage changé.
 
 **Le plan initial (phases 1 à 5) est complet** : boucle de jeu, progression du joueur,
 habillage cyberpunk, son, et installation/fonctionnement hors ligne. Prêt à être
-déployé sur Netlify (racine du dossier `defense-neon`, aucune étape de build) puis
+mis en ligne (racine du dossier `defense-neon`, aucune étape de build) puis
 distribué via Payhip.
 
 Mises à jour de contenu postérieures au plan initial :
