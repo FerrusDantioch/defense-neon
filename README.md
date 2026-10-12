@@ -89,8 +89,8 @@ puis ouvrez <http://localhost:8080> dans le navigateur.
 ## Mettre le jeu en ligne
 
 Le jeu n'a besoin d'aucune étape de construction : il suffit de publier le dossier tel
-quel (par exemple sur Netlify, en déposant le dossier). Après une mise à jour, les
-joueurs reçoivent la nouvelle version automatiquement au chargement suivant.
+quel. Après une mise à jour, les joueurs reçoivent la nouvelle version automatiquement
+au chargement suivant.
 
 ## Vérifications automatiques
 
