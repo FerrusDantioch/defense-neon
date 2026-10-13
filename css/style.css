@@ -996,3 +996,10 @@ kbd {
        (contenu additionnel post-lancement, « phase 7I ») — plus besoin de la
        répéter ici spécifiquement pour ce mode paysage mobile, qui en hérite déjà. */
 }
+
+/* Note d'installation (section À propos) : inutile une fois l'application
+   installée, puisqu'elle s'ouvre alors dans sa propre fenêtre (mode
+   d'affichage autre que « browser », celui d'un onglet de navigateur). */
+@media not all and (display-mode: browser) {
+  .note-installation { display: none; }
+}
