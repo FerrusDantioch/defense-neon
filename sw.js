@@ -10,7 +10,7 @@
 // purge tout cache dont le nom diffère) ; v28 marque le passage à cette stratégie, et
 // remplace donc une bonne fois les copies laissées par l'ancienne (cache d'abord).
 // v29 : ajout de statistiques.js et sauvegarde.js à la liste ci-dessous (octobre 2026).
-const CACHE_NOM = 'defense-neon-v30';
+const CACHE_NOM = 'defense-neon-v31';
 
 // Au-delà de ce délai sans réponse du réseau (connexion présente mais quasi
 // inutilisable), la copie en cache est servie à la place, si elle existe.
