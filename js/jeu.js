@@ -801,9 +801,16 @@ if ('serviceWorker' in navigator) {
 // Stockage persistant : par défaut, le navigateur peut effacer de lui-même la copie
 // hors ligne (et la progression) s'il manque de place ou si le jeu est peu utilisé ;
 // le jeu ne s'ouvrirait alors plus sans réseau. persist() lui demande de les garder.
-// Un refus ne change rien au fonctionnement, d'où le .catch silencieux.
-if (navigator.storage && navigator.storage.persist) {
+// Certains navigateurs (Firefox) affichent alors une fenêtre d'autorisation : pour ne
+// jamais en faire surgir une au démarrage, on ne demande que si le navigateur a déjà
+// répondu « accordé » (Chrome, pour une appli installée, sans rien afficher). Sinon,
+// on renonce en silence, d'où le .catch vide.
+if (navigator.storage && navigator.storage.persist && navigator.permissions) {
     navigator.storage.persisted()
-        .then((dejaPersistant) => dejaPersistant || navigator.storage.persist())
+        .then((dejaPersistant) => {
+            if (dejaPersistant) return;
+            return navigator.permissions.query({ name: 'persistent-storage' })
+                .then((etat) => { if (etat.state === 'granted') return navigator.storage.persist(); });
+        })
         .catch(() => {});
 }
