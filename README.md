@@ -122,3 +122,13 @@ node outils/test-navigateur.js
 - `outils/` : outils de développement (serveur local, partie de test, simulations
   d'équilibrage), jamais utilisés par les joueurs.
 - `ARCHITECTURE.md` : documentation technique détaillée, fichier par fichier.
+
+## Licence
+
+Distribué sous licence **[PolyForm Noncommercial 1.0.0](LICENSE)** (texte
+officiel en anglais, suivi d'une traduction française à titre indicatif).
+
+Vous pouvez utiliser, modifier et partager ce code librement, à condition que
+ce ne soit pas dans un but commercial et que le fichier de licence accompagne
+toujours le code. Toute utilisation commerciale nécessite l'accord de
+l'auteur. Le logiciel est fourni « en l'état », sans aucune garantie.
