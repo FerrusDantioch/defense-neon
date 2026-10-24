@@ -1074,13 +1074,13 @@ const Interface = {
     // téléphone quand elle existe, sinon une copie dans le presse-papiers, confirmée
     // sur le bouton lui-même.
     async partagerDefi(bouton, vague) {
-        const texte = `Défense Néon — défi du ${dateDuJourLisible()} : j'ai atteint la vague ${vague} !`;
+        const texte = `Omni-Défense — défi du ${dateDuJourLisible()} : j'ai atteint la vague ${vague} !`;
         // Sous file://, l'adresse ne servirait à personne d'autre : on ne la partage pas.
         const adresse = location.protocol.startsWith('http') ? location.origin + location.pathname : '';
 
         if (navigator.share) {
             try {
-                await navigator.share(adresse ? { title: 'Défense Néon', text: texte, url: adresse } : { title: 'Défense Néon', text: texte });
+                await navigator.share(adresse ? { title: 'Omni-Défense', text: texte, url: adresse } : { title: 'Omni-Défense', text: texte });
                 return;
             } catch (erreur) {
                 // Le joueur a refermé la fenêtre de partage : rien de plus à faire.

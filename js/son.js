@@ -95,7 +95,7 @@ const Son = {
         if (this.avertissementDejaAffiche) return;
         this.avertissementDejaAffiche = true;
         console.warn(
-            'Défense Néon : localStorage indisponible (navigation privée ?), la préférence son ne sera pas sauvegardée pour cette session.',
+            'Omni-Défense : localStorage indisponible (navigation privée ?), la préférence son ne sera pas sauvegardée pour cette session.',
             erreur
         );
     },

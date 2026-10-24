@@ -1,4 +1,4 @@
-// sw.js — Service worker de Défense Néon (phase 5). Ne s'active jamais sous file://
+// sw.js — Service worker de Omni-Défense (phase 5). Ne s'active jamais sous file://
 // (les navigateurs exigent une origine http/https, voir ARCHITECTURE.md) : sous ce
 // protocole, navigator.serviceWorker.register échoue simplement, et le jeu continue de
 // fonctionner sans les bénéfices d'installation et de cache explicite qu'il apporte une
@@ -10,7 +10,12 @@
 // purge tout cache dont le nom diffère) ; v28 marque le passage à cette stratégie, et
 // remplace donc une bonne fois les copies laissées par l'ancienne (cache d'abord).
 // v29 : ajout de statistiques.js et sauvegarde.js à la liste ci-dessous (octobre 2026).
-const CACHE_NOM = 'defense-neon-v32';
+const CACHE_NOM = 'omni-defense-v33';
+
+// Débuts de nom de NOS caches (« defense-neon- » : ancien nom du jeu). Toutes les
+// applications de ferrusdantioch.github.io partagent la même liste de caches : on ne
+// supprime que les nôtres, jamais ceux des autres applications du site.
+const PREFIXES_A_NOUS = ['omni-defense-', 'defense-neon-'];
 
 // Au-delà de ce délai sans réponse du réseau (connexion présente mais quasi
 // inutilisable), la copie en cache est servie à la place, si elle existe.
@@ -67,7 +72,7 @@ self.addEventListener('activate', (evenement) => {
         caches.keys()
             .then((nomsCaches) => Promise.all(
                 nomsCaches
-                    .filter((nom) => nom !== CACHE_NOM)
+                    .filter((nom) => nom !== CACHE_NOM && PREFIXES_A_NOUS.some((p) => nom.startsWith(p)))
                     .map((nom) => caches.delete(nom))
             ))
             .then(() => self.clients.claim())

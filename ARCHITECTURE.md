@@ -1,4 +1,4 @@
-# Défense Néon — Architecture
+# Omni-Défense — Architecture
 
 HTML/CSS/JS vanilla, sans module ES6 ni dépendance. Fichiers chargés dans cet ordre par
 `index.html` : `config.js`, `aleatoire.js`, `carte.js`, `ennemi.js`, `vagues.js`,
@@ -208,7 +208,7 @@ simple du jeu, pour les joueurs et pour démarrer, se trouve dans `README.md`.
 - **`outils/serveur-statique.js`** — petit serveur HTTP Node sans dépendance, utilisé
   uniquement pour prévisualiser le jeu pendant le développement (référencé par
   `.claude/launch.json`, aussi bien à la racine du dossier `claude` qu'à la racine de
-  `defense-neon` lui-même). Ne fait pas partie du jeu livré au joueur, qui reste un
+  `omni-defense` lui-même). Ne fait pas partie du jeu livré au joueur, qui reste un
   simple fichier `index.html` ouvrable directement. Complété en phase 5 avec les types
   MIME `.webmanifest` et `.png` (absents jusque-là, puisque rien de tel n'existait
   encore) : sans eux, certains navigateurs refusent de considérer l'app comme
@@ -3742,7 +3742,7 @@ en plus aide légèrement : ni inutile ni indispensable, aucun réglage changé.
 
 **Le plan initial (phases 1 à 5) est complet** : boucle de jeu, progression du joueur,
 habillage cyberpunk, son, et installation/fonctionnement hors ligne. Prêt à être
-mis en ligne (racine du dossier `defense-neon`, aucune étape de build) puis
+mis en ligne (racine du dossier `omni-defense`, aucune étape de build) puis
 distribué via Payhip.
 
 Mises à jour de contenu postérieures au plan initial :

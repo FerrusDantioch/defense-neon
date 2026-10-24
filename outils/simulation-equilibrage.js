@@ -9,7 +9,7 @@
 // 1-4 avec cette limite active, laissé à une session ultérieure une fois
 // Config.PROPORTION_LIMITE_TOURS lui-même stabilisé par le jeu réel.
 //
-// simulation-equilibrage.js — Simulation hors navigateur de « Défense Néon », pour
+// simulation-equilibrage.js — Simulation hors navigateur de « Omni-Défense », pour
 // comparer des stratégies de construction/amélioration de tours à coups de chiffres
 // plutôt qu'à l'œil. Ne duplique pas la logique du jeu : recharge tels quels
 // config.js, aleatoire.js, carte.js, ennemi.js, vagues.js et tour.js dans un contexte
@@ -133,7 +133,7 @@ function creerContexteJeu() {
         globalThis.Progression = Progression;
     `;
 
-    new vm.Script(sourceConcatenee + '\n' + republierGlobals, { filename: 'defense-neon-concatene.js' })
+    new vm.Script(sourceConcatenee + '\n' + republierGlobals, { filename: 'omni-defense-concatene.js' })
         .runInContext(sandbox);
 
     return sandbox;

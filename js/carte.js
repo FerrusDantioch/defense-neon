@@ -396,7 +396,7 @@ const Carte = {
                 return resultat;
             }
         }
-        console.warn('Défense Néon : aucune tentative de génération de chemin n\'a abouti, utilisation du chemin de secours.');
+        console.warn('Omni-Défense : aucune tentative de génération de chemin n\'a abouti, utilisation du chemin de secours.');
         return this.cheminDeSecours();
     },
 

@@ -1,6 +1,7 @@
 {
-  "name": "Défense Néon",
-  "short_name": "Défense Néon",
+  "name": "Omni-Défense",
+  "id": "/omni-defense/",
+  "short_name": "Omni-Défense",
   "description": "Tower defense cyberpunk avec génération de cartes aléatoires",
   "start_url": "./index.html",
   "scope": "./",

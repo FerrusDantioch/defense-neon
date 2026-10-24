@@ -149,7 +149,7 @@ const SauvegardePartie = {
         if (this.avertissementDejaAffiche) return;
         this.avertissementDejaAffiche = true;
         console.warn(
-            'Défense Néon : localStorage indisponible (navigation privée ?), la partie en cours ne sera pas sauvegardée.',
+            'Omni-Défense : localStorage indisponible (navigation privée ?), la partie en cours ne sera pas sauvegardée.',
             erreur
         );
     }

@@ -65,7 +65,7 @@ const Decor = {
             this.imageFondVisible = true;
         };
         const surErreur = () => {
-            console.warn('Défense Néon : image de décor introuvable ou invalide, le skyline procédural reste affiché.');
+            console.warn('Omni-Défense : image de décor introuvable ou invalide, le skyline procédural reste affiché.');
         };
 
         image.addEventListener('load', surChargement);

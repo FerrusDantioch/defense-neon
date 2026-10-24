@@ -1,4 +1,4 @@
-# Défense Néon
+# Omni-Défense
 
 Jeu de défense de tours (« tower defense ») dans une ville néon, qui se joue dans le
 navigateur, sur ordinateur comme sur téléphone, sans rien installer. Il fonctionne

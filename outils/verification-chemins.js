@@ -55,7 +55,7 @@ function creerContexteCarte() {
         globalThis.Carte = Carte;
     `;
 
-    new vm.Script(sourceConcatenee + '\n' + republierGlobals, { filename: 'defense-neon-carte-concatenee.js' })
+    new vm.Script(sourceConcatenee + '\n' + republierGlobals, { filename: 'omni-defense-carte-concatenee.js' })
         .runInContext(sandbox);
 
     return sandbox;

@@ -644,7 +644,7 @@ const Jeu = {
             Interface.afficherMessageConstruction('Partie reprise', 2, true);
             return;
         }
-        console.warn('Défense Néon : la partie sauvegardée ne correspond plus à la carte, elle est abandonnée.');
+        console.warn('Omni-Défense : la partie sauvegardée ne correspond plus à la carte, elle est abandonnée.');
         SauvegardePartie.effacer();
         this.reinitialiser(this.idDureeActuelle);
         this.etatPartie = 'accueil';

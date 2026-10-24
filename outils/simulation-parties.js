@@ -62,7 +62,7 @@ function creerContexte() {
     const source = fichiers.map(f => fs.readFileSync(path.join(DOSSIER_JS, f), 'utf8')).join('\n;\n');
     new vm.Script(
         source + '\n;Object.assign(globalThis, { Config, Carte, Vagues, Ennemi, Tour, Projectile });',
-        { filename: 'defense-neon-concatene.js' }
+        { filename: 'omni-defense-concatene.js' }
     ).runInContext(sandbox);
     return sandbox;
 }
