@@ -10,7 +10,7 @@
 // purge tout cache dont le nom diffère) ; v28 marque le passage à cette stratégie, et
 // remplace donc une bonne fois les copies laissées par l'ancienne (cache d'abord).
 // v29 : ajout de statistiques.js et sauvegarde.js à la liste ci-dessous (octobre 2026).
-const CACHE_NOM = 'omni-defense-v33';
+const CACHE_NOM = 'omni-defense-v34';
 
 // Débuts de nom de NOS caches (« defense-neon- » : ancien nom du jeu). Toutes les
 // applications de ferrusdantioch.github.io partagent la même liste de caches : on ne
